@@ -1,0 +1,11 @@
+.venv/
+__pycache__/
+*.pyc
+.env
+.env.local
+.env.docker
+.idea/
+.cursor/
+.pytest_cache/
+.mypy_cache/
+postgres_data/
