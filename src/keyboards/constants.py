@@ -30,6 +30,9 @@ ADMIN_MAIN_MENU_TEXTS = frozenset(
 # Убрать inline-клавиатуру и вернуть фокус на reply-меню админа
 CALLBACK_INLINE_BACK = CB_NAV_INLINE_BACK
 
+# Команда бота: категории операторов (цена/лимит в USDT). Старый алиас: /admin_categories.
+COMMAND_ADM_OPER = "/adm_oper"
+
 
 def normalize_reply_menu_text(text: str | None) -> str | None:
     """NFC + strip + casefold: одинаковые кнопки с разным регистром/пробелами совпадают."""

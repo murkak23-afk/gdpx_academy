@@ -72,7 +72,7 @@ class CategoryService:
         return category
 
     async def update_payout_rate(self, category_id: int, payout_rate: Decimal) -> Category | None:
-        """Обновляет payout_rate категории."""
+        """Обновляет цену за единицу (USDT) в поле `payout_rate`)."""
 
         category = await self.get_by_id(category_id)
         if category is None:

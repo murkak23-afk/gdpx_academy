@@ -59,8 +59,6 @@ class WithdrawalService:
 
         available = await self.available_amount()
         if available < amount:
-            raise InsufficientBalanceError(
-                f"Недостаточно средств: доступно {available}, запрошено {amount}"
-            )
+            raise InsufficientBalanceError(f"Недостаточно средств: доступно {available}, запрошено {amount}")
 
         return await self._crypto.create_check(amount, comment=comment)

@@ -12,9 +12,7 @@ class AdminChatForwardDaily(Base):
     """Счётчик пересылок материалов в чат по дням (UTC), по telegram chat id."""
 
     __tablename__ = "admin_chat_forward_daily"
-    __table_args__ = (
-        UniqueConstraint("telegram_chat_id", "stat_date", name="uq_forward_daily_tgchat_day"),
-    )
+    __table_args__ = (UniqueConstraint("telegram_chat_id", "stat_date", name="uq_forward_daily_tgchat_day"),)
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     telegram_chat_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)

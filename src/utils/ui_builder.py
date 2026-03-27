@@ -217,9 +217,7 @@ class GDPXRenderer:
             accepted_count = int(self._pick(payout, "accepted_count", default=0) or 0)
             amount_raw = self._pick(payout, "to_pay", "amount", "accepted_amount", default=0.0)
             amount = float(amount_raw)
-            lines.append(
-                f"🪶 {username} | 📜 {accepted_count} шт. | 💎 {format_currency(amount)}"
-            )
+            lines.append(f"🪶 {username} | 📜 {accepted_count} шт. | 💎 {format_currency(amount)}")
 
         lines.append(DIVIDER)
         return "\n".join(lines)

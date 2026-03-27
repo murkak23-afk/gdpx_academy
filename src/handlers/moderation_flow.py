@@ -1291,9 +1291,7 @@ async def on_accept(callback: CallbackQuery, session: AsyncSession, bot: Bot) ->
     if seller is not None:
         await bot.send_message(
             chat_id=seller.telegram_id,
-            text=(
-                f"Симка #{accepted.id}: Зачёт. Начислено: {accepted.accepted_amount} USDT."
-            ),
+            text=(f"Симка #{accepted.id}: Зачёт. Начислено: {accepted.accepted_amount} USDT."),
         )
 
     await callback.answer("Зачёт поставлен")
@@ -1312,11 +1310,7 @@ async def on_accept(callback: CallbackQuery, session: AsyncSession, bot: Bot) ->
 
         sent_at = accepted.reviewed_at.strftime("%Y-%m-%d %H:%M:%S UTC") if accepted.reviewed_at else "—"
         current_caption = (callback.message.caption or callback.message.text or "").strip()
-        updated_caption = (
-            f"✅ ОТПРАВЛЕНО В ЧАТ: {chat_label}\n"
-            f"🕒 Время отправки: {sent_at}\n\n"
-            f"{current_caption}"
-        )
+        updated_caption = f"✅ ОТПРАВЛЕНО В ЧАТ: {chat_label}\n🕒 Время отправки: {sent_at}\n\n{current_caption}"
         try:
             if callback.message.caption is not None:
                 await callback.message.edit_caption(caption=updated_caption, reply_markup=None)

@@ -26,7 +26,7 @@ class SellerQuotaService:
 
         Логика:
         - если есть запись в `seller_daily_quotas` (старый сценарий) — используем её;
-        - иначе берём лимит из `categories.total_upload_limit`, который админ задаёт через `/admin_categories`.
+        - иначе берём лимит из `categories.total_upload_limit`, который админ задаёт через `/adm_oper`.
         """
 
         today = self.today_utc()

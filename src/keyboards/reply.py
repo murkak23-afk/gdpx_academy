@@ -148,9 +148,7 @@ def admin_payout_menu_keyboard() -> ReplyKeyboardMarkup:
 def categories_keyboard(category_titles: list[str]) -> ReplyKeyboardMarkup:
     """Клавиатура выбора категории для продажи."""
 
-    category_rows: list[list[KeyboardButton]] = [
-        [KeyboardButton(text=title)] for title in category_titles
-    ]
+    category_rows: list[list[KeyboardButton]] = [[KeyboardButton(text=title)] for title in category_titles]
     category_rows.append([KeyboardButton(text=REPLY_BTN_BACK)])
     return ReplyKeyboardMarkup(
         keyboard=category_rows,

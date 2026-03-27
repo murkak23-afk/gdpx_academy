@@ -3,6 +3,7 @@ from __future__ import annotations
 import csv
 import logging
 import re
+import unicodedata
 from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
 from html import escape
@@ -11,7 +12,7 @@ from io import BytesIO, StringIO
 from aiogram import Bot, F, Router
 from aiogram.dispatcher.event.bases import SkipHandler
 from aiogram.exceptions import TelegramAPIError, TelegramBadRequest
-from aiogram.filters import Command, StateFilter
+from aiogram.filters import Command, StateFilter, or_f
 from aiogram.fsm.context import FSMContext
 from aiogram.types import (
     CallbackQuery,
@@ -84,6 +85,7 @@ from src.keyboards.callbacks import (
     CB_REQ_FACTORY_CONFIRM,
     CB_REQ_FACTORY_RESET,
 )
+from src.keyboards.constants import COMMAND_ADM_OPER
 from src.services import (
     AdminAuditService,
     AdminService,
@@ -544,7 +546,7 @@ _ADMIN_FSM_STATES = (
     AdminRequestsState.waiting_for_quota_line,
     AdminRequestsState.waiting_for_delete_line,
     AdminCategoryState.waiting_for_add_title,
-    AdminCategoryState.waiting_for_add_payout_rate,
+    AdminCategoryState.waiting_for_add_price,
     AdminCategoryState.waiting_for_add_total_limit,
     AdminCategoryState.waiting_for_add_description,
     AdminCategoryState.waiting_for_add_photo,
@@ -584,7 +586,7 @@ async def on_admin_fsm_step_back(
         return
     if st in (
         AdminCategoryState.waiting_for_add_title.state,
-        AdminCategoryState.waiting_for_add_payout_rate.state,
+        AdminCategoryState.waiting_for_add_price.state,
         AdminCategoryState.waiting_for_add_total_limit.state,
         AdminCategoryState.waiting_for_add_description.state,
         AdminCategoryState.waiting_for_add_photo.state,
@@ -1254,7 +1256,23 @@ async def _render_admin_categories(session: AsyncSession) -> str:
     return "\n".join(lines)
 
 
-@router.message(Command("admin_categories"))
+def _adm_oper_legacy_text_aliases(text: str | None) -> bool:
+    """Старые варианты вызова: /admin categories, /admincategories (без основной команды)."""
+
+    if not text:
+        return False
+    first = text.strip().split(maxsplit=1)[0]
+    if "@" in first:
+        first = first.split("@", 1)[0]
+    return first.casefold() in ("/admin categories", "/admincategories")
+
+
+@router.message(
+    or_f(
+        Command("adm_oper", "admin_categories"),
+        F.text.func(_adm_oper_legacy_text_aliases),
+    ),
+)
 async def on_admin_categories_menu(message: Message, state: FSMContext, session: AsyncSession) -> None:
     """Меню управления категориями (подтипами операторов)."""
 
@@ -1284,7 +1302,7 @@ async def on_admin_categories_actions(
         await callback.answer("Недостаточно прав.", show_alert=True)
         return
     if callback.message is None:
-        await callback.answer("Сообщение недоступно. Отправь /admin_categories снова.", show_alert=True)
+        await callback.answer(f"Сообщение недоступно. Отправь {COMMAND_ADM_OPER} снова.", show_alert=True)
         return
     await callback.answer()
 
@@ -1348,7 +1366,7 @@ async def on_admin_categories_actions(
         edit_action = data.get("edit_action")
         if not isinstance(edit_action, str):
             await state.clear()
-            await callback.message.answer("Ошибка состояния. Начни заново через /admin_categories.")
+            await callback.message.answer(f"Ошибка состояния. Начни заново через {COMMAND_ADM_OPER}.")
             return
         if edit_action == "rate":
             edit_action = "price"
@@ -1378,7 +1396,7 @@ async def on_admin_categories_actions(
 
         if edit_action not in {"total", "price", "desc"}:
             await state.clear()
-            await callback.message.answer("Неизвестное действие. Начни заново через /admin_categories.")
+            await callback.message.answer(f"Неизвестное действие. Начни заново через {COMMAND_ADM_OPER}.")
             return
 
         await state.update_data(edit_category_id=category_id)
@@ -1408,7 +1426,7 @@ async def on_admin_categories_actions(
 
     logger.warning("admin_categories: неизвестное действие action=%r data=%r", action, callback.data)
     await callback.message.answer(
-        "Кнопка устарела или не распознана. Отправь /admin_categories снова.",
+        f"Кнопка устарела или не распознана. Отправь {COMMAND_ADM_OPER} снова.",
         reply_markup=_admin_categories_menu_keyboard(),
     )
 
@@ -1429,10 +1447,31 @@ def _parse_optional_int(raw: str) -> int | None:
 
 
 def _parse_decimal(raw: str) -> Decimal:
-    """Парсит Decimal, поддерживая запятую."""
+    """Парсит Decimal, поддерживая запятую и Unicode-цифры (NFKC)."""
 
     value = raw.strip().replace(",", ".")
+    value = unicodedata.normalize("NFKC", value)
     return Decimal(value)
+
+
+def _parse_decimal_price_input(raw: str) -> Decimal:
+    """Цена в USDT; допускает префикс «цена»/«стоимость» или устаревший payout_rate."""
+
+    s = raw.strip()
+    try:
+        return _parse_decimal(s)
+    except InvalidOperation:
+        pass
+    stripped = re.sub(
+        r"^(?:payout[_\s-]?rate|цена|стоимость)\s*[:=]?\s*",
+        "",
+        s,
+        count=1,
+        flags=re.IGNORECASE,
+    )
+    if stripped == s:
+        raise InvalidOperation
+    return _parse_decimal(stripped.strip())
 
 
 @router.message(AdminCategoryState.waiting_for_add_title, F.text)
@@ -1451,15 +1490,15 @@ async def on_category_add_title(message: Message, state: FSMContext, session: As
         return
 
     await state.update_data(add_title=raw)
-    await state.set_state(AdminCategoryState.waiting_for_add_payout_rate)
+    await state.set_state(AdminCategoryState.waiting_for_add_price)
     await message.answer(
         "Укажи <b>цену</b> за единицу в <b>USDT</b> (число, например <code>1.50</code>).",
         parse_mode="HTML",
     )
 
 
-@router.message(AdminCategoryState.waiting_for_add_payout_rate, F.text)
-async def on_category_add_payout_rate(message: Message, state: FSMContext, session: AsyncSession) -> None:
+@router.message(AdminCategoryState.waiting_for_add_price, F.text)
+async def on_category_add_price(message: Message, state: FSMContext, session: AsyncSession) -> None:
     if message.from_user is None or message.text is None:
         return
 
@@ -1471,9 +1510,9 @@ async def on_category_add_payout_rate(message: Message, state: FSMContext, sessi
         return
 
     try:
-        price = _parse_decimal(raw)
+        price = _parse_decimal_price_input(raw)
     except InvalidOperation:
-        await message.answer("Неверный формат. Пример: 100.00 (USDT).")
+        await message.answer("Неверный формат. Пришли число в USDT, например 100.00 (можно с префиксом «цена»).")
         return
 
     if price <= 0:
@@ -1629,14 +1668,14 @@ async def on_category_edit_value(message: Message, state: FSMContext, session: A
     result_label: str
     if edit_action == "price":
         try:
-            payout_rate = _parse_decimal(raw)
+            price_usdt = _parse_decimal_price_input(raw)
         except InvalidOperation:
-            await message.answer("Неверный формат. Пример: 100.00 (USDT).")
+            await message.answer("Неверный формат. Число в USDT, например 100.00.")
             return
-        if payout_rate <= 0:
+        if price_usdt <= 0:
             await message.answer("Цена должна быть больше 0.")
             return
-        await CategoryService(session=session).update_payout_rate(category_id=category_id, payout_rate=payout_rate)
+        await CategoryService(session=session).update_payout_rate(category_id=category_id, payout_rate=price_usdt)
         result_label = "Цена обновлена."
 
     elif edit_action == "desc":

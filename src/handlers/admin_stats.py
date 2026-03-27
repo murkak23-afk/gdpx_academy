@@ -78,9 +78,7 @@ async def _build_full_stats_message(
     by_cat = await svc.accepted_by_category(start, end)
     avg_accept = await svc.avg_accept_amount(start, end)
     top_sellers = await svc.top_sellers_by_accept_amount(start, end, limit=5)
-    payout_rows, payout_total = await svc.payout_rows_paginated(
-        start, end, page=payout_page, page_size=STATS_PAGE_SIZE
-    )
+    payout_rows, payout_total = await svc.payout_rows_paginated(start, end, page=payout_page, page_size=STATS_PAGE_SIZE)
 
     pl = _PERIOD_LABEL.get(period, period)
     lines = [
@@ -97,8 +95,14 @@ async def _build_full_stats_message(
         "Зачёт по операторам (категориям):",
     ]
     accepted_amount_total = sum((amt for _, _, amt in by_cat), start=0)
-    avg_daily_paid = (accepted_amount_total / Decimal("30")).quantize(Decimal("0.01")) if period == "month" else (
-        (accepted_amount_total / Decimal("7")).quantize(Decimal("0.01")) if period == "week" else accepted_amount_total
+    avg_daily_paid = (
+        (accepted_amount_total / Decimal("30")).quantize(Decimal("0.01"))
+        if period == "month"
+        else (
+            (accepted_amount_total / Decimal("7")).quantize(Decimal("0.01"))
+            if period == "week"
+            else accepted_amount_total
+        )
     )
     lines.append(f"Сумма зачёта (USDT): {accepted_amount_total}")
     lines.append(f"Средний чек симки (USDT): {avg_accept}")

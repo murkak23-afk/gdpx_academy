@@ -30,4 +30,3 @@ async def send_clean_text_screen(
     sent = await trigger_message.answer(non_empty_plain(text), reply_markup=reply_markup)
     _LAST_SCREEN_BY_CHAT[chat_id][key] = sent.message_id
     return sent
-

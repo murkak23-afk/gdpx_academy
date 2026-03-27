@@ -14,7 +14,7 @@ class AdminCategoryState(StatesGroup):
     """Редактирование категорий (подтипов операторов) через бота."""
 
     waiting_for_add_title = State()
-    waiting_for_add_payout_rate = State()
+    waiting_for_add_price = State()
     waiting_for_add_total_limit = State()
     waiting_for_add_description = State()
     waiting_for_add_photo = State()

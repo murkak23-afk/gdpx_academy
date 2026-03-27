@@ -132,5 +132,3 @@ async def message_answer_submission(
             exc,
         )
         raise
-
-

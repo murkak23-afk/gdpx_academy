@@ -47,6 +47,7 @@ from src.keyboards.callbacks import (
     CB_SELLER_PAYHIST_PAGE,
     CB_SELLER_STATS_VIEW,
 )
+from src.keyboards.constants import COMMAND_ADM_OPER
 from src.main_operators import MAIN_OPERATOR_GROUPS
 from src.services import (
     AdminService,
@@ -473,7 +474,7 @@ def _material_short_preview(text: str, limit: int = 22) -> str:
         return "без описания"
     if len(clean) <= limit:
         return clean
-    return f"{clean[:limit - 1]}…"
+    return f"{clean[: limit - 1]}…"
 
 
 def _material_phone_hint(text: str) -> str:
@@ -661,9 +662,7 @@ async def _send_material_category_page(
             text="В этой папке пока нет товаров.",
             key=f"seller:material:category:{category_id}",
             reply_markup=InlineKeyboardMarkup(
-                inline_keyboard=[
-                    [InlineKeyboardButton(text="⬅️ К списку операторов", callback_data=CB_SELLER_MAT_BACK)]
-                ]
+                inline_keyboard=[[InlineKeyboardButton(text="⬅️ К списку операторов", callback_data=CB_SELLER_MAT_BACK)]]
             ),
         )
         return
@@ -1090,9 +1089,7 @@ async def on_material_item_delete_confirm(callback: CallbackQuery, session: Asyn
         user_id=user.id,
     )
     await callback.answer(
-        "Удалено"
-        if ok
-        else "Удаление доступно только для pending/rejected/blocked/not_a_scan",
+        "Удалено" if ok else "Удаление доступно только для pending/rejected/blocked/not_a_scan",
         show_alert=not ok,
     )
     if ok and callback.message is not None:
@@ -1196,9 +1193,7 @@ async def on_sell_content(message: Message, state: FSMContext, session: AsyncSes
         trigger_message=message,
         key="seller:sell:start",
         text=(
-            "Продать eSIM\n\n"
-            "Шаг 1/3: выбери категорию (оператора).\n"
-            "После выбора сразу переходишь к загрузке симки."
+            "Продать eSIM\n\nШаг 1/3: выбери категорию (оператора).\nПосле выбора сразу переходишь к загрузке симки."
         ),
         reply_markup=_seller_fsm_categories_keyboard(categories),
     )
@@ -1215,9 +1210,7 @@ async def on_seller_menu_sell(callback: CallbackQuery, state: FSMContext, sessio
     if callback.message is not None:
         await edit_message_text_safe(
             callback.message,
-            "Продать eSIM\n\n"
-            "Шаг 1/3: выбери категорию (оператора).\n"
-            "После выбора сразу переходишь к загрузке симки.",
+            "Продать eSIM\n\nШаг 1/3: выбери категорию (оператора).\nПосле выбора сразу переходишь к загрузке симки.",
             reply_markup=_seller_fsm_categories_keyboard(categories),
         )
 
@@ -1370,7 +1363,7 @@ async def _upload_prechecks(
         await state.clear()
         await message.answer(
             "На сегодня в этой категории не назначен лимит выгрузок. "
-            "Администратор задаёт лимиты через `/admin_categories`.",
+            f"Администратор задаёт лимиты через `{COMMAND_ADM_OPER}`.",
             reply_markup=seller_main_inline_keyboard(),
         )
         return False
@@ -1759,10 +1752,7 @@ async def on_description_received(
         await _send_fsm_step_message(
             message,
             state,
-            text=(
-                "❌ <b>Ошибка:</b> Неверный формат номера. "
-                "Введите номер в формате +79001112233."
-            ),
+            text=("❌ <b>Ошибка:</b> Неверный формат номера. Введите номер в формате +79001112233."),
             reply_markup=_seller_fsm_cancel_keyboard(),
             parse_mode="HTML",
         )
@@ -1998,7 +1988,9 @@ async def on_captcha_check(message: Message, session: AsyncSession) -> None:
 
 
 @router.message(StateFilter(None))
-async def on_seller_fallback_cleanup(message: Message) -> None:
+async def on_seller_fallback_cleanup(message: Message, session: AsyncSession) -> None:
     """Молча удаляет лишние сообщения вне FSM для чистого чата."""
 
+    if message.from_user is not None and await AdminService(session=session).is_admin(message.from_user.id):
+        return
     await _safe_delete_message(message)

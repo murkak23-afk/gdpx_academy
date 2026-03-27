@@ -814,10 +814,7 @@ class SubmissionService:
             .order_by(Category.title.asc())
         )
         rows = (await self._session.execute(stmt)).all()
-        return [
-            {"category_id": int(cid), "title": title, "total": int(cnt)}
-            for cid, title, cnt in rows
-        ]
+        return [{"category_id": int(cid), "title": title, "total": int(cnt)} for cid, title, cnt in rows]
 
     async def list_user_material_by_category_paginated(
         self,
