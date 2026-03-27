@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from decimal import Decimal
 
-from sqlalchemy import DateTime, Enum, ForeignKey, Numeric, String, Text
+from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, Numeric, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.database.models.base import Base, TimestampMixin
@@ -28,6 +28,11 @@ class Submission(Base, TimestampMixin):
         nullable=True,
         index=True,
     )
+    locked_by_admin_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     category_id: Mapped[int] = mapped_column(ForeignKey("categories.id"), index=True)
 
     telegram_file_id: Mapped[str] = mapped_column(String(255), nullable=False)
@@ -35,6 +40,9 @@ class Submission(Base, TimestampMixin):
     image_sha256: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     attachment_type: Mapped[str] = mapped_column(String(16), nullable=False, default="photo", index=True)
     description_text: Mapped[str] = mapped_column(Text, nullable=False)
+    phone_normalized: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)
+    is_duplicate: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    last_status_change: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     status: Mapped[SubmissionStatus] = mapped_column(
         Enum(
@@ -66,6 +74,11 @@ class Submission(Base, TimestampMixin):
         "User",
         foreign_keys=[admin_id],
         back_populates="assigned_submissions",
+    )
+    locked_by_admin = relationship(
+        "User",
+        foreign_keys=[locked_by_admin_id],
+        back_populates="locked_submissions",
     )
     category = relationship("Category", back_populates="submissions")
     review_actions = relationship(

@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import date, datetime
 from decimal import Decimal
 
-from sqlalchemy import Date, DateTime, Enum, ForeignKey, Numeric, String
+from sqlalchemy import BigInteger, Date, DateTime, Enum, ForeignKey, Numeric, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.database.models.base import Base, TimestampMixin
@@ -21,8 +21,8 @@ class PublicationArchive(Base, TimestampMixin):
         unique=True,
         index=True,
     )
-    archive_chat_id: Mapped[int] = mapped_column(nullable=False)
-    archive_message_id: Mapped[int] = mapped_column(nullable=False)
+    archive_chat_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    archive_message_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
     archived_by_user_id: Mapped[int | None] = mapped_column(
         ForeignKey("users.id", ondelete="SET NULL"),
         nullable=True,

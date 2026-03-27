@@ -6,17 +6,22 @@ from typing import Any
 
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import joinedload
+from src.main_operators import MAIN_OPERATOR_GROUPS, category_title_to_main_group_label
 
 from src.database.models.category import Category
 from src.database.models.enums import RejectionReason, SubmissionStatus
 from src.database.models.publication import PublicationArchive
 from src.database.models.submission import ReviewAction, Submission
 from src.database.models.user import User
-from src.main_operators import MAIN_OPERATOR_GROUPS, category_title_to_main_group_label
+from src.utils.phone_norm import normalize_phone_key
 
 
 class SubmissionService:
-    """Сервис операций с карточками контента."""
+    """Сервис операций с карточками контента.
+
+    Унифицированный заголовок «Номер — Категория»: `src.utils.submission_format` (`format_submission_title`).
+    """
 
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
@@ -70,6 +75,14 @@ class SubmissionService:
     ) -> Submission:
         """Создаёт новую карточку в статусе pending."""
 
+        now = datetime.now(timezone.utc)
+        norm = normalize_phone_key(description_text)
+        is_duplicate = False
+        if norm:
+            dup_stmt = select(Submission.id).where(Submission.phone_normalized == norm).limit(1)
+            if (await self._session.execute(dup_stmt)).scalar_one_or_none() is not None:
+                is_duplicate = True
+
         submission = Submission(
             user_id=user_id,
             category_id=category_id,
@@ -79,6 +92,9 @@ class SubmissionService:
             description_text=description_text,
             attachment_type=attachment_type,
             status=SubmissionStatus.PENDING,
+            phone_normalized=norm,
+            is_duplicate=is_duplicate,
+            last_status_change=now,
         )
         self._session.add(submission)
         await self._session.commit()
@@ -186,6 +202,7 @@ class SubmissionService:
 
         stmt = (
             select(Submission)
+            .options(joinedload(Submission.category), joinedload(Submission.seller))
             .where(Submission.status == SubmissionStatus.PENDING)
             .order_by(Submission.created_at.asc())
             .limit(limit)
@@ -243,6 +260,7 @@ class SubmissionService:
 
         stmt = (
             select(Submission)
+            .options(joinedload(Submission.category), joinedload(Submission.seller))
             .where(
                 Submission.user_id == user_id,
                 Submission.status == SubmissionStatus.PENDING,
@@ -252,20 +270,22 @@ class SubmissionService:
         result = await self._session.execute(stmt)
         return list(result.scalars().all())
 
-    async def mark_submissions_in_review(self, submissions: list[Submission], admin_id: int) -> int:
-        """Переводит список материалов в in_review после успешной пересылки."""
+    async def mark_submissions_in_review(self, submissions: list[Submission], admin_id: int) -> list[Submission]:
+        """Переводит список материалов в in_review после успешной пересылки. Возвращает фактически переведённые."""
 
         if not submissions:
-            return 0
+            return []
 
-        affected = 0
+        affected: list[Submission] = []
         for submission in submissions:
             if submission.status != SubmissionStatus.PENDING:
                 continue
             old_status = submission.status
             submission.status = SubmissionStatus.IN_REVIEW
             submission.admin_id = admin_id
+            submission.locked_by_admin_id = admin_id
             submission.assigned_at = datetime.now(timezone.utc)
+            submission.last_status_change = datetime.now(timezone.utc)
             self._session.add(
                 ReviewAction(
                     submission_id=submission.id,
@@ -275,7 +295,7 @@ class SubmissionService:
                     comment="Взято в работу пачкой после пересылки",
                 )
             )
-            affected += 1
+            affected.append(submission)
 
         await self._session.commit()
         return affected
@@ -290,7 +310,9 @@ class SubmissionService:
         old_status = submission.status
         submission.status = SubmissionStatus.IN_REVIEW
         submission.admin_id = admin_id
+        submission.locked_by_admin_id = admin_id
         submission.assigned_at = datetime.now(timezone.utc)
+        submission.last_status_change = datetime.now(timezone.utc)
 
         self._session.add(
             ReviewAction(
@@ -324,6 +346,7 @@ class SubmissionService:
         submission.rejection_reason = reason
         submission.rejection_comment = comment
         submission.reviewed_at = datetime.now(timezone.utc)
+        submission.last_status_change = datetime.now(timezone.utc)
 
         self._session.add(
             ReviewAction(
@@ -338,11 +361,33 @@ class SubmissionService:
         await self._session.refresh(submission)
         return submission
 
+    async def list_in_review_stale(self, threshold: datetime) -> list[Submission]:
+        """IN_REVIEW с моментом последнего статуса раньше порога (для мониторинга «зависания»)."""
+
+        ref = func.coalesce(Submission.last_status_change, Submission.assigned_at, Submission.created_at)
+        stmt = (
+            select(Submission)
+            .options(
+                joinedload(Submission.locked_by_admin),
+                joinedload(Submission.admin),
+            )
+            .where(
+                Submission.status == SubmissionStatus.IN_REVIEW,
+                ref < threshold,
+            )
+        )
+        return list((await self._session.execute(stmt)).scalars().all())
+
     async def list_in_review_submissions(self, admin_id: int, limit: int = 10) -> list[Submission]:
         """Возвращает карточки админа в статусе in_review."""
 
         stmt = (
             select(Submission)
+            .options(
+                joinedload(Submission.category),
+                joinedload(Submission.seller),
+                joinedload(Submission.locked_by_admin),
+            )
             .where(
                 Submission.status == SubmissionStatus.IN_REVIEW,
                 Submission.admin_id == admin_id,
@@ -377,6 +422,11 @@ class SubmissionService:
 
         stmt = (
             select(Submission)
+            .options(
+                joinedload(Submission.category),
+                joinedload(Submission.seller),
+                joinedload(Submission.locked_by_admin),
+            )
             .where(*conditions)
             .order_by(Submission.assigned_at.asc())
             .offset(page * page_size)
@@ -414,6 +464,11 @@ class SubmissionService:
         ]
         stmt = (
             select(Submission, User)
+            .options(
+                joinedload(Submission.category),
+                joinedload(Submission.seller),
+                joinedload(Submission.locked_by_admin),
+            )
             .join(User, Submission.user_id == User.id)
             .where(*base_conditions)
             .order_by(Submission.created_at.desc())
@@ -445,8 +500,10 @@ class SubmissionService:
 
         old_status = submission.status
         submission.status = SubmissionStatus.ACCEPTED
+        submission.locked_by_admin_id = None
         submission.reviewed_at = datetime.now(timezone.utc)
         submission.accepted_amount = category.payout_rate
+        submission.last_status_change = datetime.now(timezone.utc)
 
         seller.pending_balance = Decimal(seller.pending_balance) + Decimal(category.payout_rate)
 
@@ -471,6 +528,14 @@ class SubmissionService:
         await self._session.refresh(submission)
         return submission
 
+    _FINAL_REJECT_STATUSES = frozenset(
+        {
+            SubmissionStatus.REJECTED,
+            SubmissionStatus.BLOCKED,
+            SubmissionStatus.NOT_A_SCAN,
+        }
+    )
+
     async def final_reject_submission(
         self,
         submission_id: int,
@@ -479,9 +544,9 @@ class SubmissionService:
         reason: RejectionReason,
         comment: str,
     ) -> Submission | None:
-        """Финальное отклонение карточки (block/not_a_scan)."""
+        """Финальное отклонение карточки (незачёт / блок / не скан)."""
 
-        if to_status not in {SubmissionStatus.BLOCKED, SubmissionStatus.NOT_A_SCAN}:
+        if to_status not in self._FINAL_REJECT_STATUSES:
             return None
 
         submission = await self._session.get(Submission, submission_id)
@@ -490,9 +555,12 @@ class SubmissionService:
 
         old_status = submission.status
         submission.status = to_status
+        submission.admin_id = admin_id
+        submission.locked_by_admin_id = None
         submission.reviewed_at = datetime.now(timezone.utc)
         submission.rejection_reason = reason
         submission.rejection_comment = comment
+        submission.last_status_change = datetime.now(timezone.utc)
 
         self._session.add(
             ReviewAction(
@@ -609,6 +677,11 @@ class SubmissionService:
         total = int((await self._session.execute(total_stmt)).scalar_one())
         stmt = (
             select(Submission)
+            .options(
+                joinedload(Submission.category),
+                joinedload(Submission.seller),
+                joinedload(Submission.locked_by_admin),
+            )
             .where(*conds)
             .order_by(Submission.reviewed_at.desc().nullslast(), Submission.id.desc())
             .offset(page * page_size)
@@ -635,10 +708,100 @@ class SubmissionService:
         )
         stmt = (
             select(Submission)
+            .options(
+                joinedload(Submission.category),
+                joinedload(Submission.seller),
+                joinedload(Submission.locked_by_admin),
+            )
             .where(*conds)
             .order_by(Submission.reviewed_at.desc().nullslast(), Submission.id.desc())
         )
         return list((await self._session.execute(stmt)).scalars().all())
+
+    async def lock_submission(self, submission_id: int, admin_id: int) -> Submission | None:
+        """Ставит lock на карточку в работе, если она не занята другим админом.
+
+        Не использует joinedload вместе с FOR UPDATE: в PostgreSQL это даёт
+        LEFT OUTER JOIN и ошибку «FOR UPDATE cannot be applied to the nullable side
+        of an outer join». Если заявка уже залочена текущим админом — повторный
+        lock и commit не выполняются.
+        """
+
+        stmt = select(Submission).where(Submission.id == submission_id).with_for_update()
+        submission = (await self._session.execute(stmt)).scalar_one_or_none()
+        if submission is None:
+            return None
+        if submission.locked_by_admin_id is not None and submission.locked_by_admin_id != admin_id:
+            return None
+        if submission.locked_by_admin_id == admin_id:
+            return submission
+        submission.locked_by_admin_id = admin_id
+        await self._session.commit()
+        await self._session.refresh(submission)
+        return submission
+
+    async def get_submission_in_work_for_admin(
+        self,
+        submission_id: int,
+        admin_id: int,
+    ) -> Submission | None:
+        """Одна карточка «в работе» у админа: без блокировки, только для показа."""
+
+        stmt = (
+            select(Submission)
+            .options(
+                joinedload(Submission.category),
+                joinedload(Submission.seller),
+                joinedload(Submission.locked_by_admin),
+            )
+            .where(
+                Submission.id == submission_id,
+                Submission.status == SubmissionStatus.IN_REVIEW,
+                Submission.locked_by_admin_id == admin_id,
+            )
+        )
+        return (await self._session.execute(stmt)).scalar_one_or_none()
+
+    async def unlock_submission(self, submission_id: int) -> bool:
+        """Снимает lock с карточки."""
+
+        submission = await self._session.get(Submission, submission_id)
+        if submission is None:
+            return False
+        submission.locked_by_admin_id = None
+        await self._session.commit()
+        return True
+
+    async def get_admin_active_submissions(self, admin_id: int) -> list[Submission]:
+        """Возвращает карточки, заблокированные текущим админом."""
+
+        stmt = (
+            select(Submission)
+            .options(
+                joinedload(Submission.category),
+                joinedload(Submission.seller),
+                joinedload(Submission.locked_by_admin),
+            )
+            .where(
+                Submission.status == SubmissionStatus.IN_REVIEW,
+                Submission.locked_by_admin_id == admin_id,
+            )
+            .order_by(Submission.assigned_at.asc(), Submission.id.asc())
+        )
+        return list((await self._session.execute(stmt)).scalars().all())
+
+    async def has_phone_duplicate(self, *, submission_id: int, phone: str | None) -> bool:
+        """True, если в БД есть другая заявка с тем же номером."""
+
+        normalized = (phone or "").strip()
+        if not normalized:
+            return False
+        stmt = select(func.count(Submission.id)).where(
+            Submission.description_text == normalized,
+            Submission.id != submission_id,
+        )
+        count = int((await self._session.execute(stmt)).scalar_one())
+        return count > 0
 
     async def get_user_material_folders(self, user_id: int) -> list[dict[str, Any]]:
         """Папки «Материал»: категории с хотя бы одной карточкой у пользователя."""

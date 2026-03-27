@@ -9,7 +9,7 @@ from src.database.models.base import Base, TimestampMixin
 
 
 class Category(Base, TimestampMixin):
-    """Оператор (eSIM) — ставка оплаты, фото, лимит."""
+    """Оператор (eSIM) — цена за единицу в USDT, фото, лимит."""
 
     __tablename__ = "categories"
     __table_args__ = (UniqueConstraint("slug", name="uq_categories_slug"),)

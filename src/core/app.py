@@ -12,7 +12,8 @@ from src.api.app import create_app as create_fastapi_app
 from src.core.bot import create_bot
 from src.core.config import get_settings
 from src.core.dispatcher import create_dispatcher
-from src.database.session import engine
+from src.core.in_review_stuck_monitor import run_in_review_stuck_monitor
+from src.database.session import SessionFactory, engine
 
 logger = logging.getLogger(__name__)
 
@@ -67,6 +68,7 @@ async def run_application() -> None:
 
         async def run_bot() -> None:
             try:
+                asyncio.create_task(run_in_review_stuck_monitor(bot, SessionFactory))
                 await dispatcher.start_polling(
                     bot,
                     handle_signals=False,
@@ -110,6 +112,7 @@ async def run_polling() -> None:
             except RuntimeError as exc:
                 logger.debug("Не удалось повесить обработчик %s: %s", sig, exc)
 
+        asyncio.create_task(run_in_review_stuck_monitor(bot, SessionFactory))
         await dispatcher.start_polling(
             bot,
             handle_signals=False,

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import hashlib
-import re
 from datetime import datetime, timezone
 
 from aiogram import Bot, F, Router
@@ -15,19 +14,18 @@ from src.core.config import get_settings
 from src.database.models.enums import SubmissionStatus
 from src.database.models.submission import Submission
 from src.keyboards import (
-    REPLY_BTN_BACK,
-    categories_keyboard,
     is_admin_main_menu_text,
     is_sell_esim_button,
     match_admin_menu_canonical,
     moderation_item_keyboard,
-    seller_main_menu_keyboard,
-    seller_submission_step_keyboard,
+    seller_main_inline_keyboard,
 )
 from src.keyboards.callbacks import (
     CB_CAPTCHA_CANCEL,
     CB_CAPTCHA_START,
     CB_NOOP,
+    CB_SELLER_CANCEL_FSM,
+    CB_SELLER_FSM_CAT,
     CB_SELLER_INFO_FAQ,
     CB_SELLER_INFO_MANUALS,
     CB_SELLER_INFO_ROOT,
@@ -40,6 +38,12 @@ from src.keyboards.callbacks import (
     CB_SELLER_MAT_FILTER,
     CB_SELLER_MAT_ITEM,
     CB_SELLER_MAT_PAGE,
+    CB_SELLER_MENU_INFO,
+    CB_SELLER_MENU_MATERIAL,
+    CB_SELLER_MENU_PAYHIST,
+    CB_SELLER_MENU_PROFILE,
+    CB_SELLER_MENU_SELL,
+    CB_SELLER_MENU_SUPPORT,
     CB_SELLER_PAYHIST_PAGE,
     CB_SELLER_STATS_VIEW,
 )
@@ -54,6 +58,8 @@ from src.services import (
 )
 from src.states.submission_state import SubmissionState
 from src.utils.clean_screen import send_clean_text_screen
+from src.utils.phone_norm import normalize_phone_strict
+from src.utils.submission_format import format_submission_title_from_parts
 from src.utils.submission_media import (
     ATTACHMENT_DOCUMENT,
     ATTACHMENT_PHOTO,
@@ -61,9 +67,9 @@ from src.utils.submission_media import (
     is_allowed_archive_document,
 )
 from src.utils.text_format import edit_message_text_safe
+from src.utils.ui_builder import GDPXRenderer
 
 router = Router(name="seller-router")
-PHONE_DESCRIPTION_PATTERN = re.compile(r"^\+7\d{10}$")
 SELLER_PAGE_SIZE = 5
 DEFAULT_INFO_CHAT_URL = "https://t.me/+cFWhTnl_iew1ZjZi"
 MATERIAL_FILTER_ALL = "all"
@@ -76,6 +82,7 @@ MATERIAL_FILTER_ORDER = (
     MATERIAL_FILTER_CREDIT,
     MATERIAL_FILTER_DEBIT,
 )
+_renderer = GDPXRenderer()
 
 SELLER_DELETABLE_STATUSES = {
     SubmissionStatus.PENDING,
@@ -113,7 +120,7 @@ def _format_seller_esim_stats(user, stats: dict) -> str:
 def _format_seller_profile(user, dashboard: dict, esim_stats: dict) -> str:
     """Компактный современный экран профиля продавца."""
 
-    nickname = f"@{user.username}" if user.username else "без username"
+    nickname = f"@{user.username}" or "без username"
     if user.is_restricted:
         account_status = "ограничен"
     elif user.duplicate_timeout_until is not None:
@@ -266,48 +273,73 @@ async def _route_admin_menu_from_seller_fsm(
         await on_admin_stats_menu(message, state, session)
 
 
-async def _seller_menu_kb(session: AsyncSession, telegram_id: int):
-    """Главное меню селлера с учётом языка; если пользователь не найден — дефолт RU."""
-
-    user = await UserService(session=session).get_by_telegram_id(telegram_id)
-    if user is None:
-        return seller_main_menu_keyboard()
-    return seller_main_menu_keyboard(language=user.language, role=user.role)
+def _render_profile_text(user, dashboard: dict) -> str:
+    return _renderer.render_user_profile(
+        {
+            "username": user.username or "resident",
+            "user_id": user.telegram_id,
+            "approved_count": int(dashboard.get("accepted", 0)),
+            "pending_count": int(dashboard.get("pending", 0)),
+            "rejected_count": int(dashboard.get("rejected", 0)),
+        }
+    )
 
 
 def _captcha_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [InlineKeyboardButton(text="Пройти капчу", callback_data=CB_CAPTCHA_START)],
-            [InlineKeyboardButton(text=REPLY_BTN_BACK, callback_data=CB_CAPTCHA_CANCEL)],
+            [InlineKeyboardButton(text="⬅️ Назад", callback_data=CB_CAPTCHA_CANCEL)],
         ]
     )
 
 
-@router.message(F.text == REPLY_BTN_BACK, StateFilter(None))
-async def on_reply_back_root(message: Message, session: AsyncSession) -> None:
-    """«Назад» без активного FSM: главное меню селлера или админа."""
-
-    if message.from_user is None:
-        return
-    if await AdminService(session=session).is_admin(message.from_user.id):
-        user = await UserService(session=session).get_by_telegram_id(message.from_user.id)
-        if user is None:
-            await message.answer("Сначала нажми /start.")
-            return
-        await message.answer(
-            "Главное меню. Чтобы открыть админ-панель — кнопка «Войти в админ панель».",
-            reply_markup=seller_main_menu_keyboard(language=user.language, role=user.role),
-        )
-        return
-    user = await UserService(session=session).get_by_telegram_id(message.from_user.id)
-    if user is None:
-        await message.answer("Сначала нажми /start.")
-        return
-    await message.answer(
-        "Главное меню.",
-        reply_markup=seller_main_menu_keyboard(language=user.language, role=user.role),
+def _seller_fsm_cancel_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="❌ Отменить операцию", callback_data=CB_SELLER_CANCEL_FSM)],
+        ]
     )
+
+
+def _seller_fsm_categories_keyboard(categories) -> InlineKeyboardMarkup:
+    rows = [
+        [InlineKeyboardButton(text=str(category.title), callback_data=f"{CB_SELLER_FSM_CAT}:{category.id}")]
+        for category in categories
+    ]
+    rows.append([InlineKeyboardButton(text="❌ Отменить операцию", callback_data=CB_SELLER_CANCEL_FSM)])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+async def _safe_delete_message(message: Message | None) -> None:
+    if message is None:
+        return
+    try:
+        await message.delete()
+    except Exception:
+        pass
+
+
+async def _send_fsm_step_message(
+    message: Message,
+    state: FSMContext,
+    *,
+    text: str,
+    reply_markup: InlineKeyboardMarkup | None = None,
+    parse_mode: str | None = None,
+) -> Message:
+    """Send next FSM prompt and remove previous bot prompt only after success."""
+
+    state_data = await state.get_data()
+    prev_last_msg_id = state_data.get("last_msg_id")
+    sent = await message.answer(text, reply_markup=reply_markup, parse_mode=parse_mode)
+    await state.update_data(last_msg_id=sent.message_id)
+    if prev_last_msg_id:
+        try:
+            await message.bot.delete_message(chat_id=message.chat.id, message_id=int(prev_last_msg_id))
+        except Exception:
+            pass
+    return sent
 
 
 @router.message(Command("profile"))
@@ -324,13 +356,31 @@ async def on_profile(message: Message, session: AsyncSession) -> None:
         return
 
     dashboard = await SubmissionService(session=session).get_user_dashboard_stats(user_id=user.id)
-    esim_stats = await SubmissionService(session=session).get_user_esim_seller_stats(user_id=user.id)
-    await send_clean_text_screen(
-        trigger_message=message,
-        text=_format_seller_profile(user, dashboard, esim_stats),
-        key="seller:profile",
-        reply_markup=seller_main_menu_keyboard(language=user.language, role=user.role),
+    await message.answer(
+        _render_profile_text(user, dashboard),
+        reply_markup=seller_main_inline_keyboard(),
+        parse_mode="HTML",
     )
+
+
+@router.callback_query(F.data == CB_SELLER_MENU_PROFILE)
+async def on_seller_menu_profile(callback: CallbackQuery, session: AsyncSession) -> None:
+    if callback.from_user is None:
+        return
+    user = await UserService(session=session).get_by_telegram_id(callback.from_user.id)
+    if user is None:
+        await callback.answer("Сначала /start", show_alert=True)
+        return
+    dashboard = await SubmissionService(session=session).get_user_dashboard_stats(user_id=user.id)
+    text = _render_profile_text(user, dashboard)
+    await callback.answer()
+    if callback.message is not None:
+        await edit_message_text_safe(
+            callback.message,
+            text,
+            reply_markup=seller_main_inline_keyboard(),
+            parse_mode="HTML",
+        )
 
 
 @router.message(Command("stats"))
@@ -543,7 +593,7 @@ async def on_material_root(message: Message, session: AsyncSession) -> None:
             trigger_message=message,
             text="Материалов пока нет.",
             key="seller:material:root",
-            reply_markup=await _seller_menu_kb(session, message.from_user.id),
+            reply_markup=seller_main_inline_keyboard(),
         )
         return
     rows = []
@@ -554,6 +604,36 @@ async def on_material_root(message: Message, session: AsyncSession) -> None:
         trigger_message=message,
         text="Материал по операторам:",
         key="seller:material:root",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
+    )
+
+
+@router.callback_query(F.data == CB_SELLER_MENU_MATERIAL)
+async def on_seller_menu_material(callback: CallbackQuery, session: AsyncSession) -> None:
+    if callback.from_user is None:
+        return
+    user = await UserService(session=session).get_by_telegram_id(callback.from_user.id)
+    if user is None:
+        await callback.answer("Сначала /start", show_alert=True)
+        return
+    folders = await SubmissionService(session=session).get_user_material_folders(user.id)
+    await callback.answer()
+    if callback.message is None:
+        return
+    if not folders:
+        await edit_message_text_safe(
+            callback.message,
+            "Материалов пока нет.",
+            reply_markup=seller_main_inline_keyboard(),
+        )
+        return
+    rows = []
+    for f in folders:
+        text = f"{f['title']} ({f['total']})"
+        rows.append([InlineKeyboardButton(text=text, callback_data=f"{CB_SELLER_MAT_CAT}:{f['category_id']}")])
+    await edit_message_text_safe(
+        callback.message,
+        "Материал по операторам:",
         reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
     )
 
@@ -874,8 +954,8 @@ async def on_material_item_edit_submit(message: Message, state: FSMContext, sess
     if user is None:
         await state.clear()
         return
-    description_text = message.text.strip()
-    if not PHONE_DESCRIPTION_PATTERN.fullmatch(description_text):
+    description_text = normalize_phone_strict(message.text)
+    if description_text is None:
         await message.answer("Нужен формат +79999999999")
         return
     data = await state.get_data()
@@ -1075,6 +1155,19 @@ async def on_payout_history_root(message: Message, session: AsyncSession) -> Non
     await _send_payout_history_page(message, session, user_id=user.id, page=0)
 
 
+@router.callback_query(F.data == CB_SELLER_MENU_PAYHIST)
+async def on_seller_menu_payhist(callback: CallbackQuery, session: AsyncSession) -> None:
+    if callback.from_user is None:
+        return
+    user = await UserService(session=session).get_by_telegram_id(callback.from_user.id)
+    if user is None:
+        await callback.answer("Сначала /start", show_alert=True)
+        return
+    await callback.answer()
+    if callback.message is not None:
+        await _send_payout_history_page(callback.message, session, user_id=user.id, page=0)
+
+
 @router.callback_query(F.data.startswith(f"{CB_SELLER_PAYHIST_PAGE}:"))
 async def on_payout_history_page(callback: CallbackQuery, session: AsyncSession) -> None:
     if callback.from_user is None or callback.data is None:
@@ -1107,22 +1200,95 @@ async def on_sell_content(message: Message, state: FSMContext, session: AsyncSes
             "Шаг 1/3: выбери категорию (оператора).\n"
             "После выбора сразу переходишь к загрузке симки."
         ),
-        reply_markup=categories_keyboard([category.title for category in categories]),
+        reply_markup=_seller_fsm_categories_keyboard(categories),
     )
 
 
-@router.message(SubmissionState.waiting_for_category, F.text.in_({REPLY_BTN_BACK, "Отмена"}))
-async def on_cancel_submission(message: Message, state: FSMContext, session: AsyncSession) -> None:
-    """Отменяет создание симки по запросу пользователя."""
-
-    await state.clear()
-    if message.from_user is None:
-        await message.answer("Операция отменена.")
+@router.callback_query(F.data == CB_SELLER_MENU_SELL)
+async def on_seller_menu_sell(callback: CallbackQuery, state: FSMContext, session: AsyncSession) -> None:
+    categories = await CategoryService(session=session).get_active_categories()
+    if not categories:
+        await callback.answer("Сейчас нет активных категорий", show_alert=True)
         return
-    await message.answer(
-        "Операция отменена.",
-        reply_markup=await _seller_menu_kb(session, message.from_user.id),
+    await state.set_state(SubmissionState.waiting_for_category)
+    await callback.answer()
+    if callback.message is not None:
+        await edit_message_text_safe(
+            callback.message,
+            "Продать eSIM\n\n"
+            "Шаг 1/3: выбери категорию (оператора).\n"
+            "После выбора сразу переходишь к загрузке симки.",
+            reply_markup=_seller_fsm_categories_keyboard(categories),
+        )
+
+
+@router.callback_query(
+    F.data.startswith(f"{CB_SELLER_FSM_CAT}:"),
+    StateFilter(SubmissionState.waiting_for_category),
+)
+async def on_seller_fsm_category_pick(callback: CallbackQuery, state: FSMContext, session: AsyncSession) -> None:
+    if callback.from_user is None or callback.data is None:
+        return
+    try:
+        category_id = int(callback.data.split(":")[3])
+    except (TypeError, ValueError):
+        await callback.answer("Некорректная категория", show_alert=True)
+        return
+    category = await CategoryService(session=session).get_by_id(category_id)
+    if category is None or not category.is_active:
+        await callback.answer("Категория недоступна", show_alert=True)
+        return
+    await state.update_data(category_id=category.id)
+    await state.set_state(SubmissionState.waiting_for_photo)
+    await callback.answer()
+    if callback.message is not None:
+        await edit_message_text_safe(
+            callback.message,
+            "Продать eSIM\n\n"
+            "Шаг 2/3: загрузи симку\n"
+            "• фото, или\n"
+            "• архив файлом (zip/rar/7z/...)\n\n"
+            "Подпись: `+79999999999` — тогда симка сразу уйдет на модерацию.\n"
+            "Архив отправляй документом, не картинкой.",
+            reply_markup=_seller_fsm_cancel_keyboard(),
+            parse_mode="Markdown",
+        )
+
+
+@router.callback_query(
+    F.data == CB_SELLER_CANCEL_FSM,
+    StateFilter(
+        SubmissionState.waiting_for_category,
+        SubmissionState.waiting_for_photo,
+        SubmissionState.waiting_for_description,
+    ),
+)
+async def on_seller_cancel_fsm(callback: CallbackQuery, state: FSMContext, session: AsyncSession) -> None:
+    if callback.from_user is None:
+        return
+    user = await UserService(session=session).get_by_telegram_id(callback.from_user.id)
+    if user is None:
+        await callback.answer("Сначала /start", show_alert=True)
+        return
+    await state.clear()
+    dashboard = await SubmissionService(session=session).get_user_dashboard_stats(user_id=user.id)
+    text = _renderer.render_user_profile(
+        {
+            "username": user.username or "resident",
+            "user_id": user.telegram_id,
+            "approved_count": int(dashboard.get("accepted", 0)),
+            "pending_count": int(dashboard.get("pending", 0)),
+            "rejected_count": int(dashboard.get("rejected", 0)),
+        }
     )
+    await callback.answer("Операция отменена")
+    if callback.message is not None:
+        await edit_message_text_safe(
+            callback.message,
+            text,
+            reply_markup=seller_main_inline_keyboard(),
+            parse_mode="HTML",
+        )
 
 
 @router.message(SubmissionState.waiting_for_category)
@@ -1145,7 +1311,7 @@ async def on_category_selected(
     text = message.text.strip()
     category = await CategoryService(session=session).get_by_title(text)
     if category is None:
-        await message.answer(f"Выбери категорию кнопкой ниже или нажми «{REPLY_BTN_BACK}».")
+        await message.answer("Выбери категорию кнопками ниже.")
         return
 
     await state.update_data(category_id=category.id)
@@ -1159,50 +1325,7 @@ async def on_category_selected(
             "Подпись: `+79999999999` — тогда симка сразу уйдет на модерацию.\n"
             "Архив отправляй документом, не картинкой."
         ),
-        reply_markup=seller_submission_step_keyboard(),
-        parse_mode="Markdown",
-    )
-
-
-@router.message(SubmissionState.waiting_for_photo, F.text == REPLY_BTN_BACK)
-async def on_back_from_photo(message: Message, state: FSMContext, session: AsyncSession) -> None:
-    """Возврат к выбору категории."""
-
-    if message.from_user is None:
-        return
-    categories = await CategoryService(session=session).get_active_categories()
-    if not categories:
-        await state.clear()
-        await message.answer(
-            "Нет активных категорий.",
-            reply_markup=await _seller_menu_kb(session, message.from_user.id),
-        )
-        return
-    await state.clear()
-    await state.set_state(SubmissionState.waiting_for_category)
-    await message.answer(
-        "Выбери категорию:",
-        reply_markup=categories_keyboard([c.title for c in categories]),
-    )
-
-
-@router.message(SubmissionState.waiting_for_description, F.text == REPLY_BTN_BACK)
-async def on_back_from_description(message: Message, state: FSMContext) -> None:
-    """Возврат к шагу загрузки файла."""
-
-    await state.update_data(
-        telegram_file_id=None,
-        file_unique_id=None,
-        image_sha256=None,
-        attachment_type=ATTACHMENT_PHOTO,
-    )
-    await state.set_state(SubmissionState.waiting_for_photo)
-    await message.answer(
-        "Отправь **одну** симку снова:\n"
-        "• фото (как картинку), или\n"
-        "• архив одним файлом.\n\n"
-        "Архив — **файлом** (документ), не как фото.",
-        reply_markup=seller_submission_step_keyboard(),
+        reply_markup=_seller_fsm_cancel_keyboard(),
         parse_mode="Markdown",
     )
 
@@ -1227,7 +1350,7 @@ async def _upload_prechecks(
         await state.clear()
         await message.answer(
             f"Временный таймаут за дубликаты до {user.duplicate_timeout_until}.",
-            reply_markup=seller_main_menu_keyboard(language=user.language, role=user.role),
+            reply_markup=seller_main_inline_keyboard(),
         )
         return False
     data = await state.get_data()
@@ -1236,7 +1359,7 @@ async def _upload_prechecks(
         await state.clear()
         await message.answer(
             "Сначала выбери категорию (подтип оператора).",
-            reply_markup=seller_main_menu_keyboard(language=user.language, role=user.role),
+            reply_markup=seller_main_inline_keyboard(),
         )
         return False
     category_id = int(raw_cid)
@@ -1248,7 +1371,7 @@ async def _upload_prechecks(
         await message.answer(
             "На сегодня в этой категории не назначен лимит выгрузок. "
             "Администратор задаёт лимиты через `/admin_categories`.",
-            reply_markup=seller_main_menu_keyboard(language=user.language, role=user.role),
+            reply_markup=seller_main_inline_keyboard(),
         )
         return False
     counts = await submission_service.get_daily_counts_by_category_for_user(user_id=user.id)
@@ -1258,7 +1381,7 @@ async def _upload_prechecks(
         await message.answer(
             f"Достигнут дневной лимит по запросу в этой категории: {daily_limit}. "
             "Новые симки — завтра (UTC) или после смены запроса.",
-            reply_markup=seller_main_menu_keyboard(language=user.language, role=user.role),
+            reply_markup=seller_main_inline_keyboard(),
         )
         return False
     return True
@@ -1287,7 +1410,7 @@ async def _finalize_submission_after_upload(
         await state.clear()
         await message.answer(
             "Категория не найдена. Начни заново.",
-            reply_markup=seller_main_menu_keyboard(language=user.language, role=user.role),
+            reply_markup=seller_main_inline_keyboard(),
         )
         return False
     if selected_category.total_upload_limit is not None:
@@ -1296,7 +1419,7 @@ async def _finalize_submission_after_upload(
             await state.clear()
             await message.answer(
                 f"По категории достигнут общий лимит: {selected_category.total_upload_limit}.",
-                reply_markup=seller_main_menu_keyboard(language=user.language, role=user.role),
+                reply_markup=seller_main_inline_keyboard(),
             )
             return False
 
@@ -1312,13 +1435,11 @@ async def _finalize_submission_after_upload(
 
     admin_users = await UserService(session=session).get_all_admins()
     kind_label = "архив (файл)" if submission.attachment_type == ATTACHMENT_DOCUMENT else "фото"
+    title_line = format_submission_title_from_parts(submission.description_text, selected_category.title)
     notify_text = (
         f"Новая симка на проверку ({kind_label})\n"
-        f"Submission #{submission.id}\n"
-        f"Продавец: @{user.username or 'без_username'}\n"
-        f"Seller internal ID: {submission.user_id}\n"
-        f"Категория ID: {submission.category_id}\n"
-        f"Описание: {submission.description_text[:300]}"
+        f"#{submission.id} · {title_line}\n"
+        f"Продавец (внутр.): @{user.username or '—'}"
     )
     for admin_user in admin_users:
         try:
@@ -1340,19 +1461,31 @@ async def _finalize_submission_after_upload(
             attachment_type=ATTACHMENT_PHOTO,
         )
         await state.set_state(SubmissionState.waiting_for_photo)
-        await message.answer(
+        await _send_fsm_step_message(
+            message,
+            state,
             text=(
                 "Материал отправлен на модерацию. Можешь отправить ещё фото или архив "
                 "(удобно с подписью +79999999999 в том же сообщении — сразу на модерацию) "
-                f"или нажми «{REPLY_BTN_BACK}», чтобы сменить категорию."
+                "или нажми «❌ Отменить операцию», чтобы выйти в хаб."
             ),
-            reply_markup=seller_submission_step_keyboard(),
+            reply_markup=_seller_fsm_cancel_keyboard(),
         )
     else:
         await state.clear()
+        dashboard = await SubmissionService(session=session).get_user_dashboard_stats(user_id=user.id)
         await message.answer(
-            text="Материал отправлен на модерацию. Спасибо!",
-            reply_markup=seller_main_menu_keyboard(language=user.language, role=user.role),
+            text=_renderer.render_user_profile(
+                {
+                    "username": user.username or "resident",
+                    "user_id": user.telegram_id,
+                    "approved_count": int(dashboard.get("accepted", 0)),
+                    "pending_count": int(dashboard.get("pending", 0)),
+                    "rejected_count": int(dashboard.get("rejected", 0)),
+                }
+            ),
+            reply_markup=seller_main_inline_keyboard(),
+            parse_mode="HTML",
         )
     return True
 
@@ -1377,7 +1510,7 @@ async def _store_file_and_ask_description(
         await state.clear()
         await message.answer(
             "Эта симка уже была принята ранее. Выдан таймаут 60 минут и ограничение до прохождения капчи.",
-            reply_markup=seller_main_menu_keyboard(language=user.language, role=user.role),
+            reply_markup=seller_main_inline_keyboard(),
         )
         return
 
@@ -1388,9 +1521,11 @@ async def _store_file_and_ask_description(
         attachment_type=attachment_type,
     )
     await state.set_state(SubmissionState.waiting_for_description)
-    await message.answer(
-        "Отлично. Теперь отправь описание в формате номера: +79999999999.",
-        reply_markup=seller_submission_step_keyboard(),
+    await _send_fsm_step_message(
+        message,
+        state,
+        text="Отлично. Теперь отправь описание в формате номера: +79999999999.",
+        reply_markup=_seller_fsm_cancel_keyboard(),
     )
 
 
@@ -1405,6 +1540,7 @@ async def on_photo_received(
 
     if message.from_user is None or not message.photo:
         return
+    await _safe_delete_message(message)
 
     user = await UserService(session=session).get_by_telegram_id(message.from_user.id)
     if user is None:
@@ -1425,14 +1561,14 @@ async def on_photo_received(
     image_bytes = file_stream.read()
     image_sha256 = hashlib.sha256(image_bytes).hexdigest()
 
-    caption = (message.caption or "").strip()
-    if caption and PHONE_DESCRIPTION_PATTERN.fullmatch(caption):
+    caption = normalize_phone_strict(message.caption or "")
+    if caption is not None:
         if await submission_service.is_duplicate_accepted(image_sha256=image_sha256):
             await UserService(session=session).set_duplicate_timeout(user_id=user.id, minutes=60)
             await state.clear()
             await message.answer(
                 "Эта симка уже была принята ранее. Выдан таймаут 60 минут и ограничение до прохождения капчи.",
-                reply_markup=seller_main_menu_keyboard(language=user.language, role=user.role),
+                reply_markup=seller_main_inline_keyboard(),
             )
             return
         await _finalize_submission_after_upload(
@@ -1450,12 +1586,13 @@ async def on_photo_received(
             stay_in_batch=True,
         )
         return
-    if caption:
+    raw_caption = (message.caption or "").strip()
+    if raw_caption:
         await message.answer(
             "Подпись к фото не в формате номера +79999999999 (ровно +7 и 10 цифр). "
             "Отправь номер **отдельным сообщением** ниже.",
             parse_mode="Markdown",
-            reply_markup=seller_submission_step_keyboard(),
+            reply_markup=_seller_fsm_cancel_keyboard(),
         )
 
     await _store_file_and_ask_description(
@@ -1482,13 +1619,14 @@ async def on_archive_document_received(
 
     if message.from_user is None or message.document is None:
         return
+    await _safe_delete_message(message)
 
     document: Document = message.document
     if not is_allowed_archive_document(document):
         await message.answer(
             "Пришли архив известного формата (zip, rar, 7z, tar, gz, …) **файлом**.\nИли отправь фото как картинку.",
             parse_mode="Markdown",
-            reply_markup=seller_submission_step_keyboard(),
+            reply_markup=_seller_fsm_cancel_keyboard(),
         )
         return
 
@@ -1510,14 +1648,14 @@ async def on_archive_document_received(
     raw = file_stream.read()
     image_sha256 = hashlib.sha256(raw).hexdigest()
 
-    caption = (message.caption or "").strip()
-    if caption and PHONE_DESCRIPTION_PATTERN.fullmatch(caption):
+    caption = normalize_phone_strict(message.caption or "")
+    if caption is not None:
         if await submission_service.is_duplicate_accepted(image_sha256=image_sha256):
             await UserService(session=session).set_duplicate_timeout(user_id=user.id, minutes=60)
             await state.clear()
             await message.answer(
                 "Эта симка уже была принята ранее. Выдан таймаут 60 минут и ограничение до прохождения капчи.",
-                reply_markup=seller_main_menu_keyboard(language=user.language, role=user.role),
+                reply_markup=seller_main_inline_keyboard(),
             )
             return
         await _finalize_submission_after_upload(
@@ -1535,12 +1673,13 @@ async def on_archive_document_received(
             stay_in_batch=True,
         )
         return
-    if caption:
+    raw_caption = (message.caption or "").strip()
+    if raw_caption:
         await message.answer(
             "Подпись к файлу не в формате номера +79999999999 (ровно +7 и 10 цифр). "
             "Отправь номер **отдельным сообщением** ниже.",
             parse_mode="Markdown",
-            reply_markup=seller_submission_step_keyboard(),
+            reply_markup=_seller_fsm_cancel_keyboard(),
         )
 
     await _store_file_and_ask_description(
@@ -1574,7 +1713,7 @@ async def on_photo_expected(message: Message, state: FSMContext, session: AsyncS
         "Для автозачета подпись в формате +79999999999.\n"
         "Для разных номеров отправляй отдельные сообщения.",
         parse_mode="Markdown",
-        reply_markup=seller_submission_step_keyboard(),
+        reply_markup=_seller_fsm_cancel_keyboard(),
     )
 
 
@@ -1589,6 +1728,7 @@ async def on_description_received(
 
     if message.from_user is None or message.text is None:
         return
+    await _safe_delete_message(message)
 
     if is_admin_main_menu_text(message.text) and await AdminService(session=session).is_admin(message.from_user.id):
         await _route_admin_menu_from_seller_fsm(message, state, session)
@@ -1604,7 +1744,7 @@ async def on_description_received(
         await state.clear()
         await message.answer(
             "Сессия устарела. Начни заново через «Продать eSIM».",
-            reply_markup=await _seller_menu_kb(session, message.from_user.id),
+            reply_markup=seller_main_inline_keyboard(),
         )
         return
 
@@ -1614,15 +1754,21 @@ async def on_description_received(
         await message.answer("Сначала пройди регистрацию через /start.")
         return
 
-    description_text = message.text.strip()
-    if not PHONE_DESCRIPTION_PATTERN.fullmatch(description_text):
-        await message.answer(
-            "Описание должно быть только в формате номера: +79999999999.\n"
-            "Отправь описание повторно строго в этом формате.",
-            reply_markup=seller_submission_step_keyboard(),
+    description_text = normalize_phone_strict(message.text)
+    if description_text is None:
+        await _send_fsm_step_message(
+            message,
+            state,
+            text=(
+                "❌ <b>Ошибка:</b> Неверный формат номера. "
+                "Введите номер в формате +79001112233."
+            ),
+            reply_markup=_seller_fsm_cancel_keyboard(),
+            parse_mode="HTML",
         )
         return
 
+    await state.set_state(SubmissionState.waiting_for_photo)
     await _finalize_submission_after_upload(
         message=message,
         state=state,
@@ -1635,7 +1781,7 @@ async def on_description_received(
         image_sha256=str(image_sha256),
         attachment_type=attachment_type,
         description_text=description_text,
-        stay_in_batch=False,
+        stay_in_batch=True,
     )
 
 
@@ -1645,7 +1791,7 @@ async def on_description_expected(message: Message) -> None:
 
     await message.answer(
         "Шаг 3/3: отправь номер в формате +79999999999.",
-        reply_markup=seller_submission_step_keyboard(),
+        reply_markup=_seller_fsm_cancel_keyboard(),
     )
 
 
@@ -1672,8 +1818,31 @@ async def on_support(message: Message, session: AsyncSession) -> None:
         trigger_message=message,
         text=text,
         key="seller:support",
-        reply_markup=seller_main_menu_keyboard(language=user.language, role=user.role),
+        reply_markup=seller_main_inline_keyboard(),
     )
+
+
+@router.callback_query(F.data == CB_SELLER_MENU_SUPPORT)
+async def on_seller_menu_support(callback: CallbackQuery, session: AsyncSession) -> None:
+    if callback.from_user is None:
+        return
+    user = await UserService(session=session).get_by_telegram_id(callback.from_user.id)
+    if user is None:
+        await callback.answer("Сначала /start", show_alert=True)
+        return
+    support_link = get_settings().brand_chat_url or "@GDPX1"
+    text = (
+        "Support / Помощь\n\n"
+        "FAQ:\n"
+        "• Если дубликат/таймаут: проверь, что симка не отправлялась ранее.\n"
+        "• Если не зачёт: смотри статус в разделе «Материал».\n"
+        "• Выплаты: история и суммы в разделе «История выплат».\n"
+        "• Проблема с загрузкой: отправляй архив как файл.\n\n"
+        f"Написать Г: {support_link}"
+    )
+    await callback.answer()
+    if callback.message is not None:
+        await edit_message_text_safe(callback.message, text, reply_markup=seller_main_inline_keyboard())
 
 
 @router.message(F.text == "INFO")
@@ -1691,6 +1860,21 @@ async def on_info_root(message: Message, session: AsyncSession) -> None:
         trigger_message=message,
         text=_info_root_text(),
         key="seller:info",
+        reply_markup=_info_root_keyboard(channel_url, chat_url),
+    )
+
+
+@router.callback_query(F.data == CB_SELLER_MENU_INFO)
+async def on_seller_menu_info(callback: CallbackQuery) -> None:
+    if callback.message is None:
+        return
+    settings = get_settings()
+    channel_url = settings.brand_channel_url
+    chat_url = settings.brand_chat_url or DEFAULT_INFO_CHAT_URL
+    await callback.answer()
+    await edit_message_text_safe(
+        callback.message,
+        _info_root_text(),
         reply_markup=_info_root_keyboard(channel_url, chat_url),
     )
 
@@ -1758,14 +1942,16 @@ async def on_captcha_cancel(callback: CallbackQuery, session: AsyncSession) -> N
     user = await UserService(session=session).get_by_telegram_id(callback.from_user.id)
     await callback.answer()
     if callback.message is not None:
-        await callback.message.edit_reply_markup(reply_markup=None)
-    kb = (
-        seller_main_menu_keyboard(language=user.language, role=user.role)
-        if user is not None
-        else seller_main_menu_keyboard()
-    )
-    if callback.message is not None:
-        await callback.message.answer("Главное меню.", reply_markup=kb)
+        dashboard = {"accepted": 0, "pending": 0, "rejected": 0}
+        if user is not None:
+            dashboard = await SubmissionService(session=session).get_user_dashboard_stats(user_id=user.id)
+        text = _render_profile_text(user, dashboard) if user is not None else "Сначала пройди регистрацию через /start."
+        await edit_message_text_safe(
+            callback.message,
+            text,
+            reply_markup=seller_main_inline_keyboard() if user is not None else None,
+            parse_mode="HTML" if user is not None else None,
+        )
 
 
 @router.callback_query(F.data == CB_CAPTCHA_START)
@@ -1801,9 +1987,18 @@ async def on_captcha_check(message: Message, session: AsyncSession) -> None:
         return
     ok = await user_service.verify_captcha(user_id=user.id, answer=message.text.strip())
     if ok:
+        dashboard = await SubmissionService(session=session).get_user_dashboard_stats(user_id=user.id)
         await message.answer(
-            "Ограничение снято. Можно продолжать работу.",
-            reply_markup=seller_main_menu_keyboard(language=user.language, role=user.role),
+            _render_profile_text(user, dashboard),
+            reply_markup=seller_main_inline_keyboard(),
+            parse_mode="HTML",
         )
         return
     await message.answer("Неверный код. Нажми 'Пройти капчу' и попробуй снова.", reply_markup=_captcha_keyboard())
+
+
+@router.message(StateFilter(None))
+async def on_seller_fallback_cleanup(message: Message) -> None:
+    """Молча удаляет лишние сообщения вне FSM для чистого чата."""
+
+    await _safe_delete_message(message)

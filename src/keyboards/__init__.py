@@ -10,6 +10,7 @@ from src.keyboards.constants import (
     normalize_reply_menu_text,
 )
 from src.keyboards.inline import (
+    admin_main_inline_keyboard,
     moderation_item_keyboard,
     moderation_reject_template_keyboard,
     moderation_review_keyboard,
@@ -18,6 +19,7 @@ from src.keyboards.inline import (
     payout_confirm_keyboard,
     payout_mark_paid_keyboard,
     search_report_keyboard,
+    seller_main_inline_keyboard,
 )
 from src.keyboards.reply import (
     FORWARD_REQ_CHAT_CHANNEL,
@@ -44,8 +46,10 @@ __all__ = [
     "is_sell_esim_button",
     "language_choice_keyboard",
     "seller_main_menu_keyboard",
+    "seller_main_inline_keyboard",
     "seller_submission_step_keyboard",
     "admin_main_menu_keyboard",
+    "admin_main_inline_keyboard",
     "admin_payout_menu_keyboard",
     "categories_keyboard",
     "moderation_item_keyboard",

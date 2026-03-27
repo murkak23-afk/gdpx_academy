@@ -1,5 +1,3 @@
-"""Интеграция с Crypto Pay API (@CryptoBot) для создания чеков на выплату."""
-
 from __future__ import annotations
 
 import logging
@@ -11,14 +9,13 @@ from aiosend.enums import Asset
 from aiosend.exceptions import CryptoPayError
 
 from src.core.config import get_settings
+from src.services.alert_service import alert_cryptobot_error
 
 logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
 class CryptoCheckResult:
-    """Результат создания чека для сохранения в БД и UI."""
-
     check_id: str
     check_url: str
 
@@ -28,51 +25,60 @@ def _asset_from_settings(raw: str | None) -> Asset:
     try:
         return Asset[code]
     except KeyError:
-        logger.warning("Неизвестный CRYPTO_ASSET=%s, используется USDT", raw)
+        logger.warning("Unknown asset %s → fallback USDT", raw)
         return Asset.USDT
 
 
 class CryptoBotService:
-    """Обёртка над aiosend.CryptoPay: токен из окружения, без секретов в коде."""
-
-    def __init__(self, token: str | None = None) -> None:
-        self._override_token = token
+    def __init__(self) -> None:
         self._client: CryptoPay | None = None
-
-    def _resolve_token(self) -> str:
-        token = self._override_token if self._override_token is not None else get_settings().crypto_pay_token
-        if not token:
-            msg = "CRYPTO_PAY_TOKEN не задан. Укажите токен Crypto Pay в .env для выплат через чек."
-            raise RuntimeError(msg)
-        return token
 
     def _get_client(self) -> CryptoPay:
         if self._client is None:
-            self._client = CryptoPay(self._resolve_token())
+            settings = get_settings()
+
+            if not settings.crypto_pay_token:
+                raise RuntimeError("CRYPTO_PAY_TOKEN not set")
+
+            logger.info("CryptoBot init (token prefix=%s)", settings.crypto_pay_token[:5])
+
+            self._client = CryptoPay(settings.crypto_pay_token)
+
         return self._client
 
-    async def create_usdt_check(self, *, amount: Decimal, comment: str) -> CryptoCheckResult:
-        """Создаёт чек в Crypto Pay. `comment` в API не передаётся — только для логов."""
+    async def get_balance(self):
+        client = self._get_client()
+        return await client.get_balance()
 
+    async def create_usdt_check(self, amount: Decimal, comment: str = "") -> CryptoCheckResult:
+        """Создаёт чек в активе из настроек (по умолчанию USDT). Alias для `create_check`."""
+
+        return await self.create_check(amount=amount, comment=comment)
+
+    async def create_check(
+        self,
+        amount: Decimal,
+        comment: str = "",
+    ) -> CryptoCheckResult:
         if amount <= 0:
-            raise RuntimeError("Сумма чека должна быть больше нуля")
+            raise ValueError("Amount must be > 0")
 
+        client = self._get_client()
         settings = get_settings()
         asset = _asset_from_settings(settings.crypto_asset)
-        client = self._get_client()
 
-        logger.info(
-            "CryptoBot create_check: amount=%s asset=%s comment=%s",
-            amount,
-            asset.value,
-            comment[:200] if comment else "",
-        )
+        logger.info("Create check: %s %s", amount, asset.value)
 
         try:
-            check = await client.create_check(amount=float(amount), asset=asset)
-        except CryptoPayError as exc:
-            logger.exception("Ошибка Crypto Pay API при create_check")
-            raise RuntimeError(str(exc)) from exc
+            check = await client.create_check(
+                amount=str(amount),  # ✅ важно!
+                asset=asset,
+            )
+
+        except CryptoPayError as e:
+            logger.exception("CryptoPay API error: %s", e)
+            await alert_cryptobot_error(str(e))
+            raise RuntimeError(f"CryptoPay error: {e}") from e
 
         return CryptoCheckResult(
             check_id=str(check.check_id),

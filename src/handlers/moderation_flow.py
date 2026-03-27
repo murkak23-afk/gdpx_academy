@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import csv
 import re
-from datetime import datetime
+from datetime import datetime, timezone
+from html import escape
 from io import StringIO
 
 from aiogram import Bot, F, Router
@@ -14,13 +15,11 @@ from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMar
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.config import get_settings
+from src.database.models.category import Category
 from src.database.models.enums import RejectionReason, SubmissionStatus
 from src.database.models.submission import Submission
 from src.database.models.user import User
 from src.keyboards import (
-    CALLBACK_INLINE_BACK,
-    REPLY_BTN_BACK,
-    admin_main_menu_keyboard,
     forward_target_reply_keyboard,
     match_admin_menu_canonical,
     moderation_item_keyboard,
@@ -59,13 +58,38 @@ from src.services import (
     UserService,
 )
 from src.states.moderation_state import AdminBatchPickState, AdminModerationForwardState
+from src.utils.admin_keyboard import build_admin_main_menu_keyboard
 from src.utils.clean_screen import send_clean_text_screen
 from src.utils.forward_target import target_chat_id_from_forward_pick
+from src.utils.submission_format import (
+    duplicate_warning_html,
+    format_phone_category_html,
+    format_submission_title_anonymized,
+    submission_status_emoji_line,
+)
 from src.utils.submission_media import bot_send_submission, message_answer_submission
 from src.utils.text_format import PAGINATION_MESSAGE_STUB, edit_message_text_safe
+from src.utils.ui_builder import GDPXRenderer
 
 router = Router(name="moderation-router")
 PAGE_SIZE = 5
+_renderer = GDPXRenderer()
+
+
+async def _notify_sellers_in_review(bot: Bot, session: AsyncSession, submissions: list[Submission]) -> None:
+    for s in submissions:
+        u = await session.get(User, s.user_id)
+        if u is None:
+            continue
+        num = (s.description_text or "").strip() or "—"
+        try:
+            await bot.send_message(
+                chat_id=u.telegram_id,
+                text=f"⚖️ Ваш актив  <code>{escape(num)}</code>  передан в управление модератору. Ожидайте решения.",
+                parse_mode="HTML",
+            )
+        except TelegramAPIError:
+            pass
 
 
 def _reply_is_queue(t: str | None) -> bool:
@@ -73,7 +97,7 @@ def _reply_is_queue(t: str | None) -> bool:
 
 
 def _reply_is_in_review(t: str | None) -> bool:
-    return match_admin_menu_canonical(t) == "В работе"
+    return match_admin_menu_canonical(t) in {"В работе", "🏃 В работе"}
 
 
 def _reply_is_worked(t: str | None) -> bool:
@@ -142,22 +166,6 @@ def _decode_worked_query(raw: str | None) -> tuple[str, int | None, int | None, 
     return (tab, *_decode_queue_filters(rest))
 
 
-@router.callback_query(F.data == CALLBACK_INLINE_BACK)
-async def on_inline_back(callback: CallbackQuery, state: FSMContext, session: AsyncSession) -> None:
-    """Убирает inline-клавиатуру и возвращает reply-меню админа."""
-
-    if callback.from_user is None:
-        return
-    if not await AdminService(session=session).is_admin(callback.from_user.id):
-        await callback.answer("Недостаточно прав", show_alert=True)
-        return
-    await state.clear()
-    await callback.answer()
-    if callback.message is not None:
-        await callback.message.edit_reply_markup(reply_markup=None)
-        await callback.message.answer("Меню администратора ниже.", reply_markup=admin_main_menu_keyboard())
-
-
 @router.callback_query(F.data.startswith(f"{CB_MOD_REJTPL_BACK}:"))
 async def on_reject_template_back(callback: CallbackQuery, session: AsyncSession) -> None:
     """Возврат с выбора причины отклонения к кнопкам симки."""
@@ -213,26 +221,6 @@ def _parse_submission_id_selection(text: str, pending_by_id: dict[int, Submissio
     return sorted(ids, key=lambda x: pending_sorted.index(x))
 
 
-def _format_queue_card_caption(
-    *,
-    seller_label: str,
-    submission_id: int,
-    items_count: int,
-    description_text: str,
-    desc_max_len: int = 300,
-) -> str:
-    """Текст под товаром в разделе «Очередь» (админ-панель)."""
-
-    raw_desc = (description_text or "").strip()
-    desc = raw_desc[:desc_max_len] if raw_desc else "—"
-    return (
-        f"— Владелец: {seller_label}\n"
-        f"— Индивидуальный ID товара: #{submission_id} (по нему поиск и действия)\n"
-        f"— Товаров в очереди именно за этим владельцем: {items_count}\n"
-        f"— Описание: {desc}"
-    )
-
-
 def _parse_filters(text: str | None) -> tuple[int | None, int | None, datetime | None]:
     if not text:
         return None, None, None
@@ -252,6 +240,82 @@ def _parse_filters(text: str | None) -> tuple[int | None, int | None, datetime |
     return seller_id, category_id, date_from
 
 
+async def _render_moderation_card_caption(
+    submission: Submission,
+    *,
+    session: AsyncSession,
+    hint_block: str = "",
+) -> str:
+    is_duplicate = await SubmissionService(session=session).has_phone_duplicate(
+        submission_id=submission.id,
+        phone=submission.description_text,
+    )
+    card = _renderer.render_moderation_card(submission, is_duplicate=is_duplicate)
+    if hint_block:
+        return f"{hint_block}\n\n{card}"
+    return card
+
+
+async def _show_queue_for_admin(
+    *,
+    target_message: Message,
+    session: AsyncSession,
+    seller_id: int | None = None,
+    category_id: int | None = None,
+    date_from: datetime | None = None,
+) -> None:
+    """Показывает первую страницу очереди для админа в текущем чате."""
+
+    filters_query = _encode_queue_filters(seller_id=seller_id, category_id=category_id, date_from=date_from)
+    groups, total = await SubmissionService(session=session).list_pending_groups_by_user_paginated(
+        page=0,
+        page_size=PAGE_SIZE,
+        seller_id=seller_id,
+        category_id=category_id,
+        date_from=date_from,
+    )
+    if not groups:
+        if target_message.from_user is None:
+            await target_message.answer("Очередь пустая.")
+            return
+        await target_message.answer(
+            "Очередь пустая.",
+            reply_markup=await build_admin_main_menu_keyboard(session, target_message.from_user.id),
+        )
+        return
+
+    first_card = True
+    for seller_user_id, items_count in groups:
+        sample_items = await SubmissionService(session=session).list_pending_submissions_by_user(user_id=seller_user_id)
+        if not sample_items:
+            continue
+        sample = sample_items[0]
+        cap = await _render_moderation_card_caption(
+            sample,
+            session=session,
+            hint_block=HINT_QUEUE if first_card else "",
+        )
+        if first_card:
+            first_card = False
+        await message_answer_submission(
+            target_message,
+            sample,
+            caption=cap,
+            reply_markup=moderation_seller_group_keyboard(user_id=seller_user_id),
+            parse_mode="HTML",
+        )
+    await target_message.answer(
+        PAGINATION_MESSAGE_STUB,
+        reply_markup=pagination_keyboard(
+            CB_MOD_QUEUE_PAGE,
+            page=0,
+            total=total,
+            page_size=PAGE_SIZE,
+            query=filters_query,
+        ),
+    )
+
+
 @router.message(Command("moderation"))
 @router.message(F.text.func(_reply_is_queue))
 async def on_moderation_queue(message: Message, session: AsyncSession) -> None:
@@ -266,56 +330,12 @@ async def on_moderation_queue(message: Message, session: AsyncSession) -> None:
         return
 
     seller_id, category_id, date_from = _parse_filters(message.text)
-    filters_query = _encode_queue_filters(seller_id=seller_id, category_id=category_id, date_from=date_from)
-    groups, total = await SubmissionService(session=session).list_pending_groups_by_user_paginated(
-        page=0,
-        page_size=PAGE_SIZE,
+    await _show_queue_for_admin(
+        target_message=message,
+        session=session,
         seller_id=seller_id,
         category_id=category_id,
         date_from=date_from,
-    )
-    if not groups:
-        await send_clean_text_screen(
-            trigger_message=message,
-            text="Очередь пустая.",
-            key="admin:moderation:queue",
-            reply_markup=admin_main_menu_keyboard(),
-        )
-        return
-
-    first_card = True
-    for seller_user_id, items_count in groups:
-        seller = await session.get(User, seller_user_id)
-        seller_nickname = f"@{seller.username}" if seller is not None and seller.username else "без username"
-        sample_items = await SubmissionService(session=session).list_pending_submissions_by_user(user_id=seller_user_id)
-        if not sample_items:
-            continue
-        sample = sample_items[0]
-        cap = _format_queue_card_caption(
-            seller_label=seller_nickname,
-            submission_id=sample.id,
-            items_count=items_count,
-            description_text=sample.description_text,
-        )
-        if first_card:
-            cap = f"{HINT_QUEUE}\n\n{cap}"
-            first_card = False
-        await message_answer_submission(
-            message,
-            sample,
-            caption=cap,
-            reply_markup=moderation_seller_group_keyboard(user_id=seller_user_id),
-        )
-    # Пагинация должна оставаться одним сообщением и обновляться при переходах.
-    await message.answer(
-        PAGINATION_MESSAGE_STUB,
-        reply_markup=pagination_keyboard(
-            CB_MOD_QUEUE_PAGE,
-            page=0,
-            total=total,
-            page_size=PAGE_SIZE,
-            query=filters_query,
-        ),
     )
 
 
@@ -351,28 +371,25 @@ async def on_queue_page(callback: CallbackQuery, session: AsyncSession) -> None:
         )
         first_card = True
         for seller_user_id, items_count in groups:
-            seller = await session.get(User, seller_user_id)
-            seller_nickname = f"@{seller.username}" if seller is not None and seller.username else "без username"
             sample_items = await SubmissionService(session=session).list_pending_submissions_by_user(
                 user_id=seller_user_id
             )
             if not sample_items:
                 continue
             sample = sample_items[0]
-            cap = _format_queue_card_caption(
-                seller_label=seller_nickname,
-                submission_id=sample.id,
-                items_count=items_count,
-                description_text=sample.description_text,
+            cap = await _render_moderation_card_caption(
+                sample,
+                session=session,
+                hint_block=HINT_QUEUE if page == 0 and first_card else "",
             )
             if page == 0 and first_card:
-                cap = f"{HINT_QUEUE}\n\n{cap}"
                 first_card = False
             await message_answer_submission(
                 callback.message,
                 sample,
                 caption=cap,
                 reply_markup=moderation_seller_group_keyboard(user_id=seller_user_id),
+                parse_mode="HTML",
             )
     await callback.answer()
 
@@ -402,7 +419,7 @@ async def on_take_pick_start(
     await callback.answer()
     list_text = _format_pending_list_for_pick(pending)
     cancel_kb = InlineKeyboardMarkup(
-        inline_keyboard=[[InlineKeyboardButton(text=REPLY_BTN_BACK, callback_data=CB_MOD_PICK_CANCEL)]]
+        inline_keyboard=[[InlineKeyboardButton(text="⬅️ Назад", callback_data=CB_MOD_PICK_CANCEL)]]
     )
     await callback.message.answer(  # type: ignore[union-attr]
         "Укажи, какие товары переслать в чат или ЛС (по **индивидуальному ID** из списка).\n\n"
@@ -421,14 +438,17 @@ async def on_take_pick_start(
 
 
 @router.callback_query(F.data == CB_MOD_PICK_CANCEL)
-async def on_pick_cancel(callback: CallbackQuery, state: FSMContext) -> None:
+async def on_pick_cancel(callback: CallbackQuery, state: FSMContext, session: AsyncSession) -> None:
     """Отмена режима выбора ID."""
 
     await state.clear()
     await callback.answer("Отменено")
-    if callback.message is not None:
+    if callback.message is not None and callback.from_user is not None:
         await callback.message.edit_reply_markup(reply_markup=None)
-        await callback.message.answer("Выбор отменён.", reply_markup=admin_main_menu_keyboard())
+        await callback.message.answer(
+            "Выбор отменён.",
+            reply_markup=await build_admin_main_menu_keyboard(session, callback.from_user.id),
+        )
 
 
 @router.message(AdminBatchPickState.waiting_for_submission_ids, F.text)
@@ -466,7 +486,7 @@ async def on_batch_pick_ids_received(
         inline_keyboard=[
             [InlineKeyboardButton(text="Взять в работу", callback_data=f"{CB_MOD_BATCH_ACTION}:take_work")],
             [InlineKeyboardButton(text="Переслать в чат / ЛС", callback_data=f"{CB_MOD_BATCH_ACTION}:forward")],
-            [InlineKeyboardButton(text=REPLY_BTN_BACK, callback_data=CB_MOD_PICK_CANCEL)],
+            [InlineKeyboardButton(text="⬅️ Назад", callback_data=CB_MOD_PICK_CANCEL)],
         ]
     )
     await message.answer(
@@ -533,6 +553,7 @@ async def on_batch_action_confirm(
     callback: CallbackQuery,
     state: FSMContext,
     session: AsyncSession,
+    bot: Bot,
 ) -> None:
     """Подтверждение массового перевода пачки в работу."""
 
@@ -567,20 +588,22 @@ async def on_batch_action_confirm(
         submissions=submissions,
         admin_id=admin_user.id,
     )
+    if marked:
+        await _notify_sellers_in_review(bot, session, marked)
     await state.clear()
     await AdminAuditService(session=session).log(
         admin_id=admin_user.id,
         action="take_batch_to_work",
         target_type="user",
         target_id=seller_user_id,
-        details=f"submission_ids={picked_ids}, marked={marked}",
+        details=f"submission_ids={picked_ids}, marked={len(marked)}",
     )
     await callback.answer("Готово")
     if callback.message is not None:
         await callback.message.edit_reply_markup(reply_markup=None)
         await callback.message.answer(
-            f"Взято в работу: {marked}. Остальные симки остались в «Очереди».",
-            reply_markup=admin_main_menu_keyboard(),
+            f"Взято в работу: {len(marked)}. Остальные симки остались в «Очереди».",
+            reply_markup=await build_admin_main_menu_keyboard(session, callback.from_user.id),
         )
 
 
@@ -622,7 +645,7 @@ async def on_moderation_forward_target_shared(
         await state.clear()
         await message.answer(
             "Не выбраны симки. Начни с очереди.",
-            reply_markup=admin_main_menu_keyboard(),
+            reply_markup=await build_admin_main_menu_keyboard(session, message.from_user.id),
         )
         return
 
@@ -678,8 +701,6 @@ async def on_moderation_forward_confirm(
         await callback.answer("Админ не найден в БД", show_alert=True)
         return
 
-    seller = await session.get(User, seller_user_id)
-    seller_nickname = f"@{seller.username}" if seller is not None and seller.username else "без username"
     sent_count = 0
     failed_ids: list[int] = []
     for item in submissions:
@@ -688,10 +709,7 @@ async def on_moderation_forward_confirm(
                 bot,
                 target_chat_id,
                 item,
-                caption=(
-                    f"{(item.description_text or '').strip()}\n\n"
-                    f"Продавец: {seller_nickname}"
-                ),
+                caption=format_submission_title_anonymized(item),
             )
             sent_count += 1
         except TelegramAPIError:
@@ -707,6 +725,8 @@ async def on_moderation_forward_confirm(
         submissions=successfully_sent,
         admin_id=admin_user.id,
     )
+    if marked:
+        await _notify_sellers_in_review(bot, session, marked)
     await state.clear()
     await AdminAuditService(session=session).log(
         admin_id=admin_user.id,
@@ -715,7 +735,7 @@ async def on_moderation_forward_confirm(
         target_id=seller_user_id,
         details=(
             f"chat_id={target_chat_id}, submission_ids={picked_ids_for_audit}, "
-            f"sent={sent_count}, failed_ids={failed_ids}, marked={marked}"
+            f"sent={sent_count}, failed_ids={failed_ids}, marked={len(marked)}"
         ),
     )
     await callback.answer("Пересылка выполнена")
@@ -723,8 +743,8 @@ async def on_moderation_forward_confirm(
         await callback.message.edit_reply_markup(reply_markup=None)
         await callback.message.answer(
             f"Переслано: {sent_count}. Ошибок пересылки: {len(failed_ids)}. "
-            f"В работу: {marked}. Остальные pending остались в очереди.",
-            reply_markup=admin_main_menu_keyboard(),
+            f"В работу: {len(marked)}. Остальные pending остались в очереди.",
+            reply_markup=await build_admin_main_menu_keyboard(session, callback.from_user.id),
         )
 
 
@@ -768,28 +788,24 @@ async def on_in_review_queue(message: Message, session: AsyncSession) -> None:
             trigger_message=message,
             text="У тебя нет карточек в работе.",
             key="admin:moderation:in_review",
-            reply_markup=admin_main_menu_keyboard(),
+            reply_markup=await build_admin_main_menu_keyboard(session, message.from_user.id),
         )
         return
 
     first_card = True
     for item in items:
-        seller = await session.get(User, item.user_id)
-        seller_nickname = f"@{seller.username}" if seller is not None and seller.username else "без username"
-        cap = (
-            f"Submission #{item.id}\n"
-            f"Продавец: {seller_nickname}\n"
-            f"Seller internal ID: {item.user_id}\n"
-            f"Описание: {(item.description_text or '')[:300]}"
+        cap = await _render_moderation_card_caption(
+            item,
+            session=session,
+            hint_block=HINT_IN_REVIEW if first_card else "",
         )
-        if first_card:
-            cap = f"{HINT_IN_REVIEW}\n\n{cap}"
-            first_card = False
+        first_card = False
         await message_answer_submission(
             message,
             item,
             caption=cap,
             reply_markup=moderation_review_keyboard(submission_id=item.id),
+            parse_mode="HTML",
         )
     await message.answer(
         "Навигация по разделу 'В работе':",
@@ -815,22 +831,18 @@ async def on_in_review_page(callback: CallbackQuery, session: AsyncSession) -> N
     if callback.message is not None:
         first_card = True
         for item in items:
-            seller = await session.get(User, item.user_id)
-            seller_nickname = f"@{seller.username}" if seller is not None and seller.username else "без username"
-            cap = (
-                f"Submission #{item.id}\n"
-                f"Продавец: {seller_nickname}\n"
-                f"Seller internal ID: {item.user_id}\n"
-                f"Описание: {(item.description_text or '')[:300]}"
+            cap = await _render_moderation_card_caption(
+                item,
+                session=session,
+                hint_block=HINT_IN_REVIEW if page == 0 and first_card else "",
             )
-            if page == 0 and first_card:
-                cap = f"{HINT_IN_REVIEW}\n\n{cap}"
-                first_card = False
+            first_card = False
             await message_answer_submission(
                 callback.message,
                 item,
                 caption=cap,
                 reply_markup=moderation_review_keyboard(submission_id=item.id),
+                parse_mode="HTML",
             )
         await callback.message.answer(
             "Навигация:",
@@ -875,6 +887,7 @@ async def _send_worked_page(
     *,
     target_message: Message,
     session: AsyncSession,
+    telegram_id: int,
     admin_id: int,
     page: int,
     tab: str,
@@ -905,27 +918,25 @@ async def _send_worked_page(
             trigger_message=target_message,
             text="В выбранной вкладке пока нет карточек.",
             key="admin:moderation:worked",
-            reply_markup=admin_main_menu_keyboard(),
+            reply_markup=await build_admin_main_menu_keyboard(session, telegram_id),
         )
         return
 
     first = True
     for item in items:
-        seller = await session.get(User, item.user_id)
-        seller_nickname = f"@{seller.username}" if seller is not None and seller.username else "без username"
-        human_status = {
-            SubmissionStatus.ACCEPTED: "Зачёт",
-            SubmissionStatus.REJECTED: "Незачёт",
-            SubmissionStatus.BLOCKED: "Незачёт",
-            SubmissionStatus.NOT_A_SCAN: "Незачёт",
-        }.get(item.status, item.status.value)
+        seller_nickname = (
+            f"@{item.seller.username}" if item.seller is not None and item.seller.username else "без username"
+        )
+        category_title = item.category.title if item.category is not None else "Без категории"
         cap = (
             f"Submission #{item.id}\n"
-            f"Продавец: {seller_nickname}\n"
-            f"Seller internal ID: {item.user_id}\n"
-            f"Статус: {human_status}\n"
-            f"Описание: {(item.description_text or '')[:300]}"
+            f"Продавец: {escape(seller_nickname)}\n"
+            f"{submission_status_emoji_line(item.status)}\n"
+            f"{format_phone_category_html(item.description_text, category_title)}"
         )
+        dup_line = duplicate_warning_html(item)
+        if dup_line:
+            cap += "\n\n" + dup_line
         if item.status == SubmissionStatus.ACCEPTED and item.accepted_amount is not None:
             cap += f"\nСумма зачёта: {item.accepted_amount} USDT"
         if include_hint and first:
@@ -936,6 +947,7 @@ async def _send_worked_page(
             item,
             caption=cap,
             reply_markup=None,
+            parse_mode="HTML",
         )
 
     query = _encode_worked_query(tab, seller_id, category_id, date_from)
@@ -981,6 +993,7 @@ async def on_worked_queue(message: Message, session: AsyncSession) -> None:
     await _send_worked_page(
         target_message=message,
         session=session,
+        telegram_id=message.from_user.id,
         admin_id=admin_user.id,
         page=0,
         tab="credit",
@@ -1005,6 +1018,7 @@ async def on_worked_tab(callback: CallbackQuery, session: AsyncSession) -> None:
         await _send_worked_page(
             target_message=callback.message,
             session=session,
+            telegram_id=callback.from_user.id,
             admin_id=admin_user.id,
             page=0,
             tab=("debit" if tab == "debit" else "credit"),
@@ -1072,6 +1086,7 @@ async def on_worked_page(callback: CallbackQuery, session: AsyncSession) -> None
         await _send_worked_page(
             target_message=callback.message,
             session=session,
+            telegram_id=callback.from_user.id,
             admin_id=admin_user.id,
             page=page,
             tab=tab,
@@ -1084,14 +1099,17 @@ async def on_worked_page(callback: CallbackQuery, session: AsyncSession) -> None
 
 
 @router.callback_query(F.data.startswith(CB_MOD_FORWARD_CANCEL))
-async def on_forward_cancel(callback: CallbackQuery, state: FSMContext) -> None:
+async def on_forward_cancel(callback: CallbackQuery, state: FSMContext, session: AsyncSession) -> None:
     """Отменяет выбор чата пересылки."""
 
     await state.clear()
     await callback.answer("Отменено")
-    if callback.message is not None:
+    if callback.message is not None and callback.from_user is not None:
         await callback.message.edit_reply_markup(reply_markup=None)
-        await callback.message.answer("Возврат в админ-меню.", reply_markup=admin_main_menu_keyboard())
+        await callback.message.answer(
+            "Возврат в админ-меню.",
+            reply_markup=await build_admin_main_menu_keyboard(session, callback.from_user.id),
+        )
 
 
 @router.callback_query(F.data.startswith(f"{CB_MOD_TAKE}:"))
@@ -1233,19 +1251,21 @@ async def on_accept(callback: CallbackQuery, session: AsyncSession, bot: Bot) ->
         return
 
     submission_service = SubmissionService(session=session)
+    locked = await submission_service.lock_submission(submission_id=submission_id, admin_id=admin_user.id)
+    if locked is None:
+        await callback.answer("⏳ Эту заявку уже взял другой админ!", show_alert=True)
+        return
     settings = get_settings()
-    archive_text = (
-        f"ACCEPTED\n"
-        f"submission_id: {submission_obj.id}\n"
-        f"user_id: {submission_obj.user_id}\n"
-        f"description: {(submission_obj.description_text or '').strip()}"
-    )
-    if settings.archive_chat_id == 0:
-        await callback.answer("Не задан ARCHIVE_CHAT_ID в .env", show_alert=True)
+    await session.refresh(submission_obj, ["category"])
+    if submission_obj.category is None and submission_obj.category_id is not None:
+        submission_obj.category = await session.get(Category, submission_obj.category_id)
+    archive_text = format_submission_title_anonymized(submission_obj)
+    if settings.moderation_chat_id == 0:
+        await callback.answer("Не задан MODERATION_CHAT_ID в .env", show_alert=True)
         return
     archive_message = await bot_send_submission(
         bot,
-        settings.archive_chat_id,
+        settings.moderation_chat_id,
         submission_obj,
         archive_text,
     )
@@ -1253,7 +1273,7 @@ async def on_accept(callback: CallbackQuery, session: AsyncSession, bot: Bot) ->
     accepted = await submission_service.accept_submission(
         submission_id=submission_id,
         admin_id=admin_user.id,
-        archive_chat_id=settings.archive_chat_id,
+        archive_chat_id=settings.moderation_chat_id,
         archive_message_id=archive_message.message_id,
     )
     if accepted is None:
@@ -1269,18 +1289,44 @@ async def on_accept(callback: CallbackQuery, session: AsyncSession, bot: Bot) ->
 
     seller = await session.get(User, accepted.user_id)
     if seller is not None:
-        seller_nickname = f"@{seller.username}" if seller.username else "без username"
         await bot.send_message(
             chat_id=seller.telegram_id,
             text=(
-                f"Симка #{accepted.id}: Зачёт. Начислено: {accepted.accepted_amount} USDT.\n"
-                f"Продавец: {seller_nickname}"
+                f"Симка #{accepted.id}: Зачёт. Начислено: {accepted.accepted_amount} USDT."
             ),
         )
 
     await callback.answer("Зачёт поставлен")
     if callback.message is not None:
-        await callback.message.edit_reply_markup(reply_markup=None)
+        chat_label = str(settings.moderation_chat_id)
+        try:
+            chat_info = await bot.get_chat(settings.moderation_chat_id)
+            if chat_info.title:
+                chat_label = chat_info.title
+            elif chat_info.username:
+                chat_label = f"@{chat_info.username}"
+            else:
+                chat_label = "Рабочий чат"
+        except TelegramAPIError:
+            chat_label = "Рабочий чат"
+
+        sent_at = accepted.reviewed_at.strftime("%Y-%m-%d %H:%M:%S UTC") if accepted.reviewed_at else "—"
+        current_caption = (callback.message.caption or callback.message.text or "").strip()
+        updated_caption = (
+            f"✅ ОТПРАВЛЕНО В ЧАТ: {chat_label}\n"
+            f"🕒 Время отправки: {sent_at}\n\n"
+            f"{current_caption}"
+        )
+        try:
+            if callback.message.caption is not None:
+                await callback.message.edit_caption(caption=updated_caption, reply_markup=None)
+            else:
+                await edit_message_text_safe(callback.message, updated_caption, reply_markup=None)
+        except TelegramAPIError:
+            await callback.message.edit_reply_markup(reply_markup=None)
+
+        # Авто-показ следующей очереди после успешного accept.
+        await _show_queue_for_admin(target_message=callback.message, session=session)
 
 
 @router.callback_query(F.data.startswith(f"{CB_MOD_DEBIT}:"))
@@ -1328,6 +1374,16 @@ async def on_not_a_scan(callback: CallbackQuery, session: AsyncSession, bot: Bot
     )
 
 
+def _final_reject_card_header(to_status: SubmissionStatus) -> str:
+    if to_status == SubmissionStatus.REJECTED:
+        return "❌ ОТКЛОНЕНО (БРАК)"
+    if to_status == SubmissionStatus.BLOCKED:
+        return "❌ ОТКЛОНЕНО (БЛОКИРОВКА)"
+    if to_status == SubmissionStatus.NOT_A_SCAN:
+        return "❌ ОТКЛОНЕНО (НЕ СКАН)"
+    return "❌ ОТКЛОНЕНО"
+
+
 async def _handle_final_reject(
     callback: CallbackQuery,
     session: AsyncSession,
@@ -1347,13 +1403,32 @@ async def _handle_final_reject(
         await callback.answer("Недостаточно прав", show_alert=True)
         return
 
-    submission_id = int(callback.data.split(":")[2])
+    try:
+        submission_id = int(callback.data.rsplit(":", 1)[-1])
+    except (TypeError, ValueError):
+        await callback.answer("Некорректные данные кнопки.", show_alert=True)
+        return
+
     admin_user = await UserService(session=session).get_by_telegram_id(callback.from_user.id)
     if admin_user is None:
         await callback.answer("Пользователь не найден в БД", show_alert=True)
         return
 
-    submission = await SubmissionService(session=session).final_reject_submission(
+    submission_service = SubmissionService(session=session)
+    submission_obj = await session.get(Submission, submission_id)
+    if submission_obj is None:
+        await callback.answer("Симка не найдена", show_alert=True)
+        return
+    if submission_obj.status != SubmissionStatus.IN_REVIEW:
+        await callback.answer("Симка уже обработана", show_alert=True)
+        return
+
+    locked = await submission_service.lock_submission(submission_id=submission_id, admin_id=admin_user.id)
+    if locked is None:
+        await callback.answer("⏳ Эту заявку уже взял другой админ!", show_alert=True)
+        return
+
+    submission = await submission_service.final_reject_submission(
         submission_id=submission_id,
         admin_id=admin_user.id,
         to_status=to_status,
@@ -1381,4 +1456,20 @@ async def _handle_final_reject(
 
     await callback.answer("Статус обновлен")
     if callback.message is not None:
-        await callback.message.edit_reply_markup(reply_markup=None)
+        header = _final_reject_card_header(to_status)
+        sent_at = (
+            submission.reviewed_at.strftime("%Y-%m-%d %H:%M:%S UTC")
+            if submission.reviewed_at
+            else datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+        )
+        current_caption = (callback.message.caption or callback.message.text or "").strip()
+        updated_caption = f"{header}\n🕒 Время отказа: {sent_at}\n\n{current_caption}"
+        try:
+            if callback.message.caption is not None:
+                await callback.message.edit_caption(caption=updated_caption, reply_markup=None)
+            else:
+                await edit_message_text_safe(callback.message, updated_caption, reply_markup=None)
+        except TelegramAPIError:
+            await callback.message.edit_reply_markup(reply_markup=None)
+
+        await _show_queue_for_admin(target_message=callback.message, session=session)

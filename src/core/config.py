@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 from functools import lru_cache
 
-from pydantic import Field, field_validator
+from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -34,9 +34,30 @@ class Settings(BaseSettings):
     http_host: str = Field(default="0.0.0.0", alias="HTTP_HOST")
     http_port: int = Field(default=8000, alias="HTTP_PORT")
 
-    archive_chat_id: int = Field(default=0, alias="ARCHIVE_CHAT_ID")
+    moderation_chat_id: int = Field(
+        default=0,
+        validation_alias=AliasChoices("MODERATION_CHAT_ID", "ARCHIVE_CHAT_ID"),
+    )
     crypto_pay_token: str | None = Field(default=None, alias="CRYPTO_PAY_TOKEN")
     crypto_asset: str = Field(default="USDT", alias="CRYPTO_ASSET")
+
+    alert_telegram_chat_id: int | None = Field(
+        default=None,
+        alias="ALERT_TELEGRAM_CHAT_ID",
+        description="Чат для служебных алертов (CryptoBot и т.д.). Пусто — не слать.",
+    )
+    alert_cryptobot_cooldown_sec: int = Field(
+        default=900,
+        ge=60,
+        le=86_400,
+        alias="ALERT_CRYPTOBOT_COOLDOWN_SEC",
+        description="Минимальный интервал между одинаковыми алертами CryptoBot, сек.",
+    )
+    health_ready_include_cryptobot: bool = Field(
+        default=True,
+        alias="HEALTH_READY_INCLUDE_CRYPTOBOT",
+        description="Включать ли проверку Crypto Pay API в GET /health/ready (если задан CRYPTO_PAY_TOKEN).",
+    )
 
     brand_channel_url: str | None = Field(
         default=None,
@@ -63,6 +84,30 @@ class Settings(BaseSettings):
             stripped = value.strip()
             return stripped if stripped else None
         return value  # pragma: no cover
+
+    @field_validator("alert_telegram_chat_id", mode="before")
+    @classmethod
+    def _normalize_alert_chat_id(cls, value: object) -> int | None:
+        if value is None or value == "":
+            return None
+        if isinstance(value, int):
+            return None if value == 0 else value
+        if isinstance(value, str):
+            s = value.strip()
+            if not s or s == "0":
+                return None
+            return int(s)
+        return None
+
+    @field_validator("crypto_asset", mode="before")
+    @classmethod
+    def _normalize_crypto_asset(cls, value: object) -> str:
+        if value is None:
+            return "USDT"
+        if isinstance(value, str):
+            normalized = value.strip().upper()
+            return normalized or "USDT"
+        return str(value).strip().upper() or "USDT"
 
     @property
     def database_url(self) -> str:

@@ -5,6 +5,7 @@ from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import joinedload
 
 from src.database.models.publication import PublicationArchive
 from src.database.models.submission import Submission
@@ -41,6 +42,7 @@ class ArchiveService:
 
         stmt = (
             select(Submission, User)
+            .options(joinedload(Submission.category), joinedload(Submission.seller))
             .join(PublicationArchive, PublicationArchive.submission_id == Submission.id)
             .join(User, Submission.user_id == User.id)
             .where(
@@ -71,6 +73,7 @@ class ArchiveService:
         conditions = [PublicationArchive.created_at >= cutoff, phone_clause]
         stmt = (
             select(Submission, User)
+            .options(joinedload(Submission.category), joinedload(Submission.seller))
             .join(PublicationArchive, PublicationArchive.submission_id == Submission.id)
             .join(User, Submission.user_id == User.id)
             .where(*conditions)

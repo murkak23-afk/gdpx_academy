@@ -11,13 +11,15 @@ cp .env.local.example .env.local
 cp .env.docker.example .env.docker
 ```
 
-2. Запусти PostgreSQL в Docker:
+2. Обязательно заполни `BOT_TOKEN` в `.env.local`/`.env.docker` реальным токеном Telegram-бота.
+
+3. Запусти PostgreSQL в Docker:
 
 ```bash
 docker compose up -d postgres
 ```
 
-3. Установи зависимости локально (для запуска миграций):
+4. Установи зависимости локально (для запуска миграций):
 
 ```bash
 python3 -m venv .venv
@@ -25,20 +27,35 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-4. Примени миграции:
+5. Примени миграции:
 
 ```bash
 export ENV_FILE=.env.local
 alembic upgrade head
 ```
 
-5. Запусти бота в Docker:
+6. Запусти бота в Docker:
 
 ```bash
 docker compose up -d --build bot
 ```
 
 `docker-compose.yml` использует `.env.docker` автоматически.
+
+## One-button команды
+
+- Полный запуск в Docker:
+
+```bash
+make docker-up
+```
+
+- Локальный запуск (после `make install` и миграций):
+
+```bash
+make migrate-local
+make run-local
+```
 
 ## Полезные команды
 

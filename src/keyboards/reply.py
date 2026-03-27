@@ -111,17 +111,25 @@ def seller_main_menu_keyboard(
     )
 
 
-def admin_main_menu_keyboard() -> ReplyKeyboardMarkup:
-    """Главное меню админа: только админские разделы + выход (без кнопок «как у селлера»)."""
+def admin_main_menu_keyboard(*, show_payout_finance: bool = False) -> ReplyKeyboardMarkup:
+    """Главное меню админа: только админские разделы + выход (без кнопок «как у селлера»).
 
+    «Статистика» и связанные финансовые разделы — только при show_payout_finance=True
+    (chief_admin / payout_admin).
+    """
+
+    rows: list[list[KeyboardButton]] = [
+        [KeyboardButton(text="Очередь"), KeyboardButton(text="🏃 В работе")],
+        [KeyboardButton(text="Отработанные")],
+        [KeyboardButton(text="Выплаты")],
+        [KeyboardButton(text="Рассылка"), KeyboardButton(text="Архив (7days)")],
+    ]
+    if show_payout_finance:
+        rows.append([KeyboardButton(text="Статистика"), KeyboardButton(text=BUTTON_EXIT_ADMIN_PANEL)])
+    else:
+        rows.append([KeyboardButton(text=BUTTON_EXIT_ADMIN_PANEL)])
     return ReplyKeyboardMarkup(
-        keyboard=[
-            [KeyboardButton(text="Очередь"), KeyboardButton(text="В работе")],
-            [KeyboardButton(text="Отработанные")],
-            [KeyboardButton(text="Выплаты")],
-            [KeyboardButton(text="Рассылка"), KeyboardButton(text="Архив (7days)")],
-            [KeyboardButton(text="Статистика"), KeyboardButton(text=BUTTON_EXIT_ADMIN_PANEL)],
-        ],
+        keyboard=rows,
         resize_keyboard=True,
     )
 

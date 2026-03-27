@@ -31,6 +31,13 @@ class AdminService:
         role = (await self._session.execute(stmt)).scalar_one_or_none()
         return role == UserRole.CHIEF_ADMIN
 
+    async def can_access_payout_finance(self, telegram_id: int) -> bool:
+        """Доступ к разделу «Статистика», /withdraw и связанным финансовым экранам."""
+
+        stmt = select(User.role).where(User.telegram_id == telegram_id)
+        role = (await self._session.execute(stmt)).scalar_one_or_none()
+        return role in {UserRole.CHIEF_ADMIN, UserRole.PAYOUT_ADMIN}
+
     async def create_category(
         self,
         title: str,

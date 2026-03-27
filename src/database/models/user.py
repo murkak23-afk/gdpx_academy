@@ -76,6 +76,11 @@ class User(Base, TimestampMixin):
         foreign_keys="Submission.admin_id",
         back_populates="admin",
     )
+    locked_submissions = relationship(
+        "Submission",
+        foreign_keys="Submission.locked_by_admin_id",
+        back_populates="locked_by_admin",
+    )
     review_logs = relationship(
         "ReviewAction",
         foreign_keys="ReviewAction.admin_id",

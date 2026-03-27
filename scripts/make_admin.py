@@ -44,14 +44,19 @@ async def promote_role(telegram_id: int, role: UserRole) -> None:
 def parse_args() -> argparse.Namespace:
     """Парсит аргументы командной строки."""
 
-    parser = argparse.ArgumentParser(description="Назначить админскую роль пользователю.")
+    parser = argparse.ArgumentParser(description="Назначить роль пользователю (в т.ч. забрать админку → seller).")
     parser.add_argument("--telegram-id", type=int, required=True, help="Telegram ID пользователя")
     parser.add_argument(
         "--role",
         type=str,
         default=UserRole.CHIEF_ADMIN.value,
-        choices=[UserRole.CHIEF_ADMIN.value, UserRole.PAYOUT_ADMIN.value, UserRole.ADMIN.value],
-        help="Роль для назначения",
+        choices=[
+            UserRole.SELLER.value,
+            UserRole.CHIEF_ADMIN.value,
+            UserRole.PAYOUT_ADMIN.value,
+            UserRole.ADMIN.value,
+        ],
+        help="Роль: seller — обычный продавец (снять права админа)",
     )
     return parser.parse_args()
 

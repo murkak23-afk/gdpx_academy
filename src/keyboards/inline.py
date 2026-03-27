@@ -3,8 +3,12 @@ from __future__ import annotations
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 from src.keyboards.callbacks import (
+    CB_ADMIN_INWORK_HUB,
+    CB_ADMIN_PAYOUTS,
+    CB_ADMIN_QUEUE,
     CB_ADMIN_REPORT_SUBMISSION,
     CB_ADMIN_RESTRICT,
+    CB_ADMIN_STATS,
     CB_ADMIN_UNRESTRICT,
     CB_MOD_ACCEPT,
     CB_MOD_DEBIT,
@@ -18,12 +22,44 @@ from src.keyboards.callbacks import (
     CB_PAY_CONFIRM,
     CB_PAY_MARK,
     CB_PAY_TRASH,
+    CB_SELLER_MENU_INFO,
+    CB_SELLER_MENU_MATERIAL,
+    CB_SELLER_MENU_PAYHIST,
+    CB_SELLER_MENU_PROFILE,
+    CB_SELLER_MENU_SELL,
+    CB_SELLER_MENU_SUPPORT,
 )
 from src.keyboards.constants import CALLBACK_INLINE_BACK, REPLY_BTN_BACK
 
 
 def _inline_back_row() -> list[InlineKeyboardButton]:
     return [InlineKeyboardButton(text=REPLY_BTN_BACK, callback_data=CALLBACK_INLINE_BACK)]
+
+
+def admin_main_inline_keyboard(*, show_payout_finance: bool = False) -> InlineKeyboardMarkup:
+    rows: list[list[InlineKeyboardButton]] = [
+        [InlineKeyboardButton(text="📜 Очередь", callback_data=CB_ADMIN_QUEUE)],
+        [InlineKeyboardButton(text="🛡 В работе", callback_data=CB_ADMIN_INWORK_HUB)],
+        [InlineKeyboardButton(text="💰 Выплаты", callback_data=CB_ADMIN_PAYOUTS)],
+    ]
+    if show_payout_finance:
+        rows.append([InlineKeyboardButton(text="📊 Статистика", callback_data=CB_ADMIN_STATS)])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def seller_main_inline_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="👤 Профиль", callback_data=CB_SELLER_MENU_PROFILE)],
+            [InlineKeyboardButton(text="📤 Сдать материал", callback_data=CB_SELLER_MENU_SELL)],
+            [InlineKeyboardButton(text="🧾 Мои номера", callback_data=CB_SELLER_MENU_MATERIAL)],
+            [
+                InlineKeyboardButton(text="💸 История выплат", callback_data=CB_SELLER_MENU_PAYHIST),
+                InlineKeyboardButton(text="ℹ️ INFO", callback_data=CB_SELLER_MENU_INFO),
+            ],
+            [InlineKeyboardButton(text="🆘 Поддержка", callback_data=CB_SELLER_MENU_SUPPORT)],
+        ]
+    )
 
 
 def moderation_item_keyboard(submission_id: int) -> InlineKeyboardMarkup:
@@ -69,11 +105,11 @@ def moderation_review_keyboard(submission_id: int) -> InlineKeyboardMarkup:
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text="Зачёт",
+                    text="✅ ПРИНЯТЬ",
                     callback_data=f"{CB_MOD_ACCEPT}:{submission_id}",
                 ),
                 InlineKeyboardButton(
-                    text="Незачёт",
+                    text="❌ БРАК",
                     callback_data=f"{CB_MOD_DEBIT}:{submission_id}",
                 ),
             ],
@@ -82,19 +118,19 @@ def moderation_review_keyboard(submission_id: int) -> InlineKeyboardMarkup:
     )
 
 
-def payout_mark_paid_keyboard(user_id: int) -> InlineKeyboardMarkup:
-    """Кнопка фиксации выплаты пользователю."""
+def payout_mark_paid_keyboard(user_id: int, *, ledger_page: int = 0) -> InlineKeyboardMarkup:
+    """Кнопка фиксации выплаты пользователю (legacy; ведомость собирается в admin_menu)."""
 
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
                 InlineKeyboardButton(
                     text="Оплата",
-                    callback_data=f"{CB_PAY_MARK}:{user_id}",
+                    callback_data=f"{CB_PAY_MARK}:{user_id}:{ledger_page}",
                 ),
                 InlineKeyboardButton(
                     text="В корзину",
-                    callback_data=f"{CB_PAY_TRASH}:{user_id}",
+                    callback_data=f"{CB_PAY_TRASH}:{user_id}:{ledger_page}",
                 ),
             ],
             _inline_back_row(),
@@ -102,14 +138,20 @@ def payout_mark_paid_keyboard(user_id: int) -> InlineKeyboardMarkup:
     )
 
 
-def payout_confirm_keyboard(user_id: int) -> InlineKeyboardMarkup:
-    """Подтверждение действия выплаты."""
+def payout_confirm_keyboard(user_id: int, *, ledger_page: int = 0) -> InlineKeyboardMarkup:
+    """Подтверждение действия выплаты. ledger_page — для возврата к ведомости."""
 
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
-                InlineKeyboardButton(text="✅ Подтвердить оплату", callback_data=f"{CB_PAY_CONFIRM}:{user_id}"),
-                InlineKeyboardButton(text="❌ Отмена", callback_data=f"{CB_PAY_CANCEL}:{user_id}"),
+                InlineKeyboardButton(
+                    text="✅ Подтвердить оплату",
+                    callback_data=f"{CB_PAY_CONFIRM}:{user_id}:{ledger_page}",
+                ),
+                InlineKeyboardButton(
+                    text="❌ Отмена",
+                    callback_data=f"{CB_PAY_CANCEL}:{user_id}:{ledger_page}",
+                ),
             ],
             _inline_back_row(),
         ]

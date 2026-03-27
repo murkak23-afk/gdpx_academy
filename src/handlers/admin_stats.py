@@ -5,6 +5,8 @@ from decimal import Decimal
 from io import BytesIO
 
 from aiogram import F, Router
+from aiogram.exceptions import TelegramBadRequest
+from aiogram.fsm.context import FSMContext
 from aiogram.types import BufferedInputFile, CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 from openpyxl import Workbook
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -129,18 +131,37 @@ async def _build_full_stats_message(
     return text, InlineKeyboardMarkup(inline_keyboard=kb_rows)
 
 
-async def send_stats_hub(message: Message, session: AsyncSession) -> None:
+async def send_stats_hub(message: Message, session: AsyncSession, state: FSMContext | None = None) -> None:
     """Точка входа: раздел «Статистика» из reply-меню."""
 
     text, kb = await _build_full_stats_message(session, "day", 0)
-    await message.answer(non_empty_plain(text), reply_markup=kb)
+    plain = non_empty_plain(text)
+    if state is not None and message.chat is not None:
+        data = await state.get_data()
+        mid = data.get("admin_last_panel_message_id")
+        if mid is not None:
+            try:
+                await message.bot.edit_message_text(
+                    chat_id=message.chat.id,
+                    message_id=int(mid),
+                    text=plain,
+                    reply_markup=kb,
+                )
+                return
+            except TelegramBadRequest:
+                pass
+    sent = await message.answer(plain, reply_markup=kb)
+    if state is not None and sent:
+        from src.handlers.admin_menu import _admin_store_panel_message
+
+        await _admin_store_panel_message(state, sent)
 
 
 @router.callback_query(F.data.startswith(f"{CB_ADMIN_STATS_VIEW}:"))
 async def on_stats_view_period(callback: CallbackQuery, session: AsyncSession) -> None:
     if callback.from_user is None or callback.data is None:
         return
-    if not await AdminService(session=session).can_manage_payouts(callback.from_user.id):
+    if not await AdminService(session=session).can_access_payout_finance(callback.from_user.id):
         await callback.answer("Недостаточно прав", show_alert=True)
         return
     period = callback.data.split(":")[-1]
@@ -154,7 +175,7 @@ async def on_stats_view_period(callback: CallbackQuery, session: AsyncSession) -
 async def on_stats_payout_page(callback: CallbackQuery, session: AsyncSession) -> None:
     if callback.from_user is None or callback.data is None:
         return
-    if not await AdminService(session=session).can_manage_payouts(callback.from_user.id):
+    if not await AdminService(session=session).can_access_payout_finance(callback.from_user.id):
         await callback.answer("Недостаточно прав", show_alert=True)
         return
     parts = callback.data.split(":")
@@ -172,7 +193,7 @@ async def on_stats_payout_page(callback: CallbackQuery, session: AsyncSession) -
 async def on_stats_excel(callback: CallbackQuery, session: AsyncSession) -> None:
     if callback.from_user is None or callback.data is None:
         return
-    if not await AdminService(session=session).can_manage_payouts(callback.from_user.id):
+    if not await AdminService(session=session).can_access_payout_finance(callback.from_user.id):
         await callback.answer("Недостаточно прав", show_alert=True)
         return
     period = callback.data.split(":")[-1]
