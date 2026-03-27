@@ -10,12 +10,35 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.database.models.enums import UserLanguage
+from src.database.models.user import User
 from src.keyboards import REPLY_BTN_BACK, language_choice_keyboard, seller_main_menu_keyboard
-from src.services import UserService
-from src.states import RegistrationState
+from src.services import SubmissionService, UserService
+from src.states.registration_state import RegistrationState
 
 router = Router(name="start-router")
 logger = logging.getLogger(__name__)
+
+
+def _welcome_profile_caption(user: User, lead: str) -> str:
+    nickname = f"@{user.username}" if user.username else "без username"
+    return (
+        f"{lead}\n\n"
+        "👤 Профиль\n"
+        f"• Ник: {nickname}\n"
+        f"• TG ID: {user.telegram_id}\n"
+        f"• Роль: {user.role.value}\n"
+        "• Статус: активен"
+    )
+
+
+async def _send_welcome_banner(
+    message: Message,
+    user: User,
+    lead: str,
+    dashboard: dict[str, object],
+) -> None:
+    caption = _welcome_profile_caption(user, lead)
+    await message.answer(caption)
 
 
 @router.message(CommandStart(ignore_mention=True))
@@ -40,13 +63,14 @@ async def on_start(message: Message, state: FSMContext, session: AsyncSession) -
     if existing_user is not None:
         await state.clear()
         menu = seller_main_menu_keyboard(language=existing_user.language, role=existing_user.role)
-        await message.answer(
-            text=(
-                "С возвращением! Выбери действие в меню.\n"
-                "Если хочешь сменить язык, снова нажми /start."
-            ),
-            reply_markup=menu,
+        dashboard = await SubmissionService(session=session).get_user_dashboard_stats(user_id=existing_user.id)
+        await _send_welcome_banner(
+            message,
+            existing_user,
+            "С возвращением! Выбери действие в меню.\nЕсли хочешь сменить язык, снова нажми /start.",
+            dashboard,
         )
+        await message.answer("Главное меню:", reply_markup=menu)
         return
 
     await state.set_state(RegistrationState.waiting_for_language)
@@ -91,8 +115,10 @@ async def on_language_selected(
     )
 
     await state.clear()
+    dashboard = await SubmissionService(session=session).get_user_dashboard_stats(user_id=user.id)
+    await _send_welcome_banner(message, user, "Регистрация завершена. Добро пожаловать!", dashboard)
     await message.answer(
-        text="Регистрация завершена. Теперь доступно главное меню.",
+        "Теперь доступно главное меню.",
         reply_markup=seller_main_menu_keyboard(language=user.language, role=user.role),
     )
 

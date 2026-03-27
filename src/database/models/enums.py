@@ -7,7 +7,9 @@ class UserRole(StrEnum):
     """Роли в системе."""
 
     SELLER = "seller"
+    ADMIN = "admin"
     CHIEF_ADMIN = "chief_admin"
+    PAYOUT_ADMIN = "payout_admin"
 
 
 class UserLanguage(StrEnum):
@@ -19,7 +21,7 @@ class UserLanguage(StrEnum):
 
 
 class SubmissionStatus(StrEnum):
-    """Статусы карточки контента."""
+    """Статусы симки контента."""
 
     PENDING = "pending"
     IN_REVIEW = "in_review"
@@ -36,3 +38,11 @@ class RejectionReason(StrEnum):
     QUALITY = "quality"
     RULES_VIOLATION = "rules_violation"
     OTHER = "other"
+
+
+class PayoutStatus(StrEnum):
+    """Статусы записи выплаты."""
+
+    PENDING = "pending"
+    PAID = "paid"
+    CANCELLED = "cancelled"

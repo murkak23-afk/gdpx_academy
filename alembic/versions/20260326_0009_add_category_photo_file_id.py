@@ -4,9 +4,9 @@ Revision ID: 0009
 Revises: 20260325_0008_submission_attachment_type
 """
 
-from alembic import op
 import sqlalchemy as sa
 
+from alembic import op
 
 revision = "20260326_0009"
 # NOTE: keep revision chain consistent; down_revision is the revision id,

@@ -19,8 +19,8 @@ from src.database.models.enums import UserRole
 from src.database.models.user import User
 
 
-async def promote_to_admin(telegram_id: int) -> None:
-    """Назначает пользователю роль chief_admin по telegram_id."""
+async def promote_role(telegram_id: int, role: UserRole) -> None:
+    """Назначает пользователю указанную роль по telegram_id."""
 
     settings = get_settings()
     engine = create_async_engine(settings.database_url, echo=False, pool_pre_ping=True)
@@ -34,9 +34,9 @@ async def promote_to_admin(telegram_id: int) -> None:
             await engine.dispose()
             return
 
-        user.role = UserRole.CHIEF_ADMIN
+        user.role = role
         await session.commit()
-        print(f"Готово: @{user.username or 'без_username'} (telegram_id={telegram_id}) теперь chief_admin.")
+        print(f"Готово: @{user.username or 'без_username'} (telegram_id={telegram_id}) теперь {role.value}.")
 
     await engine.dispose()
 
@@ -44,8 +44,15 @@ async def promote_to_admin(telegram_id: int) -> None:
 def parse_args() -> argparse.Namespace:
     """Парсит аргументы командной строки."""
 
-    parser = argparse.ArgumentParser(description="Назначить роль chief_admin пользователю.")
+    parser = argparse.ArgumentParser(description="Назначить админскую роль пользователю.")
     parser.add_argument("--telegram-id", type=int, required=True, help="Telegram ID пользователя")
+    parser.add_argument(
+        "--role",
+        type=str,
+        default=UserRole.CHIEF_ADMIN.value,
+        choices=[UserRole.CHIEF_ADMIN.value, UserRole.PAYOUT_ADMIN.value, UserRole.ADMIN.value],
+        help="Роль для назначения",
+    )
     return parser.parse_args()
 
 
@@ -54,7 +61,7 @@ def main() -> None:
 
     args = parse_args()
     try:
-        asyncio.run(promote_to_admin(telegram_id=args.telegram_id))
+        asyncio.run(promote_role(telegram_id=args.telegram_id, role=UserRole(args.role)))
     except socket.gaierror as exc:
         print(
             "Не удаётся разрешить имя хоста PostgreSQL (DNS).\n"

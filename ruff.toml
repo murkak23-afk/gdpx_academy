@@ -1,0 +1,12 @@
+line-length = 120
+target-version = "py312"
+
+[lint]
+select = ["E", "F", "I"]
+
+[lint.per-file-ignores]
+"scripts/make_admin.py" = ["E402"]
+
+[format]
+quote-style = "double"
+indent-style = "space"

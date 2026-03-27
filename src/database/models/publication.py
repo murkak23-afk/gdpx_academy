@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+from datetime import date, datetime
 from decimal import Decimal
 
-from sqlalchemy import ForeignKey, Numeric, String
+from sqlalchemy import Date, DateTime, Enum, ForeignKey, Numeric, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.database.models.base import Base, TimestampMixin
+from src.database.models.enums import PayoutStatus
 
 
 class PublicationArchive(Base, TimestampMixin):
@@ -39,10 +41,40 @@ class Payout(Base, TimestampMixin):
     amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
     accepted_count: Mapped[int] = mapped_column(nullable=False)
     period_key: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
+    period_date: Mapped[date | None] = mapped_column(Date, nullable=True, index=True)
+    status: Mapped[PayoutStatus] = mapped_column(
+        Enum(
+            PayoutStatus,
+            name="payout_status_enum",
+            values_callable=lambda e: [item.value for item in e],
+            validate_strings=True,
+        ),
+        nullable=False,
+        default=PayoutStatus.PENDING,
+        index=True,
+    )
+    uploaded_count: Mapped[int] = mapped_column(nullable=False, default=0)
+    blocked_count: Mapped[int] = mapped_column(nullable=False, default=0)
+    not_a_scan_count: Mapped[int] = mapped_column(nullable=False, default=0)
+    category_id: Mapped[int | None] = mapped_column(
+        ForeignKey("categories.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    unit_price: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)
+    crypto_check_id: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
+    crypto_check_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    paid_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    cancelled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     paid_by_admin_id: Mapped[int | None] = mapped_column(
         ForeignKey("users.id", ondelete="SET NULL"),
         nullable=True,
     )
+    cancelled_by_admin_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    cancel_reason: Mapped[str | None] = mapped_column(String(255), nullable=True)
     note: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
     user = relationship("User", foreign_keys=[user_id], back_populates="payouts")

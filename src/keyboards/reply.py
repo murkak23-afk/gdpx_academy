@@ -53,7 +53,7 @@ def forward_target_reply_keyboard() -> ReplyKeyboardMarkup:
                     ),
                 ),
             ],
-            [[KeyboardButton(text=REPLY_BTN_BACK)]],
+            [KeyboardButton(text=REPLY_BTN_BACK)],
         ],
         resize_keyboard=True,
         one_time_keyboard=True,
@@ -94,15 +94,15 @@ def seller_main_menu_keyboard(
         ("ВЫПЛАТЫ" if ru else "PAYMENTS", _norm_brand_url(settings.brand_payments_url)),
     ]
 
-    rows: list[list[KeyboardButton]] = [
-        [KeyboardButton(text="Профиль"), KeyboardButton(text="Статистика")],
-    ]
+    rows: list[list[KeyboardButton]] = [[KeyboardButton(text="ПРОФИЛЬ")]]
+    rows.append([KeyboardButton(text="Продать eSIM")])
+    rows.append([KeyboardButton(text="Статистика"), KeyboardButton(text="INFO")])
+    rows.append([KeyboardButton(text="Материал"), KeyboardButton(text="История выплат")])
     for label, url in links:
         if url:
             rows.append([KeyboardButton(text=label, url=url)])
-    rows.append([KeyboardButton(text="Продать eSIM")])
-    rows.append([KeyboardButton(text=REPLY_BTN_BACK)])
-    if role == UserRole.CHIEF_ADMIN:
+    rows.append([KeyboardButton(text="Поддержка")])
+    if role in (UserRole.CHIEF_ADMIN, UserRole.PAYOUT_ADMIN, UserRole.ADMIN):
         rows.append([KeyboardButton(text=BUTTON_ENTER_ADMIN_PANEL)])
 
     return ReplyKeyboardMarkup(
@@ -116,11 +116,22 @@ def admin_main_menu_keyboard() -> ReplyKeyboardMarkup:
 
     return ReplyKeyboardMarkup(
         keyboard=[
-            [KeyboardButton(text=BUTTON_EXIT_ADMIN_PANEL)],
             [KeyboardButton(text="Очередь"), KeyboardButton(text="В работе")],
-            [KeyboardButton(text="Выплаты"), KeyboardButton(text="Запросы")],
+            [KeyboardButton(text="Отработанные")],
+            [KeyboardButton(text="Выплаты")],
             [KeyboardButton(text="Рассылка"), KeyboardButton(text="Архив (7days)")],
-            [KeyboardButton(text="Статистика")],
+            [KeyboardButton(text="Статистика"), KeyboardButton(text=BUTTON_EXIT_ADMIN_PANEL)],
+        ],
+        resize_keyboard=True,
+    )
+
+
+def admin_payout_menu_keyboard() -> ReplyKeyboardMarkup:
+    """Ограниченное меню админа выплат."""
+
+    return ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text="Выплаты"), KeyboardButton(text=BUTTON_EXIT_ADMIN_PANEL)],
         ],
         resize_keyboard=True,
     )

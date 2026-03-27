@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import unicodedata
 
+from src.keyboards.callbacks import CB_NAV_INLINE_BACK
+
 # Reply-кнопка (одинаковая для селлера и админа)
 REPLY_BTN_BACK = "⬅️ Назад"
 
@@ -16,8 +18,8 @@ ADMIN_MAIN_MENU_TEXTS = frozenset(
     {
         "Очередь",
         "В работе",
+        "Отработанные",
         "Выплаты",
-        "Запросы",
         "Рассылка",
         "Архив (7days)",
         "Статистика",
@@ -25,7 +27,7 @@ ADMIN_MAIN_MENU_TEXTS = frozenset(
 )
 
 # Убрать inline-клавиатуру и вернуть фокус на reply-меню админа
-CALLBACK_INLINE_BACK = "nav:inline_back"
+CALLBACK_INLINE_BACK = CB_NAV_INLINE_BACK
 
 
 def normalize_reply_menu_text(text: str | None) -> str | None:

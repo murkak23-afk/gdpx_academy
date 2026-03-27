@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from functools import lru_cache
 import os
+from functools import lru_cache
 
-from pydantic import Field
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -25,7 +25,18 @@ class Settings(BaseSettings):
     postgres_user: str = Field(default="tgpriem", alias="POSTGRES_USER")
     postgres_password: str = Field(..., alias="POSTGRES_PASSWORD")
 
+    redis_url: str | None = Field(
+        default=None,
+        alias="REDIS_URL",
+        description="URL Redis для FSM (например redis://localhost:6379/0). Пусто — MemoryStorage.",
+    )
+
+    http_host: str = Field(default="0.0.0.0", alias="HTTP_HOST")
+    http_port: int = Field(default=8000, alias="HTTP_PORT")
+
     archive_chat_id: int = Field(default=0, alias="ARCHIVE_CHAT_ID")
+    crypto_pay_token: str | None = Field(default=None, alias="CRYPTO_PAY_TOKEN")
+    crypto_asset: str = Field(default="USDT", alias="CRYPTO_ASSET")
 
     brand_channel_url: str | None = Field(
         default=None,
@@ -42,6 +53,16 @@ class Settings(BaseSettings):
         alias="BRAND_PAYMENTS_URL",
         description="Ссылка на выплаты (страница, бот, t.me — кнопка ВЫПЛАТЫ / PAYMENTS).",
     )
+
+    @field_validator("redis_url", mode="before")
+    @classmethod
+    def _normalize_redis_url(cls, value: object) -> str | None:
+        if value is None:
+            return None
+        if isinstance(value, str):
+            stripped = value.strip()
+            return stripped if stripped else None
+        return value  # pragma: no cover
 
     @property
     def database_url(self) -> str:

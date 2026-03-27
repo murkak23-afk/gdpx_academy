@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from decimal import Decimal
 from io import BytesIO
 
 from aiogram import F, Router
@@ -11,7 +12,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.database.models.enums import SubmissionStatus
 from src.keyboards import CALLBACK_INLINE_BACK, REPLY_BTN_BACK
 from src.keyboards.admin_hints import HINT_STATS
+from src.keyboards.callbacks import CB_ADMIN_STATS_EXCEL, CB_ADMIN_STATS_PAGE, CB_ADMIN_STATS_VIEW, CB_NOOP
 from src.services import AdminService, AdminStatsService
+from src.utils.text_format import edit_message_text_safe, non_empty_plain
 
 router = Router(name="admin-stats-router")
 
@@ -26,23 +29,23 @@ def _period_keyboard() -> InlineKeyboardMarkup:
             [
                 InlineKeyboardButton(
                     text="День",
-                    callback_data="admin:stats:view:day",
+                    callback_data=f"{CB_ADMIN_STATS_VIEW}:day",
                 ),
                 InlineKeyboardButton(
                     text="7 дней",
-                    callback_data="admin:stats:view:week",
+                    callback_data=f"{CB_ADMIN_STATS_VIEW}:week",
                 ),
                 InlineKeyboardButton(
                     text="30 дней",
-                    callback_data="admin:stats:view:month",
+                    callback_data=f"{CB_ADMIN_STATS_VIEW}:month",
                 ),
             ],
             [
-                InlineKeyboardButton(text="📊 Excel (день)", callback_data="admin:stats:excel:day"),
-                InlineKeyboardButton(text="Excel (7д)", callback_data="admin:stats:excel:week"),
+                InlineKeyboardButton(text="📊 Excel (день)", callback_data=f"{CB_ADMIN_STATS_EXCEL}:day"),
+                InlineKeyboardButton(text="Excel (7д)", callback_data=f"{CB_ADMIN_STATS_EXCEL}:week"),
             ],
             [
-                InlineKeyboardButton(text="Excel (30д)", callback_data="admin:stats:excel:month"),
+                InlineKeyboardButton(text="Excel (30д)", callback_data=f"{CB_ADMIN_STATS_EXCEL}:month"),
             ],
             [InlineKeyboardButton(text=REPLY_BTN_BACK, callback_data=CALLBACK_INLINE_BACK)],
         ],
@@ -54,14 +57,16 @@ def _payout_nav_keyboard(period: str, page: int, total: int) -> list[list[Inline
     page = min(max(page, 0), max_page)
     return [
         [
-            InlineKeyboardButton(text="⬅️", callback_data=f"admin:stats:pg:{period}:{max(page - 1, 0)}"),
-            InlineKeyboardButton(text=f"{page + 1}/{max_page + 1}", callback_data="noop"),
-            InlineKeyboardButton(text="➡️", callback_data=f"admin:stats:pg:{period}:{min(page + 1, max_page)}"),
+            InlineKeyboardButton(text="⬅️", callback_data=f"{CB_ADMIN_STATS_PAGE}:{period}:{max(page - 1, 0)}"),
+            InlineKeyboardButton(text=f"{page + 1}/{max_page + 1}", callback_data=CB_NOOP),
+            InlineKeyboardButton(text="➡️", callback_data=f"{CB_ADMIN_STATS_PAGE}:{period}:{min(page + 1, max_page)}"),
         ],
     ]
 
 
-async def _build_full_stats_message(session: AsyncSession, period: str, payout_page: int) -> tuple[str, InlineKeyboardMarkup]:
+async def _build_full_stats_message(
+    session: AsyncSession, period: str, payout_page: int
+) -> tuple[str, InlineKeyboardMarkup]:
     svc = AdminStatsService(session=session)
     start, end = svc.period_bounds(period)
     incoming = await svc.count_incoming_submissions(start, end)
@@ -69,6 +74,8 @@ async def _build_full_stats_message(session: AsyncSession, period: str, payout_p
     blk = await svc.count_by_status_reviewed(SubmissionStatus.BLOCKED, start, end)
     nas = await svc.count_by_status_reviewed(SubmissionStatus.NOT_A_SCAN, start, end)
     by_cat = await svc.accepted_by_category(start, end)
+    avg_accept = await svc.avg_accept_amount(start, end)
+    top_sellers = await svc.top_sellers_by_accept_amount(start, end, limit=5)
     payout_rows, payout_total = await svc.payout_rows_paginated(
         start, end, page=payout_page, page_size=STATS_PAGE_SIZE
     )
@@ -87,11 +94,24 @@ async def _build_full_stats_message(session: AsyncSession, period: str, payout_p
         "",
         "Зачёт по операторам (категориям):",
     ]
+    accepted_amount_total = sum((amt for _, _, amt in by_cat), start=0)
+    avg_daily_paid = (accepted_amount_total / Decimal("30")).quantize(Decimal("0.01")) if period == "month" else (
+        (accepted_amount_total / Decimal("7")).quantize(Decimal("0.01")) if period == "week" else accepted_amount_total
+    )
+    lines.append(f"Сумма зачёта (USDT): {accepted_amount_total}")
+    lines.append(f"Средний чек симки (USDT): {avg_accept}")
+    lines.append(f"Payout velocity (USDT/день): {avg_daily_paid}")
     if not by_cat:
         lines.append("  — нет данных")
     else:
-        for title, cnt in by_cat:
-            lines.append(f"  • {title}: {cnt}")
+        for title, cnt, amt in by_cat:
+            lines.append(f"  • {title}: {cnt} шт, {amt} USDT")
+    lines.extend(["", "Топ продавцов по сумме зачёта:"])
+    if not top_sellers:
+        lines.append("  — нет данных")
+    else:
+        for label, amount, cnt in top_sellers:
+            lines.append(f"  • {label}: {amount} USDT ({cnt} симок)")
     lines.extend(["", "Выплаты продавцам (по @nickname, только с выплатами в периоде):", ""])
     if not payout_rows:
         lines.append("  — нет записей")
@@ -113,28 +133,28 @@ async def send_stats_hub(message: Message, session: AsyncSession) -> None:
     """Точка входа: раздел «Статистика» из reply-меню."""
 
     text, kb = await _build_full_stats_message(session, "day", 0)
-    await message.answer(text, reply_markup=kb)
+    await message.answer(non_empty_plain(text), reply_markup=kb)
 
 
-@router.callback_query(F.data.startswith("admin:stats:view:"))
+@router.callback_query(F.data.startswith(f"{CB_ADMIN_STATS_VIEW}:"))
 async def on_stats_view_period(callback: CallbackQuery, session: AsyncSession) -> None:
     if callback.from_user is None or callback.data is None:
         return
-    if not await AdminService(session=session).is_admin(callback.from_user.id):
+    if not await AdminService(session=session).can_manage_payouts(callback.from_user.id):
         await callback.answer("Недостаточно прав", show_alert=True)
         return
     period = callback.data.split(":")[-1]
     await callback.answer()
     text, kb = await _build_full_stats_message(session, period, 0)
     if callback.message is not None:
-        await callback.message.edit_text(text, reply_markup=kb)
+        await edit_message_text_safe(callback.message, text, reply_markup=kb)
 
 
-@router.callback_query(F.data.startswith("admin:stats:pg:"))
+@router.callback_query(F.data.startswith(f"{CB_ADMIN_STATS_PAGE}:"))
 async def on_stats_payout_page(callback: CallbackQuery, session: AsyncSession) -> None:
     if callback.from_user is None or callback.data is None:
         return
-    if not await AdminService(session=session).is_admin(callback.from_user.id):
+    if not await AdminService(session=session).can_manage_payouts(callback.from_user.id):
         await callback.answer("Недостаточно прав", show_alert=True)
         return
     parts = callback.data.split(":")
@@ -145,14 +165,14 @@ async def on_stats_payout_page(callback: CallbackQuery, session: AsyncSession) -
     await callback.answer()
     text, kb = await _build_full_stats_message(session, period, page)
     if callback.message is not None:
-        await callback.message.edit_text(text, reply_markup=kb)
+        await edit_message_text_safe(callback.message, text, reply_markup=kb)
 
 
-@router.callback_query(F.data.startswith("admin:stats:excel:"))
+@router.callback_query(F.data.startswith(f"{CB_ADMIN_STATS_EXCEL}:"))
 async def on_stats_excel(callback: CallbackQuery, session: AsyncSession) -> None:
     if callback.from_user is None or callback.data is None:
         return
-    if not await AdminService(session=session).is_admin(callback.from_user.id):
+    if not await AdminService(session=session).can_manage_payouts(callback.from_user.id):
         await callback.answer("Недостаточно прав", show_alert=True)
         return
     period = callback.data.split(":")[-1]
@@ -183,9 +203,9 @@ async def on_stats_excel(callback: CallbackQuery, session: AsyncSession) -> None
     ws0.append(["Не скан", nas])
 
     ws1 = wb.create_sheet("По_операторам")
-    ws1.append(["Категория (оператор)", "Зачёт, шт."])
-    for title, cnt in by_cat:
-        ws1.append([title, cnt])
+    ws1.append(["Категория (оператор)", "Зачёт, шт.", "Сумма зачёта, USDT"])
+    for title, cnt, amt in by_cat:
+        ws1.append([title, cnt, float(amt)])
 
     ws2 = wb.create_sheet("Выплаты")
     ws2.append(["Продавец", "Сумма USDT", "Число выплат"])

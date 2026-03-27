@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
 import re
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -34,10 +34,10 @@ class ArchiveService:
         cutoff = datetime.now(timezone.utc) - timedelta(days=self.RETENTION_DAYS)
         normalized = query.strip()
         if re.fullmatch(r"^\+7\d{10}$", normalized):
-            phone_clause = Submission.description_text == normalized
+            phone_clause = Submission.description_text.like(f"{normalized}%")
         else:
             digits = re.sub(r"\D", "", normalized)
-            phone_clause = Submission.description_text.like(f"%{digits}")
+            phone_clause = Submission.description_text.like(f"%{digits}%")
 
         stmt = (
             select(Submission, User)
@@ -63,10 +63,10 @@ class ArchiveService:
         cutoff = datetime.now(timezone.utc) - timedelta(days=self.RETENTION_DAYS)
         normalized = query.strip()
         if re.fullmatch(r"^\+7\d{10}$", normalized):
-            phone_clause = Submission.description_text == normalized
+            phone_clause = Submission.description_text.like(f"{normalized}%")
         else:
             digits = re.sub(r"\D", "", normalized)
-            phone_clause = Submission.description_text.like(f"%{digits}")
+            phone_clause = Submission.description_text.like(f"%{digits}%")
 
         conditions = [PublicationArchive.created_at >= cutoff, phone_clause]
         stmt = (

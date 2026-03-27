@@ -67,4 +67,37 @@ docker compose logs -f bot
 ```bash
 export ENV_FILE=.env.local
 python -m scripts.make_admin --telegram-id 123456789
+# или роль админа выплат:
+python -m scripts.make_admin --telegram-id 123456789 --role payout_admin
+# или тех. админ:
+python -m scripts.make_admin --telegram-id 123456789 --role admin
 ```
+
+## Качество кода
+
+Локальные проверки через `Makefile`:
+
+```bash
+make install
+make lint
+make test
+```
+
+Или сразу:
+
+```bash
+make check
+```
+
+## Соглашения callback_data
+
+- Единые префиксы и шаблоны хранятся в `src/keyboards/callbacks.py`.
+- Рекомендуемый формат: `scope:action[:arg1[:arg2...]]`.
+- Для новых callback-значений используй константы из `callbacks.py`, а не строковые литералы в хендлерах/клавиатурах.
+
+## Текущий workflow
+
+- Админ: `Запросы -> Очередь -> В работе -> Отработанные`.
+- Финал карточки в `В работе` ставится вручную кнопками `Зачёт / Незачёт`.
+- `Отработанные` содержит вкладки `Зачёт` и `Незачёт`, пагинацию и экспорт CSV по текущей вкладке.
+- Продавец: `Материал` (папки по операторам, карточка, edit/delete только для `pending`) и `История выплат` (пагинация по выплатам).

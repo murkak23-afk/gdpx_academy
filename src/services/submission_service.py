@@ -2,13 +2,14 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from decimal import Decimal
+from typing import Any
 
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.database.models.category import Category
 from src.database.models.enums import RejectionReason, SubmissionStatus
 from src.database.models.publication import PublicationArchive
-from src.database.models.category import Category
 from src.database.models.submission import ReviewAction, Submission
 from src.database.models.user import User
 from src.main_operators import MAIN_OPERATOR_GROUPS, category_title_to_main_group_label
@@ -420,7 +421,8 @@ class SubmissionService:
             .limit(page_size)
         )
         rows = list((await self._session.execute(stmt)).all())
-        total = int((await self._session.execute(select(func.count(Submission.id)).where(*base_conditions))).scalar_one())
+        total_stmt = select(func.count(Submission.id)).where(*base_conditions)
+        total = int((await self._session.execute(total_stmt)).scalar_one())
         return rows, total
 
     async def accept_submission(
@@ -504,3 +506,178 @@ class SubmissionService:
         await self._session.commit()
         await self._session.refresh(submission)
         return submission
+
+    _DEBIT_WORKED_STATUSES = (
+        SubmissionStatus.REJECTED,
+        SubmissionStatus.BLOCKED,
+        SubmissionStatus.NOT_A_SCAN,
+    )
+
+    @staticmethod
+    def _utc_day_start() -> datetime:
+        now = datetime.now(timezone.utc)
+        return now.replace(hour=0, minute=0, second=0, microsecond=0)
+
+    def _worked_filter_conditions(
+        self,
+        *,
+        admin_id: int,
+        tab: str,
+        seller_id: int | None,
+        category_id: int | None,
+        date_from: datetime | None,
+    ) -> list:
+        conds: list = [
+            Submission.admin_id == admin_id,
+            Submission.reviewed_at.isnot(None),
+        ]
+        if tab == "credit":
+            conds.append(Submission.status == SubmissionStatus.ACCEPTED)
+        else:
+            conds.append(Submission.status.in_(self._DEBIT_WORKED_STATUSES))
+        if seller_id is not None:
+            conds.append(Submission.user_id == seller_id)
+        if category_id is not None:
+            conds.append(Submission.category_id == category_id)
+        if date_from is not None:
+            conds.append(Submission.reviewed_at >= date_from)
+        return conds
+
+    async def get_worked_today_counts(self, admin_id: int) -> tuple[int, int]:
+        """Сколько карточек сегодня (UTC) отработано этим админом: зачёт / незачёт."""
+
+        day_start = self._utc_day_start()
+        credit_stmt = select(func.count(Submission.id)).where(
+            Submission.admin_id == admin_id,
+            Submission.reviewed_at >= day_start,
+            Submission.status == SubmissionStatus.ACCEPTED,
+        )
+        debit_stmt = select(func.count(Submission.id)).where(
+            Submission.admin_id == admin_id,
+            Submission.reviewed_at >= day_start,
+            Submission.status.in_(self._DEBIT_WORKED_STATUSES),
+        )
+        credit = int((await self._session.execute(credit_stmt)).scalar_one())
+        debit = int((await self._session.execute(debit_stmt)).scalar_one())
+        return credit, debit
+
+    async def get_worked_totals(
+        self,
+        *,
+        admin_id: int,
+        tab: str,
+        seller_id: int | None,
+        category_id: int | None,
+        date_from: datetime | None,
+    ) -> tuple[int, Decimal]:
+        """Количество и сумма USDT (только вкладка «Зачёт») по текущим фильтрам."""
+
+        conds = self._worked_filter_conditions(
+            admin_id=admin_id,
+            tab=tab,
+            seller_id=seller_id,
+            category_id=category_id,
+            date_from=date_from,
+        )
+        count_stmt = select(func.count(Submission.id)).where(*conds)
+        total = int((await self._session.execute(count_stmt)).scalar_one())
+        if tab != "credit":
+            return total, Decimal("0.00")
+        sum_stmt = select(func.coalesce(func.sum(Submission.accepted_amount), Decimal("0.00"))).where(*conds)
+        amount = Decimal((await self._session.execute(sum_stmt)).scalar_one())
+        return total, amount
+
+    async def list_worked_submissions_paginated(
+        self,
+        *,
+        admin_id: int,
+        page: int,
+        page_size: int,
+        tab: str,
+        seller_id: int | None,
+        category_id: int | None,
+        date_from: datetime | None,
+    ) -> tuple[list[Submission], int]:
+        conds = self._worked_filter_conditions(
+            admin_id=admin_id,
+            tab=tab,
+            seller_id=seller_id,
+            category_id=category_id,
+            date_from=date_from,
+        )
+        total_stmt = select(func.count(Submission.id)).where(*conds)
+        total = int((await self._session.execute(total_stmt)).scalar_one())
+        stmt = (
+            select(Submission)
+            .where(*conds)
+            .order_by(Submission.reviewed_at.desc().nullslast(), Submission.id.desc())
+            .offset(page * page_size)
+            .limit(page_size)
+        )
+        rows = list((await self._session.execute(stmt)).scalars().all())
+        return rows, total
+
+    async def list_worked_submissions_for_export(
+        self,
+        *,
+        admin_id: int,
+        tab: str,
+        seller_id: int | None,
+        category_id: int | None,
+        date_from: datetime | None,
+    ) -> list[Submission]:
+        conds = self._worked_filter_conditions(
+            admin_id=admin_id,
+            tab=tab,
+            seller_id=seller_id,
+            category_id=category_id,
+            date_from=date_from,
+        )
+        stmt = (
+            select(Submission)
+            .where(*conds)
+            .order_by(Submission.reviewed_at.desc().nullslast(), Submission.id.desc())
+        )
+        return list((await self._session.execute(stmt)).scalars().all())
+
+    async def get_user_material_folders(self, user_id: int) -> list[dict[str, Any]]:
+        """Папки «Материал»: категории с хотя бы одной карточкой у пользователя."""
+
+        stmt = (
+            select(Category.id, Category.title, func.count(Submission.id))
+            .join(Submission, Submission.category_id == Category.id)
+            .where(Submission.user_id == user_id)
+            .group_by(Category.id, Category.title)
+            .order_by(Category.title.asc())
+        )
+        rows = (await self._session.execute(stmt)).all()
+        return [
+            {"category_id": int(cid), "title": title, "total": int(cnt)}
+            for cid, title, cnt in rows
+        ]
+
+    async def list_user_material_by_category_paginated(
+        self,
+        *,
+        user_id: int,
+        category_id: int,
+        page: int,
+        page_size: int,
+        statuses: list[SubmissionStatus] | None,
+    ) -> tuple[list[Submission], int]:
+        """Карточки пользователя в категории с пагинацией и опциональным фильтром по статусам."""
+
+        conds = [Submission.user_id == user_id, Submission.category_id == category_id]
+        if statuses is not None:
+            conds.append(Submission.status.in_(statuses))
+        total_stmt = select(func.count(Submission.id)).where(*conds)
+        total = int((await self._session.execute(total_stmt)).scalar_one())
+        stmt = (
+            select(Submission)
+            .where(*conds)
+            .order_by(Submission.created_at.desc(), Submission.id.desc())
+            .offset(page * page_size)
+            .limit(page_size)
+        )
+        rows = list((await self._session.execute(stmt)).scalars().all())
+        return rows, total

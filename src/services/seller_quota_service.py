@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 from datetime import date, datetime, timezone
+from decimal import Decimal
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.database.models.category import Category
 from src.database.models.seller_daily_quota import SellerDailyQuota
 
 
@@ -19,7 +21,13 @@ class SellerQuotaService:
         return datetime.now(timezone.utc).date()
 
     async def get_quota_for_today(self, user_id: int, category_id: int) -> int:
-        """Сколько выгрузок разрешено сегодня (UTC) в этой категории. Без записи — 0."""
+        """
+        Сколько выгрузок разрешено сегодня (UTC) в этой категории.
+
+        Логика:
+        - если есть запись в `seller_daily_quotas` (старый сценарий) — используем её;
+        - иначе берём лимит из `categories.total_upload_limit`, который админ задаёт через `/admin_categories`.
+        """
 
         today = self.today_utc()
         stmt = select(SellerDailyQuota.max_uploads).where(
@@ -29,7 +37,19 @@ class SellerQuotaService:
         )
         row = (await self._session.execute(stmt)).scalar_one_or_none()
         if row is None:
-            return 0
+            # Фолбэк на операторский лимит (категория).
+            cat_stmt = select(Category.total_upload_limit, Category.is_active).where(Category.id == category_id)
+            cat_row = (await self._session.execute(cat_stmt)).one_or_none()
+            if cat_row is None:
+                return 0
+            total_upload_limit, is_active = cat_row
+            if not is_active:
+                return 0
+            # None = безлимит.
+            if total_upload_limit is None:
+                return 10**9
+            return max(0, int(total_upload_limit))
+
         return max(0, int(row))
 
     async def upsert_quota(
@@ -38,6 +58,7 @@ class SellerQuotaService:
         category_id: int,
         quota_date: date,
         max_uploads: int,
+        unit_price: Decimal,
     ) -> SellerDailyQuota:
         """Задаёт лимит на указанный день (UTC) для пары продавец + категория."""
 
@@ -53,10 +74,12 @@ class SellerQuotaService:
                 category_id=category_id,
                 quota_date=quota_date,
                 max_uploads=max_uploads,
+                unit_price=unit_price,
             )
             self._session.add(row)
         else:
             existing.max_uploads = max_uploads
+            existing.unit_price = unit_price
             row = existing
         await self._session.commit()
         await self._session.refresh(row)
@@ -66,3 +89,59 @@ class SellerQuotaService:
         stmt = select(SellerDailyQuota).where(SellerDailyQuota.quota_date == quota_date)
         result = await self._session.execute(stmt)
         return list(result.scalars().all())
+
+    async def get_unit_price_for_date(self, user_id: int, category_id: int, quota_date: date) -> Decimal:
+        stmt = select(SellerDailyQuota.unit_price).where(
+            SellerDailyQuota.user_id == user_id,
+            SellerDailyQuota.category_id == category_id,
+            SellerDailyQuota.quota_date == quota_date,
+        )
+        value = (await self._session.execute(stmt)).scalar_one_or_none()
+        if value is None:
+            return Decimal("0.00")
+        return Decimal(value)
+
+    async def delete_quota_for_date(self, user_id: int, category_id: int, quota_date: date) -> bool:
+        stmt = select(SellerDailyQuota).where(
+            SellerDailyQuota.user_id == user_id,
+            SellerDailyQuota.category_id == category_id,
+            SellerDailyQuota.quota_date == quota_date,
+        )
+        row = (await self._session.execute(stmt)).scalar_one_or_none()
+        if row is None:
+            return False
+        await self._session.delete(row)
+        await self._session.commit()
+        return True
+
+    async def clear_quotas_for_date(self, quota_date: date) -> int:
+        rows = await self.list_quotas_for_date(quota_date)
+        if not rows:
+            return 0
+        for row in rows:
+            await self._session.delete(row)
+        await self._session.commit()
+        return len(rows)
+
+    async def clear_quotas_for_category_on_date(self, category_id: int, quota_date: date) -> int:
+        stmt = select(SellerDailyQuota).where(
+            SellerDailyQuota.category_id == category_id,
+            SellerDailyQuota.quota_date == quota_date,
+        )
+        rows = list((await self._session.execute(stmt)).scalars().all())
+        if not rows:
+            return 0
+        for row in rows:
+            await self._session.delete(row)
+        await self._session.commit()
+        return len(rows)
+
+    async def clear_all_quotas(self) -> int:
+        stmt = select(SellerDailyQuota)
+        rows = list((await self._session.execute(stmt)).scalars().all())
+        if not rows:
+            return 0
+        for row in rows:
+            await self._session.delete(row)
+        await self._session.commit()
+        return len(rows)
