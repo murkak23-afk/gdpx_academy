@@ -480,6 +480,39 @@ class SubmissionService:
         total = int((await self._session.execute(total_stmt)).scalar_one())
         return rows, total
 
+    async def search_by_phone_partial(
+        self,
+        query: str,
+        limit: int = 5,
+    ) -> list[Submission]:
+        """Быстрый поиск для inline query: по префиксу номера (только цифры).
+        
+        Пример: query="234" найдёт +79995555234, +79998765234, и т.д.
+        Ищет только ACCEPTED (готовые к продаже).
+        """
+
+        # Извлекаем только цифры из запроса
+        digits = "".join(ch for ch in query if ch.isdigit())
+        if len(digits) < 3:
+            return []
+
+        # Ищем товары, где номер содержит эти цифры, и статус ACCEPTED
+        stmt = (
+            select(Submission)
+            .options(
+                joinedload(Submission.category),
+                joinedload(Submission.seller),
+            )
+            .where(
+                Submission.description_text.like(f"%{digits}%"),
+                Submission.status == SubmissionStatus.ACCEPTED,
+            )
+            .order_by(Submission.created_at.desc())
+            .limit(limit)
+        )
+        results = list((await self._session.execute(stmt)).scalars().all())
+        return results
+
     async def accept_submission(
         self,
         submission_id: int,
