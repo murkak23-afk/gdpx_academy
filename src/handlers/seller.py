@@ -60,6 +60,7 @@ from src.services import (
 )
 from src.states.submission_state import SubmissionState
 from src.utils.clean_screen import send_clean_text_screen
+from src.utils.fsm_progress import FSMProgressFormatter
 from src.utils.phone_norm import normalize_phone_strict
 from src.utils.submission_format import format_submission_title_from_parts
 from src.utils.submission_media import (
@@ -1193,8 +1194,11 @@ async def on_sell_content(message: Message, state: FSMContext, session: AsyncSes
     await send_clean_text_screen(
         trigger_message=message,
         key="seller:sell:start",
-        text=(
-            "Продать eSIM\n\nШаг 1/3: выбери категорию (оператора).\nПосле выбора сразу переходишь к загрузке симки."
+        text=FSMProgressFormatter.format_fsm_message(
+            current_step=1,
+            include_progress_bar=True,
+            include_description=True,
+            full_description=True,
         ),
         reply_markup=_seller_fsm_categories_keyboard(categories),
     )
@@ -1259,17 +1263,15 @@ async def on_seller_fsm_category_pick(callback: CallbackQuery, state: FSMContext
         is_quick_add = data.get("quick_add", False)
         
         if is_quick_add:
-            # Быстрый режим - более краткий текст
-            photo_text = "⚡ Загрузи фото или архив"
+            # QUICK ADD: минималистичное сообщение с прогрессом
+            photo_text = FSMProgressFormatter.format_fsm_quick_message(current_step=2)
         else:
-            # Обычный режим - подробная инструкция
-            photo_text = (
-                "Продать eSIM\n\n"
-                "Шаг 2/3: загрузи симку\n"
-                "• фото, или\n"
-                "• архив файлом (zip/rar/7z/...)\n\n"
-                "Подпись: <code>+79999999999</code> — тогда симка сразу уйдет на модерацию.\n"
-                "Архив отправляй документом, не картинкой."
+            # Обычный режим: полное сообщение с подробностями
+            photo_text = FSMProgressFormatter.format_fsm_message(
+                current_step=2,
+                include_progress_bar=True,
+                include_description=True,
+                full_description=True,
             )
         
         await edit_message_text_safe(
@@ -1342,16 +1344,14 @@ async def on_category_selected(
     await state.update_data(category_id=category.id)
     await state.set_state(SubmissionState.waiting_for_photo)
     await message.answer(
-        text=(
-            "Продать eSIM\n\n"
-            "Шаг 2/3: загрузи симку\n"
-            "• фото, или\n"
-            "• архив файлом (zip/rar/7z/...)\n\n"
-            "Подпись: `+79999999999` — тогда симка сразу уйдет на модерацию.\n"
-            "Архив отправляй документом, не картинкой."
+        text=FSMProgressFormatter.format_fsm_message(
+            current_step=2,
+            include_progress_bar=True,
+            include_description=True,
+            full_description=True,
         ),
         reply_markup=_seller_fsm_cancel_keyboard(),
-        parse_mode="Markdown",
+        parse_mode="HTML",
     )
 
 
@@ -1550,11 +1550,16 @@ async def _store_file_and_ask_description(
     is_quick_add = data.get("quick_add", False)
     
     if is_quick_add:
-        # Краткое сообщение для быстрого режима
-        desc_text = "⚡ Номер в формате +79999999999"
+        # QUICK ADD: минималистичное сообщение с прогрессом
+        desc_text = FSMProgressFormatter.format_fsm_quick_message(current_step=3)
     else:
-        # Подробное сообщение для обычного режима
-        desc_text = "Отлично. Теперь отправь описание в формате номера: +79999999999."
+        # Обычный режим: полное сообщение с прогрессом и подробностями
+        desc_text = FSMProgressFormatter.format_fsm_message(
+            current_step=3,
+            include_progress_bar=True,
+            include_description=True,
+            full_description=True,
+        )
     
     await _send_fsm_step_message(
         message,
@@ -1744,10 +1749,8 @@ async def on_photo_expected(message: Message, state: FSMContext, session: AsyncS
         return
 
     await message.answer(
-        "Шаг 2/3: пришли фото или один архив файлом.\n"
-        "Для автозачета подпись в формате +79999999999.\n"
-        "Для разных номеров отправляй отдельные сообщения.",
-        parse_mode="Markdown",
+        text=FSMProgressFormatter.format_fsm_quick_message(current_step=2),
+        parse_mode="HTML",
         reply_markup=_seller_fsm_cancel_keyboard(),
     )
 
@@ -1822,8 +1825,9 @@ async def on_description_expected(message: Message) -> None:
     """Подсказывает формат шага, если пришел не текст."""
 
     await message.answer(
-        "Шаг 3/3: отправь номер в формате +79999999999.",
+        text=FSMProgressFormatter.format_fsm_quick_message(current_step=3),
         reply_markup=_seller_fsm_cancel_keyboard(),
+        parse_mode="HTML",
     )
 
 
