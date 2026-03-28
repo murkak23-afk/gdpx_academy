@@ -76,7 +76,16 @@ class CryptoBotService:
             )
 
         except CryptoPayError as e:
+            error_str = str(e).upper()
             logger.exception("CryptoPay API error: %s", e)
+            
+            # Специальная обработка NOT_ENOUGH_COINS
+            if "NOT_ENOUGH_COINS" in error_str or "INSUFFICIENT" in error_str:
+                raise RuntimeError(
+                    f"❌ NOT_ENOUGH_COINS: На счёте CryptoBot недостаточно средств {amount} {asset.value}. "
+                    f"Пополните баланс и попробуйте снова."
+                ) from e
+            
             await alert_cryptobot_error(str(e))
             raise RuntimeError(f"CryptoPay error: {e}") from e
 

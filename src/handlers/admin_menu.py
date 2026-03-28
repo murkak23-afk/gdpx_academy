@@ -873,8 +873,8 @@ async def on_requests_ui(
         await callback.message.edit_reply_markup(reply_markup=None)
         await state.set_state(AdminRequestsState.waiting_for_delete_line)
         await callback.message.answer(
-            "Удаление запроса: отправь `category_id`.\nПример: `12`",
-            parse_mode="Markdown",
+            "Удаление запроса: отправь <code>category_id</code>.\nПример: <code>12</code>",
+            parse_mode="HTML",
         )
         return
     if callback.data == CB_REQ_CLEAR:
@@ -904,8 +904,8 @@ async def on_requests_ui(
         return
     if callback.data == CB_REQ_FACTORY_RESET:
         await callback.message.answer(
-            "Сбросить `Запросы` до заводских настроек?\nЭто удалит все лимиты/цены по всем датам.",
-            parse_mode="Markdown",
+            "Сбросить <code>Запросы</code> до заводских настроек?\nЭто удалит все лимиты/цены по всем датам.",
+            parse_mode="HTML",
             reply_markup=InlineKeyboardMarkup(
                 inline_keyboard=[
                     [
@@ -1638,8 +1638,8 @@ async def on_category_add_photo_text(message: Message, state: FSMContext, sessio
         return
 
     await message.answer(
-        "Похоже, это не фото и не команда. Напиши `пропустить` или отправь фото.",
-        parse_mode="Markdown",
+        "Похоже, это не фото и не команда. Напиши <code>пропустить</code> или отправь фото.",
+        parse_mode="HTML",
     )
 
 
@@ -2266,13 +2266,26 @@ async def on_mark_paid_confirm(callback: CallbackQuery, session: AsyncSession, b
     try:
         check = await CryptoBotService().create_usdt_check(amount=amount, comment=comment)
     except RuntimeError as exc:
-        await callback.answer("Не удалось создать чек CryptoBot", show_alert=True)
-        if callback.message is not None:
-            await edit_message_text_safe(
-                callback.message,
-                f"Ошибка CryptoBot: {exc}\n\nПопробуйте снова из ведомости.",
-                reply_markup=None,
-            )
+        error_msg = str(exc)
+        # Специальная обработка NOT_ENOUGH_COINS
+        if "NOT_ENOUGH_COINS" in error_msg:
+            await callback.answer("Недостаточно средств на счёте CryptoBot", show_alert=True)
+            if callback.message is not None:
+                await edit_message_text_safe(
+                    callback.message,
+                    f"<b>⚠️ Ошибка CryptoBot:</b>\n{error_msg}\n\n"
+                    f"<b>Решение:</b> Пополните баланс CryptoBot и повторите попытку.",
+                    reply_markup=None,
+                    parse_mode="HTML",
+                )
+        else:
+            await callback.answer("Не удалось создать чек CryptoBot", show_alert=True)
+            if callback.message is not None:
+                await edit_message_text_safe(
+                    callback.message,
+                    f"Ошибка CryptoBot: {exc}\n\nПопробуйте снова из ведомости.",
+                    reply_markup=None,
+                )
         return
 
     payout = await BillingService(session=session).mark_user_paid_with_crypto(

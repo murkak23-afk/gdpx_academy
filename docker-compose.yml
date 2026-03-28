@@ -37,6 +37,8 @@ services:
       - .env.docker
     ports:
       - "8000:8000"
+    volumes:
+      - ./logs:/app/logs
     environment:
       REDIS_URL: redis://redis:6379/0
       HTTP_HOST: "0.0.0.0"
@@ -46,7 +48,6 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-    command: ["python", "-m", "src"]
     healthcheck:
       test:
         [

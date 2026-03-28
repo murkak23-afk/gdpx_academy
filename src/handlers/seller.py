@@ -1241,10 +1241,10 @@ async def on_seller_fsm_category_pick(callback: CallbackQuery, state: FSMContext
             "Шаг 2/3: загрузи симку\n"
             "• фото, или\n"
             "• архив файлом (zip/rar/7z/...)\n\n"
-            "Подпись: `+79999999999` — тогда симка сразу уйдет на модерацию.\n"
+            "Подпись: <code>+79999999999</code> — тогда симка сразу уйдет на модерацию.\n"
             "Архив отправляй документом, не картинкой.",
             reply_markup=_seller_fsm_cancel_keyboard(),
-            parse_mode="Markdown",
+            parse_mode="HTML",
         )
 
 

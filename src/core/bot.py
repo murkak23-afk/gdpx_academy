@@ -3,6 +3,7 @@ from __future__ import annotations
 from aiogram import Bot
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
+from aiogram.types import BotCommand, BotCommandScopeDefault
 
 from src.core.config import get_settings
 
@@ -27,3 +28,16 @@ def create_bot() -> Bot:
         token=settings.bot_token,
         default=DefaultBotProperties(parse_mode=parse_mode),
     )
+
+
+async def setup_bot_commands(bot: Bot) -> None:
+    """Устанавливает красивое меню команд в Telegram (/start, /profile, /sell, etc)."""
+
+    commands = [
+        BotCommand(command="start", description="🚀 Начать работу"),
+        BotCommand(command="profile", description="👤 Мой профиль"),
+        BotCommand(command="sell", description="📤 Сдать eSIM"),
+        BotCommand(command="stats", description="📊 Статистика продаж"),
+        BotCommand(command="help", description="❓ Справка"),
+    ]
+    await bot.set_my_commands(commands, scope=BotCommandScopeDefault())

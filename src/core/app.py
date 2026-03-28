@@ -9,7 +9,7 @@ import uvicorn
 from aiogram import Bot
 
 from src.api.app import create_app as create_fastapi_app
-from src.core.bot import create_bot
+from src.core.bot import create_bot, setup_bot_commands
 from src.core.config import get_settings
 from src.core.dispatcher import create_dispatcher
 from src.core.in_review_stuck_monitor import run_in_review_stuck_monitor
@@ -53,6 +53,7 @@ async def run_application() -> None:
 
     try:
         bot = create_bot()
+        await setup_bot_commands(bot)  # 🆕 Устанавливаем красивое меню команд
         dispatcher = create_dispatcher()
 
         fastapi_app = create_fastapi_app()
@@ -97,6 +98,7 @@ async def run_polling() -> None:
     bot: Bot | None = None
     try:
         bot = create_bot()
+        await setup_bot_commands(bot)  # 🆕 Устанавливаем красивое меню команд
         dispatcher = create_dispatcher()
 
         def _request_stop() -> None:
