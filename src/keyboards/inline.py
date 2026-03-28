@@ -26,6 +26,7 @@ from src.keyboards.callbacks import (
     CB_SELLER_MENU_MATERIAL,
     CB_SELLER_MENU_PAYHIST,
     CB_SELLER_MENU_PROFILE,
+    CB_SELLER_MENU_QUICK_ADD,
     CB_SELLER_MENU_SELL,
     CB_SELLER_MENU_SUPPORT,
 )
@@ -51,7 +52,10 @@ def seller_main_inline_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [InlineKeyboardButton(text="👤 Профиль", callback_data=CB_SELLER_MENU_PROFILE)],
-            [InlineKeyboardButton(text="📤 Сдать материал", callback_data=CB_SELLER_MENU_SELL)],
+            [
+                InlineKeyboardButton(text="📤 Сдать материал", callback_data=CB_SELLER_MENU_SELL),
+                InlineKeyboardButton(text="🚀 Быстро", callback_data=CB_SELLER_MENU_QUICK_ADD),
+            ],
             [InlineKeyboardButton(text="🧾 Мои номера", callback_data=CB_SELLER_MENU_MATERIAL)],
             [
                 InlineKeyboardButton(text="💸 История выплат", callback_data=CB_SELLER_MENU_PAYHIST),

@@ -42,6 +42,7 @@ from src.keyboards.callbacks import (
     CB_SELLER_MENU_MATERIAL,
     CB_SELLER_MENU_PAYHIST,
     CB_SELLER_MENU_PROFILE,
+    CB_SELLER_MENU_QUICK_ADD,
     CB_SELLER_MENU_SELL,
     CB_SELLER_MENU_SUPPORT,
     CB_SELLER_PAYHIST_PAGE,
@@ -1215,6 +1216,25 @@ async def on_seller_menu_sell(callback: CallbackQuery, state: FSMContext, sessio
         )
 
 
+@router.callback_query(F.data == CB_SELLER_MENU_QUICK_ADD)
+async def on_seller_menu_quick_add(callback: CallbackQuery, state: FSMContext, session: AsyncSession) -> None:
+    """Быстрое добавление: категория -> фото -> готово (без описания)."""
+
+    categories = await CategoryService(session=session).get_active_categories()
+    if not categories:
+        await callback.answer("Сейчас нет активных категорий", show_alert=True)
+        return
+    await state.set_state(SubmissionState.waiting_for_category)
+    await state.update_data(quick_add=True)  # Флаг для быстрого режима
+    await callback.answer()
+    if callback.message is not None:
+        await edit_message_text_safe(
+            callback.message,
+            "⚡ Быстрое добавление\n\nВыбери категорию → загрузи фото → готово!",
+            reply_markup=_seller_fsm_categories_keyboard(categories),
+        )
+
+
 @router.callback_query(
     F.data.startswith(f"{CB_SELLER_FSM_CAT}:"),
     StateFilter(SubmissionState.waiting_for_category),
@@ -1235,14 +1255,26 @@ async def on_seller_fsm_category_pick(callback: CallbackQuery, state: FSMContext
     await state.set_state(SubmissionState.waiting_for_photo)
     await callback.answer()
     if callback.message is not None:
+        data = await state.get_data()
+        is_quick_add = data.get("quick_add", False)
+        
+        if is_quick_add:
+            # Быстрый режим - более краткий текст
+            photo_text = "⚡ Загрузи фото или архив"
+        else:
+            # Обычный режим - подробная инструкция
+            photo_text = (
+                "Продать eSIM\n\n"
+                "Шаг 2/3: загрузи симку\n"
+                "• фото, или\n"
+                "• архив файлом (zip/rar/7z/...)\n\n"
+                "Подпись: <code>+79999999999</code> — тогда симка сразу уйдет на модерацию.\n"
+                "Архив отправляй документом, не картинкой."
+            )
+        
         await edit_message_text_safe(
             callback.message,
-            "Продать eSIM\n\n"
-            "Шаг 2/3: загрузи симку\n"
-            "• фото, или\n"
-            "• архив файлом (zip/rar/7z/...)\n\n"
-            "Подпись: <code>+79999999999</code> — тогда симка сразу уйдет на модерацию.\n"
-            "Архив отправляй документом, не картинкой.",
+            photo_text,
             reply_markup=_seller_fsm_cancel_keyboard(),
             parse_mode="HTML",
         )
@@ -1514,10 +1546,20 @@ async def _store_file_and_ask_description(
         attachment_type=attachment_type,
     )
     await state.set_state(SubmissionState.waiting_for_description)
+    data = await state.get_data()
+    is_quick_add = data.get("quick_add", False)
+    
+    if is_quick_add:
+        # Краткое сообщение для быстрого режима
+        desc_text = "⚡ Номер в формате +79999999999"
+    else:
+        # Подробное сообщение для обычного режима
+        desc_text = "Отлично. Теперь отправь описание в формате номера: +79999999999."
+    
     await _send_fsm_step_message(
         message,
         state,
-        text="Отлично. Теперь отправь описание в формате номера: +79999999999.",
+        text=desc_text,
         reply_markup=_seller_fsm_cancel_keyboard(),
     )
 
