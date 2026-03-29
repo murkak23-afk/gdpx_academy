@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 
 from aiogram import Bot, F, Router
 from aiogram.exceptions import TelegramAPIError
-from aiogram.filters import Command, CommandStart, StateFilter
+from aiogram.filters import Command, StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Document, InlineKeyboardButton, InlineKeyboardMarkup, Message
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -247,25 +247,6 @@ def _is_admin_menu_shortcut(text: str | None) -> bool:
     if text is None:
         return False
     return text.strip().casefold() == "/admin"
-
-
-def _is_start_shortcut(text: str | None) -> bool:
-    if text is None:
-        return False
-    return text.strip().casefold().startswith("/start")
-
-
-async def _route_start_from_seller_fsm(
-    message: Message,
-    state: FSMContext,
-    session: AsyncSession,
-) -> None:
-    """Сбрасывает seller FSM и запускает обычный /start сценарий."""
-
-    from src.handlers.start import on_start
-
-    await state.clear()
-    await on_start(message, state, session)
 
 
 def _render_profile_text(user, dashboard: dict) -> str:
@@ -1697,14 +1678,6 @@ async def on_photo_expected(message: Message, state: FSMContext, session: AsyncS
     if (
         message.text
         and message.from_user is not None
-        and _is_start_shortcut(message.text)
-    ):
-        await _route_start_from_seller_fsm(message, state, session)
-        return
-
-    if (
-        message.text
-        and message.from_user is not None
         and _is_admin_menu_shortcut(message.text)
         and await AdminService(session=session).is_admin(message.from_user.id)
     ):
@@ -1730,10 +1703,6 @@ async def on_description_received(
     if message.from_user is None or message.text is None:
         return
     await _safe_delete_message(message)
-
-    if _is_start_shortcut(message.text):
-        await _route_start_from_seller_fsm(message, state, session)
-        return
 
     if _is_admin_menu_shortcut(message.text) and await AdminService(session=session).is_admin(message.from_user.id):
         await _route_admin_menu_from_seller_fsm(message, state, session)
@@ -1785,22 +1754,6 @@ async def on_description_received(
         description_text=description_text,
         stay_in_batch=True,
     )
-
-
-@router.message(
-    CommandStart(ignore_mention=True),
-    StateFilter(
-        SubmissionState.waiting_for_category,
-        SubmissionState.waiting_for_photo,
-        SubmissionState.waiting_for_description,
-        SubmissionState.waiting_for_material_edit_description,
-        SubmissionState.waiting_for_material_edit_media,
-    ),
-)
-async def on_start_inside_submission_fsm(message: Message, state: FSMContext, session: AsyncSession) -> None:
-    """Позволяет всегда выйти из seller FSM по /start."""
-
-    await _route_start_from_seller_fsm(message, state, session)
 
 
 @router.message(SubmissionState.waiting_for_description)

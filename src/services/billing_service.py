@@ -18,6 +18,15 @@ class BillingService:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
 
+    async def get_user_total_paid_amount(self, user_id: int) -> Decimal:
+        """Возвращает общую сумму успешных выплат (PAID) по пользователю."""
+
+        stmt = select(func.coalesce(func.sum(Payout.amount), Decimal("0.00"))).where(
+            Payout.user_id == user_id,
+            Payout.status == PayoutStatus.PAID,
+        )
+        return Decimal((await self._session.execute(stmt)).scalar_one())
+
     async def get_daily_report_rows(self) -> list[dict[str, int | str | Decimal]]:
         """Возвращает строки ежедневного отчета по пользователям с балансом к выплате."""
 
@@ -57,45 +66,85 @@ class BillingService:
         return report_rows
 
     async def mark_user_paid(self, user_id: int, paid_by_admin_id: int) -> Payout | None:
-        """Сбрасывает pending_balance и создает запись выплаты."""
+        """Обновляет PENDING payouts на PAID и обнуляет pending_balance."""
 
         user = await self._session.get(User, user_id)
         if user is None:
             return None
 
-        rows = await self.get_daily_report_rows()
-        daily_row = next((r for r in rows if int(r["user_id"]) == user_id), None)
-        if daily_row is None:
-            return None
-        amount = Decimal(daily_row["to_pay"])
-        if amount <= Decimal("0.00"):
-            return None
-
-        day_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
-        accepted_count = int(daily_row["accepted_count"])
-
-        payout = Payout(
-            user_id=user.id,
-            amount=amount,
-            accepted_count=accepted_count,
-            period_key=day_start.date().isoformat(),
-            period_date=day_start.date(),
-            status=PayoutStatus.PAID,
-            uploaded_count=accepted_count,
-            blocked_count=0,
-            not_a_scan_count=0,
-            unit_price=None,
-            paid_at=datetime.now(timezone.utc),
-            paid_by_admin_id=paid_by_admin_id,
-            note="manual_daily_report",
+        # Получаем все PENDING payouts для этого пользователя
+        pending_stmt = (
+            select(Payout)
+            .where(
+                Payout.user_id == user_id,
+                Payout.status == PayoutStatus.PENDING,
+            )
+            .order_by(Payout.created_at.asc())
         )
-        user.pending_balance = max(Decimal("0.00"), Decimal(user.pending_balance) - amount)
-        user.total_paid = Decimal(user.total_paid) + amount
+        pending_payouts = list((await self._session.execute(pending_stmt)).scalars().all())
+        
+        if not pending_payouts:
+            # Если нет PENDING payouts, смотрим on pending_balance
+            rows = await self.get_daily_report_rows()
+            daily_row = next((r for r in rows if int(r["user_id"]) == user_id), None)
+            if daily_row is None:
+                return None
+            amount = Decimal(daily_row["to_pay"])
+            if amount <= Decimal("0.00"):
+                return None
 
-        self._session.add(payout)
+            day_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+            accepted_count = int(daily_row["accepted_count"])
+
+            payout = Payout(
+                user_id=user.id,
+                amount=amount,
+                accepted_count=accepted_count,
+                period_key=day_start.date().isoformat(),
+                period_date=day_start.date(),
+                status=PayoutStatus.PAID,
+                uploaded_count=accepted_count,
+                blocked_count=0,
+                not_a_scan_count=0,
+                unit_price=None,
+                paid_at=datetime.now(timezone.utc),
+                paid_by_admin_id=paid_by_admin_id,
+                note="manual_daily_report",
+            )
+            user.pending_balance = max(Decimal("0.00"), Decimal(user.pending_balance) - amount)
+            user.total_paid = Decimal(user.total_paid) + amount
+
+            self._session.add(payout)
+            await self._session.commit()
+            await self._session.refresh(payout)
+            return payout
+        
+        # Обновляем PENDING payouts на PAID
+        total_amount = Decimal("0.00")
+        total_count = 0
+        now = datetime.now(timezone.utc)
+        
+        for payout in pending_payouts:
+            payout.status = PayoutStatus.PAID
+            payout.paid_at = now
+            payout.paid_by_admin_id = paid_by_admin_id
+            payout.uploaded_count = payout.accepted_count
+            total_amount += payout.amount
+            total_count += payout.accepted_count
+            self._session.add(payout)
+        
+        # Обновляем баланс пользователя
+        user.pending_balance = max(Decimal("0.00"), Decimal(user.pending_balance) - total_amount)
+        user.total_paid = Decimal(user.total_paid) + total_amount
+        self._session.add(user)
+        
         await self._session.commit()
-        await self._session.refresh(payout)
-        return payout
+        
+        # Возвращаем первую выплату (для обратной совместимости)
+        if pending_payouts:
+            await self._session.refresh(pending_payouts[0])
+            return pending_payouts[0]
+        return None
 
     async def mark_user_paid_with_crypto(
         self,

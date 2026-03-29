@@ -9,5 +9,7 @@
     "GDPXRenderer",
     "sqlalchemy",
     "SQLAlchemy"
-  ]
+  ],
+  "github.copilot.nextEditSuggestions.enabled": true,
+  "python-envs.defaultEnvManager": "ms-python.python:system"
 }

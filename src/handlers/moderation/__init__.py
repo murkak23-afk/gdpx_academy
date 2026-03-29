@@ -15,14 +15,12 @@ from src.handlers.moderation.forwarding import (
 )
 from src.handlers.moderation.in_review import on_in_review_queue
 from src.handlers.moderation.queue import on_moderation_queue
-from src.handlers.moderation.worked import on_worked_queue
 from src.handlers.moderation_flow import router
 
 __all__ = [
     "router",
     "on_moderation_queue",
     "on_in_review_queue",
-    "on_worked_queue",
     "on_reject",
     "on_reject_template",
     "on_accept",

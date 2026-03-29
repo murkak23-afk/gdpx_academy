@@ -3,7 +3,6 @@ from __future__ import annotations
 import csv
 import logging
 import re
-import unicodedata
 from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
 from html import escape
@@ -12,14 +11,13 @@ from io import BytesIO, StringIO
 from aiogram import Bot, F, Router
 from aiogram.dispatcher.event.bases import SkipHandler
 from aiogram.exceptions import TelegramAPIError, TelegramBadRequest
-from aiogram.filters import Command, StateFilter, or_f
+from aiogram.filters import Command, StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.types import (
     CallbackQuery,
     InlineKeyboardButton,
     InlineKeyboardMarkup,
     Message,
-    ReplyKeyboardMarkup,
     ReplyKeyboardRemove,
 )
 from sqlalchemy import func, select
@@ -27,9 +25,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
 from src.database.models.enums import PayoutStatus, SubmissionStatus
+from src.database.models.publication import Payout
 from src.database.models.submission import ReviewAction, Submission
 from src.database.models.user import User
-from src.handlers.admin_stats import send_stats_hub
 from src.handlers.moderation import on_moderation_queue
 from src.keyboards import (
     BUTTON_ENTER_ADMIN_PANEL,
@@ -41,18 +39,19 @@ from src.keyboards import (
     moderation_review_keyboard,
     pagination_keyboard,
     payout_confirm_keyboard,
+    payout_final_confirm_keyboard,
     search_report_keyboard,
     seller_main_menu_keyboard,
 )
 from src.keyboards.admin_hints import (
-    HINT_ADMIN_CATEGORIES,
     HINT_ARCHIVE,
     HINT_BROADCAST,
     HINT_PAYOUTS,
-    HINT_REQUESTS,
 )
 from src.keyboards.callbacks import (
+    CB_ADMIN_ARCHIVE,
     CB_ADMIN_ARCHIVE_PAGE,
+    CB_ADMIN_BROADCAST,
     CB_ADMIN_INWORK_HUB,
     CB_ADMIN_INWORK_OPEN,
     CB_ADMIN_INWORK_PAGE,
@@ -63,29 +62,19 @@ from src.keyboards.callbacks import (
     CB_ADMIN_REPORT_SUBMISSION,
     CB_ADMIN_RESTRICT,
     CB_ADMIN_SEARCH_PAGE,
-    CB_ADMIN_STATS,
     CB_ADMIN_UNRESTRICT,
-    CB_CAT,
-    CB_CAT_PICK_CATEGORY,
-    CB_CAT_PICK_CATEGORY_PAGE,
     CB_NOOP,
     CB_PAY_CANCEL,
     CB_PAY_CONFIRM,
+    CB_PAY_FINAL_CONFIRM,
     CB_PAY_HISTORY_PAGE,
     CB_PAY_LEDGER_PAGE,
     CB_PAY_MARK,
+    CB_PAY_TOPUP,
+    CB_PAY_TOPUP_CHECK,
     CB_PAY_TRASH,
     CB_PAY_TRASH_PAGE,
-    CB_REQ,
-    CB_REQ_CLEAR,
-    CB_REQ_CLEAR_CANCEL,
-    CB_REQ_CLEAR_CONFIRM,
-    CB_REQ_DELETE,
-    CB_REQ_FACTORY_CANCEL,
-    CB_REQ_FACTORY_CONFIRM,
-    CB_REQ_FACTORY_RESET,
 )
-from src.keyboards.constants import COMMAND_ADM_OPER
 from src.services import (
     AdminAuditService,
     AdminService,
@@ -93,18 +82,16 @@ from src.services import (
     BillingService,
     CategoryService,
     CryptoBotService,
-    SellerQuotaService,
     SubmissionService,
     UserService,
 )
-from src.states.admin_state import AdminBroadcastState, AdminCategoryState, AdminRequestsState
+from src.states.admin_state import AdminBroadcastState, AdminPayoutState, AdminSearchSimState
 from src.states.moderation_state import AdminBatchPickState, AdminInReviewLookupState, AdminModerationForwardState
-from src.utils.admin_keyboard import build_admin_main_inline_keyboard, build_admin_main_menu_keyboard
+from src.utils.admin_keyboard import build_admin_main_inline_keyboard
 from src.utils.admin_panel_text import ADMIN_PANEL_HOME_TEXT
 from src.utils.submission_format import submission_status_emoji_line
 from src.utils.submission_media import message_answer_submission
 from src.utils.text_format import (
-    edit_message_text_or_caption_safe,
     edit_message_text_safe,
     non_empty_plain,
 )
@@ -117,12 +104,6 @@ PAGE_SIZE = 5
 LEDGER_PAGE_SIZE = 8
 INWORK_PAGE_SIZE = 8
 _ADMIN_LAST_PANEL_MSG_KEY = "admin_last_panel_message_id"
-
-
-async def _admin_reply_menu(session: AsyncSession, telegram_id: int) -> ReplyKeyboardMarkup:
-    """Компактная обёртка над build_admin_main_menu_keyboard (короткие строки для ruff)."""
-
-    return await build_admin_main_menu_keyboard(session, telegram_id)
 
 
 async def _admin_delete_prev_panel_message(message: Message, state: FSMContext) -> None:
@@ -140,10 +121,6 @@ async def _admin_store_panel_message(state: FSMContext, sent: Message | None) ->
     if sent is None:
         return
     await state.update_data(**{_ADMIN_LAST_PANEL_MSG_KEY: sent.message_id})
-
-
-REQUESTS_MAX_CATEGORIES_DISPLAY = 60
-CATEGORIES_PICK_PAGE_SIZE = 8
 
 
 def _lock_line(submission: Submission) -> str:
@@ -205,27 +182,31 @@ async def _payout_ledger_text_and_markup(
     *,
     page: int,
 ) -> tuple[str, InlineKeyboardMarkup]:
-    rows = await BillingService(session=session).get_daily_report_rows()
-    total = len(rows)
+    # Получаем PENDING payouts из таблицы payouts
+    rows, total = await BillingService(session=session).get_payouts_paginated(
+        status=PayoutStatus.PENDING,
+        page=page,
+        page_size=LEDGER_PAGE_SIZE,
+    )
     max_page = max((total - 1) // LEDGER_PAGE_SIZE, 0) if total > 0 else 0
     page = min(max(page, 0), max_page)
-    start = page * LEDGER_PAGE_SIZE
-    chunk = rows[start : start + LEDGER_PAGE_SIZE]
 
     lines = ["💰 ВЕДОМОСТЬ ВЫПЛАТ", ""]
     if not rows:
-        lines.append("Нет пользователей с балансом к выплате.")
+        lines.append("Нет пользователей с ожидающими выплатами.")
     else:
-        for i, r in enumerate(chunk, start=start + 1):
-            lines.append(f"{i}. {r['username']} | {r['accepted_count']} шт. | {r['to_pay']} USDT")
+        for i, (payout, user) in enumerate(rows, start=page * LEDGER_PAGE_SIZE + 1):
+            username = f"@{user.username}" if user.username else f"id:{user.telegram_id}"
+            lines.append(f"{i}. {username} | {payout.accepted_count} шт. | {payout.amount} USDT")
     text = "\n".join(lines)
     kb_rows: list[list[InlineKeyboardButton]] = []
-    for r in chunk:
-        uid = int(r["user_id"])
+    for payout, user in rows:
+        uid = int(payout.user_id)
+        username = f"@{user.username}" if user.username else f"id:{user.telegram_id}"
         kb_rows.append(
             [
                 InlineKeyboardButton(
-                    text=_pay_op_label(str(r["username"])),
+                    text=_pay_op_label(username),
                     callback_data=f"{CB_PAY_MARK}:{uid}:{page}",
                 )
             ]
@@ -238,6 +219,14 @@ async def _payout_ledger_text_and_markup(
         if page < max_page:
             nav.append(InlineKeyboardButton(text=">>", callback_data=f"{CB_PAY_LEDGER_PAGE}:{page + 1}"))
         kb_rows.append(nav)
+    kb_rows.append(
+        [
+            InlineKeyboardButton(
+                text="💳 Добавить USDT",
+                callback_data=f"{CB_PAY_TOPUP}:{page}",
+            )
+        ]
+    )
     kb_rows.append(
         [
             InlineKeyboardButton(text="История выплат", callback_data=f"{CB_PAY_HISTORY_PAGE}:0"),
@@ -434,130 +423,15 @@ def _reply_matches_menu_label(expected: str):
     return _check
 
 
-_QUOTA_LINE_RE = re.compile(r"^\s*(\d+)\s+(\d+)\s+([0-9]+(?:[.,][0-9]{1,2})?)\s*$")
-_QUOTA_DELETE_RE = re.compile(r"^\s*(\d+)\s*$")
-
-
-async def _format_requests_page(
-    session: AsyncSession,
-    *,
-    page: int,
-) -> tuple[str, int]:
-    categories = await CategoryService(session=session).get_active_categories()
-    categories = categories[:REQUESTS_MAX_CATEGORIES_DISPLAY]
-
-    today = datetime.now(timezone.utc).date()
-    quota_svc = SellerQuotaService(session=session)
-
-    quota_rows = await quota_svc.list_quotas_for_date(today)
-
-    total = len(categories)
-    max_page = max((total - 1) // PAGE_SIZE, 0)
-    page = min(max(page, 0), max_page)
-    start_idx = page * PAGE_SIZE
-    end_idx = start_idx + PAGE_SIZE
-    categories_page = categories[start_idx:end_idx]
-
-    header = [
-        "Ежедневные запросы (общие) по категориям",
-        f"Дата (UTC): {today}",
-        "Без привязки к продавцам",
-        f"Страница: {page + 1}/{max_page + 1}",
-    ]
-
-    lines: list[str] = header + ["", "Категории (id — название):"]
-    for c in categories_page:
-        lines.append(f"  {c.id} — {c.title}")
-
-    if not categories_page:
-        lines.append("")
-        lines.append("Активные категории не найдены.")
-    lines.append("")
-    lines.append("Заданные сегодня значения:")
-    if not quota_rows:
-        lines.append("  (пока пусто)")
-    else:
-        by_category: dict[int, tuple[int, Decimal, int]] = {}
-        for row in quota_rows:
-            cid = int(row.category_id)
-            if cid in by_category:
-                limit, price, cnt = by_category[cid]
-                by_category[cid] = (limit, price, cnt + 1)
-            else:
-                by_category[cid] = (int(row.max_uploads), Decimal(row.unit_price), 1)
-        for cid in sorted(by_category):
-            limit, price, cnt = by_category[cid]
-            lines.append(f"  category_id={cid} | лимит={limit} | цена={price} | продавцов={cnt}")
-
-    lines.extend(
-        [
-            "",
-            "Запрос задаётся строкой: category_id max_uploads unit_price_usdt",
-            "Удаление одного: кнопка 🗑 → строка category_id",
-            "Полная очистка: кнопка 🧹 (с подтверждением)",
-            "Сброс до заводских: кнопка ♻️ (полная очистка всех дат)",
-            "",
-            HINT_REQUESTS,
-        ]
-    )
-    return "\n".join(lines), total
-
-
-def _requests_pagination_keyboard(*, page: int, total: int) -> InlineKeyboardMarkup:
-    max_page = max((total - 1) // PAGE_SIZE, 0)
-    page = min(max(page, 0), max_page)
-
-    # "Разделы" клавиатуры: отдельно блок "Страницы" и отдельно блок "Поиск".
-    arrows: list[InlineKeyboardButton] = []
-    if page > 0:
-        arrows.append(InlineKeyboardButton(text="⬅️", callback_data=f"{CB_REQ}:{page - 1}"))
-    arrows.append(InlineKeyboardButton(text=f"{page + 1}/{max_page + 1}", callback_data=CB_NOOP))
-    if page < max_page:
-        arrows.append(InlineKeyboardButton(text="➡️", callback_data=f"{CB_REQ}:{page + 1}"))
-
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text="Страницы", callback_data=CB_NOOP)],
-            arrows,
-            [InlineKeyboardButton(text="🗑 Удалить", callback_data=CB_REQ_DELETE)],
-            [InlineKeyboardButton(text="🧹 Очистить список", callback_data=CB_REQ_CLEAR)],
-            [InlineKeyboardButton(text="♻️ Заводской сброс", callback_data=CB_REQ_FACTORY_RESET)],
-            [InlineKeyboardButton(text=REPLY_BTN_BACK, callback_data=CALLBACK_INLINE_BACK)],
-        ]
-    )
-
-
-async def open_requests_section(message: Message, state: FSMContext, session: AsyncSession) -> None:
-    """Раздел «Запросы»: ежедневные лимиты выгрузок для продавцов."""
-
-    if message.from_user is None:
-        return
-    if not await AdminService(session=session).is_admin(message.from_user.id):
-        await message.answer("Недостаточно прав.")
-        return
-    page = 0
-    text, total = await _format_requests_page(session, page=page)
-    keyboard = _requests_pagination_keyboard(page=page, total=total)
-    await state.set_state(AdminRequestsState.waiting_for_quota_line)
-    await message.answer(non_empty_plain(text), reply_markup=keyboard)
-
-
 _ADMIN_FSM_STATES = (
-    AdminRequestsState.waiting_for_quota_line,
-    AdminRequestsState.waiting_for_delete_line,
-    AdminCategoryState.waiting_for_add_title,
-    AdminCategoryState.waiting_for_add_price,
-    AdminCategoryState.waiting_for_add_total_limit,
-    AdminCategoryState.waiting_for_add_description,
-    AdminCategoryState.waiting_for_add_photo,
-    AdminCategoryState.waiting_for_pick_category,
-    AdminCategoryState.waiting_for_edit_value,
     AdminBroadcastState.waiting_for_text,
+    AdminSearchSimState.waiting_for_digits,
     AdminModerationForwardState.waiting_for_target,
     AdminModerationForwardState.waiting_for_confirm,
     AdminBatchPickState.waiting_for_submission_ids,
     AdminBatchPickState.waiting_for_action,
     AdminInReviewLookupState.waiting_for_query,
+    AdminPayoutState.waiting_for_topup_amount,
 )
 
 
@@ -574,83 +448,79 @@ async def on_admin_fsm_step_back(
     if not await AdminService(session=session).is_admin(message.from_user.id):
         return
 
-    tid = message.from_user.id
     st = await state.get_state()
-    if st == AdminRequestsState.waiting_for_quota_line.state:
-        await state.clear()
-        await message.answer("Ввод запроса отменён.", reply_markup=await _admin_reply_menu(session, tid))
-        return
-    if st == AdminRequestsState.waiting_for_delete_line.state:
-        await state.clear()
-        await message.answer("Удаление запроса отменено.", reply_markup=await _admin_reply_menu(session, tid))
-        return
-    if st in (
-        AdminCategoryState.waiting_for_add_title.state,
-        AdminCategoryState.waiting_for_add_price.state,
-        AdminCategoryState.waiting_for_add_total_limit.state,
-        AdminCategoryState.waiting_for_add_description.state,
-        AdminCategoryState.waiting_for_add_photo.state,
-        AdminCategoryState.waiting_for_pick_category.state,
-        AdminCategoryState.waiting_for_edit_value.state,
-    ):
-        await state.clear()
-        await message.answer("Операция с категориями отменена.", reply_markup=await _admin_reply_menu(session, tid))
-        return
     if st == AdminBroadcastState.waiting_for_text.state:
         await state.clear()
-        await message.answer("Рассылка отменена.", reply_markup=await _admin_reply_menu(session, tid))
+        await on_admin_panel(message, session)
+        return
+    if st == AdminSearchSimState.waiting_for_digits.state:
+        await state.clear()
+        await on_admin_panel(message, session)
         return
     if st == AdminModerationForwardState.waiting_for_target.state:
         await state.clear()
-        await message.answer("Пересылка отменена.", reply_markup=await _admin_reply_menu(session, tid))
+        pending_count = int(
+            (
+                await session.execute(
+                    select(func.count(Submission.id)).where(Submission.status == SubmissionStatus.PENDING)
+                )
+            ).scalar_one()
+        )
+        text = GDPXRenderer().render_queue_lobby(pending_count=pending_count)
+        await message.answer(text, reply_markup=_admin_queue_lobby_keyboard(), parse_mode="HTML")
         return
     if st == AdminModerationForwardState.waiting_for_confirm.state:
         await state.clear()
-        await message.answer("Пересылка отменена.", reply_markup=await _admin_reply_menu(session, tid))
+        pending_count = int(
+            (
+                await session.execute(
+                    select(func.count(Submission.id)).where(Submission.status == SubmissionStatus.PENDING)
+                )
+            ).scalar_one()
+        )
+        text = GDPXRenderer().render_queue_lobby(pending_count=pending_count)
+        await message.answer(text, reply_markup=_admin_queue_lobby_keyboard(), parse_mode="HTML")
         return
     if st == AdminBatchPickState.waiting_for_submission_ids.state:
         await state.clear()
-        await message.answer(
-            "Выбор части пачки отменён. Снова открой «Очередь».",
-            reply_markup=await _admin_reply_menu(session, tid),
+        pending_count = int(
+            (
+                await session.execute(
+                    select(func.count(Submission.id)).where(Submission.status == SubmissionStatus.PENDING)
+                )
+            ).scalar_one()
         )
+        text = GDPXRenderer().render_queue_lobby(pending_count=pending_count)
+        await message.answer(text, reply_markup=_admin_queue_lobby_keyboard(), parse_mode="HTML")
         return
     if st == AdminBatchPickState.waiting_for_action.state:
         await state.clear()
-        await message.answer(
-            "Действие для выбранной пачки отменено. Снова открой «Очередь».",
-            reply_markup=await _admin_reply_menu(session, tid),
+        pending_count = int(
+            (
+                await session.execute(
+                    select(func.count(Submission.id)).where(Submission.status == SubmissionStatus.PENDING)
+                )
+            ).scalar_one()
         )
+        text = GDPXRenderer().render_queue_lobby(pending_count=pending_count)
+        await message.answer(text, reply_markup=_admin_queue_lobby_keyboard(), parse_mode="HTML")
         return
     if st == AdminInReviewLookupState.waiting_for_query.state:
         await state.clear()
-        await message.answer("Поиск в «В работе» отменён.", reply_markup=await _admin_reply_menu(session, tid))
+        await on_in_work_hub(message, state, session)
+        return
+    if st == AdminPayoutState.waiting_for_topup_amount.state:
+        await state.clear()
+        await on_daily_report(message, state, session)
         return
 
 
-@router.message(F.text.func(_reply_matches_menu_label("Статистика")))
-async def on_admin_stats_menu(message: Message, state: FSMContext, session: AsyncSession) -> None:
-    """Сводки и отчёты."""
-
-    if message.from_user is None:
-        return
-    if not await AdminService(session=session).can_access_payout_finance(message.from_user.id):
-        raise SkipHandler()
-
-    panel_id = (await state.get_data()).get(_ADMIN_LAST_PANEL_MSG_KEY)
-    await state.clear()
-    if panel_id is not None:
-        await state.update_data(**{_ADMIN_LAST_PANEL_MSG_KEY: panel_id})
-    await send_stats_hub(message, session, state)
-
-
+@router.callback_query(F.data == CB_NOOP)
 @router.callback_query(F.data == CB_NOOP)
 async def on_noop(callback: CallbackQuery) -> None:
     await callback.answer()
 
 
-@router.message(F.text.func(_reply_matches_menu_label("🏃 В работе")))
-@router.message(F.text.func(_reply_matches_menu_label("В работе")))
 async def on_in_work_hub(message: Message, state: FSMContext, session: AsyncSession) -> None:
     """Хаб «В работе»: компактная статистика и поиск по номеру."""
 
@@ -670,23 +540,46 @@ async def on_in_work_hub(message: Message, state: FSMContext, session: AsyncSess
     await state.clear()
     total = len(mine)
     page = 0
+    
+    # Проверяем, chief_admin ли это
+    is_chief = admin_user.role == "chief_admin"
+
     if not mine:
+        if is_chief:
+            empty_msg = "🏃 В работе\n\nВсего в системе 0 заявок в работе."
+        else:
+            empty_msg = "🏃 В работе\n\nУ вас 0 заявок в работе."
         sent = await message.answer(
-            "🏃 В работе\n\nУ вас 0 заявок в работе.",
+            empty_msg,
             reply_markup=_in_work_hub_keyboard(items=[], page=0, total=0),
         )
         await _admin_store_panel_message(state, sent)
         return
 
     chunk = mine[:INWORK_PAGE_SIZE]
-    lines = ["🏃 ВАШИ ЗАЯВКИ В РАБОТЕ:", "", "📝 ВАШИ АКТИВНЫЕ ЗАЯВКИ:"]
+    if is_chief:
+        lines = ["🏃 ВСЕ ЗАЯВКИ В РАБОТЕ:", "", "📝 АКТИВНЫЕ ЗАЯВКИ (все администраторы):"]
+    else:
+        lines = ["🏃 ВАШИ ЗАЯВКИ В РАБОТЕ:", "", "📝 ВАШИ АКТИВНЫЕ ЗАЯВКИ:"]
+
     base = page * INWORK_PAGE_SIZE
     for idx, item in enumerate(chunk, start=base + 1):
         seller_label = (
             f"@{item.seller.username}" if item.seller is not None and item.seller.username else f"id: {item.user_id}"
         )
         phone = (item.description_text or "").strip() or "—"
-        lines.append(f"{idx}. 📱 <code>{escape(phone)}</code> | Продавец: {escape(seller_label)}")
+
+        if is_chief and item.locked_by_admin:
+            # Show which admin is working on this card
+            admin_name = item.locked_by_admin.first_name or f"Admin {item.locked_by_admin.id}"
+            line = (
+                f"{idx}. 📱 <code>{escape(phone)}</code> | "
+                f"Продавец: {escape(seller_label)} | Админ: {escape(admin_name)}"
+            )
+            lines.append(line)
+        else:
+            lines.append(f"{idx}. 📱 <code>{escape(phone)}</code> | Продавец: {escape(seller_label)}")
+
     lines.append("")
     lines.append("Нажми на номер ниже, чтобы открыть карточку:")
 
@@ -710,15 +603,20 @@ async def on_in_work_page(callback: CallbackQuery, session: AsyncSession, state:
         await callback.answer("Пользователь не найден в БД", show_alert=True)
         return
 
+    is_chief = admin_user.role == "chief_admin"
     page = max(int(callback.data.rsplit(":", 1)[-1]), 0)
     mine = await SubmissionService(session=session).get_admin_active_submissions(admin_id=admin_user.id)
     total = len(mine)
     if not mine:
         await callback.answer()
         if callback.message is not None:
+            if is_chief:
+                empty_msg = "🏃 В работе\n\nВсего в системе 0 заявок в работе."
+            else:
+                empty_msg = "🏃 В работе\n\nУ вас 0 заявок в работе."
             await edit_message_text_safe(
                 callback.message,
-                "🏃 В работе\n\nУ вас 0 заявок в работе.",
+                empty_msg,
                 reply_markup=_in_work_hub_keyboard(items=[], page=0, total=0),
             )
         return
@@ -727,13 +625,29 @@ async def on_in_work_page(callback: CallbackQuery, session: AsyncSession, state:
     page = min(page, max_page)
     chunk = mine[page * INWORK_PAGE_SIZE : page * INWORK_PAGE_SIZE + INWORK_PAGE_SIZE]
     base = page * INWORK_PAGE_SIZE
-    lines = ["🏃 ВАШИ ЗАЯВКИ В РАБОТЕ:", "", "📝 ВАШИ АКТИВНЫЕ ЗАЯВКИ:"]
+
+    if is_chief:
+        lines = ["🏃 ВСЕ ЗАЯВКИ В РАБОТЕ:", "", "📝 АКТИВНЫЕ ЗАЯВКИ (все администраторы):"]
+    else:
+        lines = ["🏃 ВАШИ ЗАЯВКИ В РАБОТЕ:", "", "📝 ВАШИ АКТИВНЫЕ ЗАЯВКИ:"]
+
     for idx, item in enumerate(chunk, start=base + 1):
         seller_label = (
             f"@{item.seller.username}" if item.seller is not None and item.seller.username else f"id: {item.user_id}"
         )
         phone = (item.description_text or "").strip() or "—"
-        lines.append(f"{idx}. 📱 <code>{escape(phone)}</code> | Продавец: {escape(seller_label)}")
+
+        if is_chief and item.locked_by_admin:
+            # Show which admin is working on this card
+            admin_name = item.locked_by_admin.first_name or f"Admin {item.locked_by_admin.id}"
+            line = (
+                f"{idx}. 📱 <code>{escape(phone)}</code> | "
+                f"Продавец: {escape(seller_label)} | Админ: {escape(admin_name)}"
+            )
+            lines.append(line)
+        else:
+            lines.append(f"{idx}. 📱 <code>{escape(phone)}</code> | Продавец: {escape(seller_label)}")
+
     lines.append("")
     lines.append("Нажми на номер ниже, чтобы открыть карточку:")
     await callback.answer()
@@ -851,142 +765,6 @@ async def on_in_work_search_query(message: Message, state: FSMContext, session: 
         )
 
 
-@router.callback_query(F.data.startswith(f"{CB_REQ}:"))
-async def on_requests_ui(
-    callback: CallbackQuery,
-    state: FSMContext,
-    session: AsyncSession,
-) -> None:
-    """UI для раздела «Запросы»: пагинация и действия."""
-
-    if callback.from_user is None or callback.data is None:
-        return
-    if not await AdminService(session=session).is_admin(callback.from_user.id):
-        await callback.answer("Недостаточно прав.", show_alert=True)
-        return
-    await callback.answer()
-
-    if callback.message is None:
-        return
-
-    if callback.data == CB_REQ_DELETE:
-        await callback.message.edit_reply_markup(reply_markup=None)
-        await state.set_state(AdminRequestsState.waiting_for_delete_line)
-        await callback.message.answer(
-            "Удаление запроса: отправь <code>category_id</code>.\nПример: <code>12</code>",
-            parse_mode="HTML",
-        )
-        return
-    if callback.data == CB_REQ_CLEAR:
-        await callback.message.answer(
-            "Очистить весь список запросов за сегодня (UTC)?",
-            reply_markup=InlineKeyboardMarkup(
-                inline_keyboard=[
-                    [
-                        InlineKeyboardButton(text="✅ Да, очистить", callback_data=CB_REQ_CLEAR_CONFIRM),
-                        InlineKeyboardButton(text="❌ Отмена", callback_data=CB_REQ_CLEAR_CANCEL),
-                    ]
-                ]
-            ),
-        )
-        return
-    if callback.data == CB_REQ_CLEAR_CANCEL:
-        await callback.answer("Очистка отменена")
-        return
-    if callback.data == CB_REQ_CLEAR_CONFIRM:
-        today = datetime.now(timezone.utc).date()
-        removed = await SellerQuotaService(session=session).clear_quotas_for_date(today)
-        await callback.message.answer(f"Очищено записей: {removed}.")
-        text, total = await _format_requests_page(session, page=0)
-        keyboard = _requests_pagination_keyboard(page=0, total=total)
-        await callback.message.answer(non_empty_plain(text), reply_markup=keyboard)
-        await state.set_state(AdminRequestsState.waiting_for_quota_line)
-        return
-    if callback.data == CB_REQ_FACTORY_RESET:
-        await callback.message.answer(
-            "Сбросить <code>Запросы</code> до заводских настроек?\nЭто удалит все лимиты/цены по всем датам.",
-            parse_mode="HTML",
-            reply_markup=InlineKeyboardMarkup(
-                inline_keyboard=[
-                    [
-                        InlineKeyboardButton(
-                            text="⚠️ Да, полный сброс",
-                            callback_data=CB_REQ_FACTORY_CONFIRM,
-                        ),
-                        InlineKeyboardButton(text="❌ Отмена", callback_data=CB_REQ_FACTORY_CANCEL),
-                    ]
-                ]
-            ),
-        )
-        return
-    if callback.data == CB_REQ_FACTORY_CANCEL:
-        await callback.answer("Сброс отменён")
-        return
-    if callback.data == CB_REQ_FACTORY_CONFIRM:
-        removed_total = await SellerQuotaService(session=session).clear_all_quotas()
-        await callback.message.answer(f"Заводской сброс выполнен. Удалено записей: {removed_total}.")
-        text, total = await _format_requests_page(session, page=0)
-        keyboard = _requests_pagination_keyboard(page=0, total=total)
-        await callback.message.answer(non_empty_plain(text), reply_markup=keyboard)
-        await state.set_state(AdminRequestsState.waiting_for_quota_line)
-        return
-
-    parts = callback.data.split(":", maxsplit=1)
-    if len(parts) != 2:
-        return
-    _, page_s = parts
-    try:
-        page = int(page_s)
-    except ValueError:
-        page = 0
-
-    text, total = await _format_requests_page(session, page=page)
-    keyboard = _requests_pagination_keyboard(page=page, total=total)
-    await edit_message_text_safe(callback.message, text, reply_markup=keyboard)
-
-
-@router.message(AdminRequestsState.waiting_for_delete_line, F.text)
-async def on_requests_delete_line(
-    message: Message,
-    state: FSMContext,
-    session: AsyncSession,
-) -> None:
-    if message.from_user is None or message.text is None:
-        return
-    if not await AdminService(session=session).is_admin(message.from_user.id):
-        await state.clear()
-        return
-    raw = message.text.strip()
-    if raw.casefold() == "отмена" or raw == REPLY_BTN_BACK:
-        await state.clear()
-        await message.answer("Удаление отменено.", reply_markup=await _admin_reply_menu(session, message.from_user.id))
-        return
-    m = _QUOTA_DELETE_RE.match(raw)
-    if not m:
-        await message.answer("Нужна строка: category_id. Пример: 12")
-        return
-    category_id = int(m.group(1))
-    category = await CategoryService(session=session).get_by_id(category_id)
-    if category is None:
-        await message.answer("Категория с таким id не найдена.")
-        return
-    today = datetime.now(timezone.utc).date()
-    removed = await SellerQuotaService(session=session).clear_quotas_for_category_on_date(
-        category_id,
-        today,
-    )
-    if not removed:
-        await message.answer("Запрос на сегодня не найден для этой категории.")
-        return
-    await state.set_state(AdminRequestsState.waiting_for_quota_line)
-    text, total = await _format_requests_page(session, page=0)
-    keyboard = _requests_pagination_keyboard(page=0, total=total)
-    await message.answer(
-        f"Удалено записей по категории {category_id} («{category.title}») за {today} UTC: {removed}.",
-    )
-    await message.answer(non_empty_plain(text), reply_markup=keyboard)
-
-
 @router.message(F.text.func(is_admin_main_menu_text), StateFilter(*_ADMIN_FSM_STATES))
 async def on_admin_menu_interrupt_fsm(
     message: Message,
@@ -1019,19 +797,40 @@ async def on_admin_menu_interrupt_fsm(
         await on_in_work_hub(message, state, session)
     elif label == "Выплаты":
         await on_daily_report(message, state, session)
-    elif label == "Запросы":
-        await open_requests_section(message, state, session)
     elif label == "Рассылка":
         await on_broadcast_start(message, state, session)
     elif label == "Архив (7days)":
         await on_archive_help(message, session)
-    elif label == "Статистика":
-        await on_admin_stats_menu(message, state, session)
+
+
+@router.message(Command("admin"), StateFilter(*_ADMIN_FSM_STATES))
+async def on_admin_command_interrupt_fsm(
+    message: Message,
+    state: FSMContext,
+    session: AsyncSession,
+) -> None:
+    """Сбрасывает админский FSM и открывает inline-дашборд по /admin."""
+
+    if message.from_user is None:
+        return
+    if not await AdminService(session=session).is_admin(message.from_user.id):
+        return
+
+    data = await state.get_data()
+    old_panel = data.get(_ADMIN_LAST_PANEL_MSG_KEY)
+    await state.clear()
+    if old_panel is not None and message.chat is not None:
+        try:
+            await message.bot.delete_message(chat_id=message.chat.id, message_id=int(old_panel))
+        except TelegramBadRequest:
+            pass
+
+    await on_admin_panel(message, session)
 
 
 @router.message(F.text == BUTTON_ENTER_ADMIN_PANEL)
 async def on_enter_admin_panel(message: Message, session: AsyncSession) -> None:
-    """Открывает админ-панель (reply-меню админа)."""
+    """Открывает инлайн-панель админа (убирает reply-клавиатуру)."""
 
     if message.from_user is None:
         return
@@ -1039,7 +838,16 @@ async def on_enter_admin_panel(message: Message, session: AsyncSession) -> None:
     if not await admin_service.is_admin(message.from_user.id):
         await message.answer("Недостаточно прав.")
         return
-    await message.answer(_admin_panel_intro_text(), reply_markup=await _admin_reply_menu(session, message.from_user.id))
+    # Убираем reply-клавиатуру с экрана пользователя
+    await message.answer("⁠", reply_markup=ReplyKeyboardRemove())
+    stats = await _fetch_admin_board_stats(session)
+    stats["username"] = message.from_user.username or str(message.from_user.id)
+    text = GDPXRenderer().render_dashboard(stats)
+    await message.answer(
+        text,
+        reply_markup=await build_admin_main_inline_keyboard(session, message.from_user.id),
+        parse_mode="HTML",
+    )
 
 
 @router.message(F.text == BUTTON_EXIT_ADMIN_PANEL)
@@ -1106,7 +914,11 @@ async def on_back_to_admin_menu(callback: CallbackQuery, state: FSMContext, sess
                 parse_mode="HTML",
             )
         except TelegramBadRequest:
-            pass
+            await callback.message.answer(
+                text=text,
+                reply_markup=await build_admin_main_inline_keyboard(session, callback.from_user.id),
+                parse_mode="HTML",
+            )
 
 
 @router.callback_query(F.data == CB_ADMIN_QUEUE)
@@ -1143,9 +955,40 @@ async def on_admin_inline_inwork(callback: CallbackQuery, session: AsyncSession,
     if not await AdminService(session=session).is_admin(callback.from_user.id):
         await callback.answer("Недостаточно прав", show_alert=True)
         return
+
+    admin_user = await UserService(session=session).get_by_telegram_id(callback.from_user.id)
+    if admin_user is None:
+        await callback.answer("Пользователь не найден в БД", show_alert=True)
+        return
+
+    mine = await SubmissionService(session=session).get_admin_active_submissions(admin_id=admin_user.id)
+    await state.clear()
+    total = len(mine)
+    page = 0
+
+    if not mine:
+        text = "🏃 В работе\n\nУ вас 0 заявок в работе."
+        markup = _in_work_hub_keyboard(items=[], page=0, total=0)
+    else:
+        chunk = mine[:INWORK_PAGE_SIZE]
+        lines = ["🏃 ВАШИ ЗАЯВКИ В РАБОТЕ:", "", "📝 ВАШИ АКТИВНЫЕ ЗАЯВКИ:"]
+        base = page * INWORK_PAGE_SIZE
+        for idx, item in enumerate(chunk, start=base + 1):
+            seller_label = (
+                f"@{item.seller.username}"
+                if item.seller is not None and item.seller.username
+                else f"id: {item.user_id}"
+            )
+            phone = (item.description_text or "").strip() or "—"
+            lines.append(f"{idx}. 📱 <code>{escape(phone)}</code> | Продавец: {escape(seller_label)}")
+        lines.append("")
+        lines.append("Нажми на номер ниже, чтобы открыть карточку:")
+        text = "\n".join(lines)
+        markup = _in_work_hub_keyboard(items=chunk, page=page, total=total)
+
     await callback.answer()
     if callback.message is not None:
-        await on_in_work_hub(callback.message, state, session)
+        await edit_message_text_safe(callback.message, text, reply_markup=markup, parse_mode="HTML")
 
 
 @router.callback_query(F.data == CB_ADMIN_PAYOUTS)
@@ -1157,19 +1000,57 @@ async def on_admin_inline_payouts(callback: CallbackQuery, session: AsyncSession
         return
     await callback.answer()
     if callback.message is not None:
-        await on_daily_report(callback.message, state, session)
+        await on_daily_report(callback.message, state, session, _caller_id=callback.from_user.id)
 
 
-@router.callback_query(F.data == CB_ADMIN_STATS)
-async def on_admin_inline_stats(callback: CallbackQuery, session: AsyncSession, state: FSMContext) -> None:
+@router.callback_query(F.data == CB_ADMIN_BROADCAST)
+async def on_admin_inline_broadcast(callback: CallbackQuery, state: FSMContext, session: AsyncSession) -> None:
+    """Запускает рассылку из инлайн-дашборда."""
+
     if callback.from_user is None:
         return
-    if not await AdminService(session=session).can_access_payout_finance(callback.from_user.id):
+    if not await AdminService(session=session).is_admin(callback.from_user.id):
+        await callback.answer("Недостаточно прав", show_alert=True)
+        return
+    await state.set_state(AdminBroadcastState.waiting_for_text)
+    await callback.answer()
+    if callback.message is not None:
+        await edit_message_text_safe(
+            callback.message,
+            f"📡 <b>РАССЫЛКА</b>\n\nОтправь текст рассылки одним сообщением.\n\n{HINT_BROADCAST}",
+            reply_markup=InlineKeyboardMarkup(
+                inline_keyboard=[
+                    [InlineKeyboardButton(text=REPLY_BTN_BACK, callback_data=CALLBACK_INLINE_BACK)]
+                ]
+            ),
+            parse_mode="HTML",
+        )
+
+
+@router.callback_query(F.data == CB_ADMIN_ARCHIVE)
+async def on_admin_inline_archive(callback: CallbackQuery, session: AsyncSession) -> None:
+    """Показывает инструкции по поиску в архиве из инлайн-дашборда."""
+
+    if callback.from_user is None:
+        return
+    if not await AdminService(session=session).can_manage_payouts(callback.from_user.id):
         await callback.answer("Недостаточно прав", show_alert=True)
         return
     await callback.answer()
     if callback.message is not None:
-        await on_admin_stats_menu(callback.message, state, session)
+        await edit_message_text_safe(
+            callback.message,
+            f"🗄 <b>АРХИВ (7 ДНЕЙ)</b>\n\n"
+            f"Поиск в архиве:\n"
+            f"/archive 1234  — последние 4 цифры\n"
+            f"/archive +79999999999  — полный номер\n\n{HINT_ARCHIVE}",
+            reply_markup=InlineKeyboardMarkup(
+                inline_keyboard=[
+                    [InlineKeyboardButton(text=REPLY_BTN_BACK, callback_data=CALLBACK_INLINE_BACK)]
+                ]
+            ),
+            parse_mode="HTML",
+        )
 
 
 @router.callback_query(F.data == CB_ADMIN_QUEUE_START)
@@ -1185,529 +1066,9 @@ async def on_admin_queue_start(callback: CallbackQuery, session: AsyncSession) -
             await callback.message.delete()
         except TelegramBadRequest:
             pass
-        await on_moderation_queue(callback.message, session)
+        await on_moderation_queue(callback.message, session, _caller_id=callback.from_user.id)
 
 
-def _admin_categories_menu_keyboard() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text="➕ Добавить", callback_data=f"{CB_CAT}:add")],
-            [InlineKeyboardButton(text="⛔ Отключить", callback_data=f"{CB_CAT}:disable")],
-            [InlineKeyboardButton(text="✅ Включить", callback_data=f"{CB_CAT}:enable")],
-            [InlineKeyboardButton(text="🧮 Лимит категории", callback_data=f"{CB_CAT}:total")],
-            [InlineKeyboardButton(text="💰 Цена (USDT)", callback_data=f"{CB_CAT}:price")],
-            [InlineKeyboardButton(text="📝 Описание", callback_data=f"{CB_CAT}:desc")],
-            [InlineKeyboardButton(text=REPLY_BTN_BACK, callback_data=CALLBACK_INLINE_BACK)],
-        ]
-    )
-
-
-def _admin_categories_picker_keyboard(*, categories: list, page: int) -> InlineKeyboardMarkup:
-    """Инлайн-подбор категории без ввода category_id вручную."""
-
-    total = len(categories)
-    max_page = max((total - 1) // CATEGORIES_PICK_PAGE_SIZE, 0)
-    page = min(max(page, 0), max_page)
-    start = page * CATEGORIES_PICK_PAGE_SIZE
-    end = start + CATEGORIES_PICK_PAGE_SIZE
-    cats_page = categories[start:end]
-
-    rows: list[list[InlineKeyboardButton]] = []
-    for c in cats_page:
-        state = "ACTIVE" if getattr(c, "is_active", False) else "DISABLED"
-        total_limit = getattr(c, "total_upload_limit", None)
-        total_limit_text = "∞" if total_limit is None else str(total_limit)
-        rows.append(
-            [
-                InlineKeyboardButton(
-                    text=f"{c.id} — {c.title} | лимит: {total_limit_text} ({state})",
-                    callback_data=f"{CB_CAT_PICK_CATEGORY}:{c.id}",
-                )
-            ]
-        )
-
-    # навигация по страницам
-    nav: list[InlineKeyboardButton] = []
-    if page > 0:
-        nav.append(InlineKeyboardButton(text="⬅️", callback_data=f"{CB_CAT_PICK_CATEGORY_PAGE}:{page - 1}"))
-    nav.append(InlineKeyboardButton(text=f"{page + 1}/{max_page + 1}", callback_data=CB_NOOP))
-    if page < max_page:
-        nav.append(InlineKeyboardButton(text="➡️", callback_data=f"{CB_CAT_PICK_CATEGORY_PAGE}:{page + 1}"))
-    rows.append(nav)
-
-    rows.append([InlineKeyboardButton(text=REPLY_BTN_BACK, callback_data=CALLBACK_INLINE_BACK)])
-    return InlineKeyboardMarkup(inline_keyboard=rows)
-
-
-async def _render_admin_categories(session: AsyncSession) -> str:
-    categories = await CategoryService(session=session).get_all_categories()
-    if not categories:
-        return "Категорий нет."
-
-    lines: list[str] = ["Категории (id — название):"]
-    for c in categories[:80]:
-        state = "ACTIVE" if c.is_active else "DISABLED"
-        total = "∞" if c.total_upload_limit is None else str(c.total_upload_limit)
-        lines.append(f"{c.id}: {c.title} | {state} | цена={c.payout_rate} USDT | total={total}")
-    if len(categories) > 80:
-        lines.append(f"… и ещё {len(categories) - 80} категорий")
-    lines.append("")
-    lines.append("Управляй категориями кнопками ниже.")
-    return "\n".join(lines)
-
-
-def _adm_oper_legacy_text_aliases(text: str | None) -> bool:
-    """Старые варианты вызова: /admin categories, /admincategories (без основной команды)."""
-
-    if not text:
-        return False
-    first = text.strip().split(maxsplit=1)[0]
-    if "@" in first:
-        first = first.split("@", 1)[0]
-    return first.casefold() in ("/admin categories", "/admincategories")
-
-
-@router.message(
-    or_f(
-        Command("adm_oper", "admin_categories"),
-        F.text.func(_adm_oper_legacy_text_aliases),
-    ),
-)
-async def on_admin_categories_menu(message: Message, state: FSMContext, session: AsyncSession) -> None:
-    """Меню управления категориями (подтипами операторов)."""
-
-    if message.from_user is None:
-        return
-    if not await AdminService(session=session).is_admin(message.from_user.id):
-        await message.answer("Недостаточно прав.")
-        return
-
-    await state.clear()
-    text = await _render_admin_categories(session)
-    text = f"{text}\n\n{HINT_ADMIN_CATEGORIES}"
-    await message.answer(non_empty_plain(text), reply_markup=_admin_categories_menu_keyboard())
-
-
-@router.callback_query(F.data.startswith(f"{CB_CAT}:"))
-async def on_admin_categories_actions(
-    callback: CallbackQuery,
-    state: FSMContext,
-    session: AsyncSession,
-) -> None:
-    """Обработчик кнопок управления категориями."""
-
-    if callback.from_user is None or callback.data is None:
-        return
-    if not await AdminService(session=session).is_admin(callback.from_user.id):
-        await callback.answer("Недостаточно прав.", show_alert=True)
-        return
-    if callback.message is None:
-        await callback.answer(f"Сообщение недоступно. Отправь {COMMAND_ADM_OPER} снова.", show_alert=True)
-        return
-    await callback.answer()
-
-    action = callback.data.split(":", 1)[1]
-    if action == "rate":
-        action = "price"
-
-    if action == "add":
-        await state.clear()
-        await state.set_state(AdminCategoryState.waiting_for_add_title)
-        await edit_message_text_or_caption_safe(
-            callback.message,
-            "Добавление категории.\nПришли название категории.\nПример: МТС(Салон)\nОтмена/«Назад» — кнопкой ⬅️ Назад.",
-        )
-        return
-
-    if action in ("disable", "enable", "total", "price", "desc"):
-        await state.clear()
-        await state.update_data(edit_action=action)
-        await state.update_data(pick_page=0)
-        await state.set_state(AdminCategoryState.waiting_for_pick_category)
-
-        action_title = {
-            "disable": "Отключить",
-            "enable": "Включить",
-            "total": "Изменить лимит категории",
-            "price": "Изменить цену",
-            "desc": "Изменить описание",
-        }.get(action, "Действие с категорией")
-
-        categories = await CategoryService(session=session).get_all_categories()
-        keyboard = _admin_categories_picker_keyboard(categories=categories, page=0)
-        await edit_message_text_or_caption_safe(
-            callback.message,
-            f"{action_title}.\nВыбери категорию кнопкой.",
-            reply_markup=keyboard,
-        )
-        return
-
-    if action.startswith("pick_page:"):
-        _, page_raw = action.split(":", 1)
-        try:
-            page = int(page_raw)
-        except ValueError:
-            page = 0
-        await state.update_data(pick_page=page)
-        categories = await CategoryService(session=session).get_all_categories()
-        keyboard = _admin_categories_picker_keyboard(categories=categories, page=page)
-        await callback.message.edit_reply_markup(reply_markup=keyboard)
-        return
-
-    if action.startswith("pick:"):
-        _, cat_id_raw = action.split(":", 1)
-        try:
-            category_id = int(cat_id_raw)
-        except ValueError:
-            await callback.message.answer("Некорректный category_id")
-            return
-
-        data = await state.get_data()
-        edit_action = data.get("edit_action")
-        if not isinstance(edit_action, str):
-            await state.clear()
-            await callback.message.answer(f"Ошибка состояния. Начни заново через {COMMAND_ADM_OPER}.")
-            return
-        if edit_action == "rate":
-            edit_action = "price"
-            await state.update_data(edit_action="price")
-
-        if edit_action == "disable":
-            await CategoryService(session=session).set_active(category_id=category_id, is_active=False)
-            await state.clear()
-            text = await _render_admin_categories(session)
-            await edit_message_text_or_caption_safe(
-                callback.message,
-                f"Категория отключена.\n\n{text}",
-                reply_markup=_admin_categories_menu_keyboard(),
-            )
-            return
-
-        if edit_action == "enable":
-            await CategoryService(session=session).set_active(category_id=category_id, is_active=True)
-            await state.clear()
-            text = await _render_admin_categories(session)
-            await edit_message_text_or_caption_safe(
-                callback.message,
-                f"Категория включена.\n\n{text}",
-                reply_markup=_admin_categories_menu_keyboard(),
-            )
-            return
-
-        if edit_action not in {"total", "price", "desc"}:
-            await state.clear()
-            await callback.message.answer(f"Неизвестное действие. Начни заново через {COMMAND_ADM_OPER}.")
-            return
-
-        await state.update_data(edit_category_id=category_id)
-        await state.set_state(AdminCategoryState.waiting_for_edit_value)
-
-        if edit_action == "total":
-            await edit_message_text_or_caption_safe(
-                callback.message,
-                "Введите <code>total_upload_limit</code> (число) или <code>-</code> для без лимита.",
-                reply_markup=None,
-                parse_mode="HTML",
-            )
-        elif edit_action == "price":
-            await edit_message_text_or_caption_safe(
-                callback.message,
-                "Введите цену в USDT (число, например <code>100.00</code>).",
-                reply_markup=None,
-                parse_mode="HTML",
-            )
-        else:
-            await edit_message_text_or_caption_safe(
-                callback.message,
-                "Введите новое описание. «-» — без описания.",
-                reply_markup=None,
-            )
-        return
-
-    logger.warning("admin_categories: неизвестное действие action=%r data=%r", action, callback.data)
-    await callback.message.answer(
-        f"Кнопка устарела или не распознана. Отправь {COMMAND_ADM_OPER} снова.",
-        reply_markup=_admin_categories_menu_keyboard(),
-    )
-
-
-def _parse_optional_int(raw: str) -> int | None:
-    """Парсит целое число, а также 'none'/'-' -> None.
-
-    Возвращает:
-    - int,
-    - None (значение 'без ограничений'),
-    - или None как признак ошибки не используется (ошибка будет исключением).
-    """
-
-    v = raw.strip().casefold()
-    if v in {"-", "none", "null", "без", "безлимит"}:
-        return None
-    return int(v)
-
-
-def _parse_decimal(raw: str) -> Decimal:
-    """Парсит Decimal, поддерживая запятую и Unicode-цифры (NFKC)."""
-
-    value = raw.strip().replace(",", ".")
-    value = unicodedata.normalize("NFKC", value)
-    return Decimal(value)
-
-
-def _parse_decimal_price_input(raw: str) -> Decimal:
-    """Цена в USDT; допускает префикс «цена»/«стоимость» или устаревший payout_rate."""
-
-    s = raw.strip()
-    try:
-        return _parse_decimal(s)
-    except InvalidOperation:
-        pass
-    stripped = re.sub(
-        r"^(?:payout[_\s-]?rate|цена|стоимость)\s*[:=]?\s*",
-        "",
-        s,
-        count=1,
-        flags=re.IGNORECASE,
-    )
-    if stripped == s:
-        raise InvalidOperation
-    return _parse_decimal(stripped.strip())
-
-
-@router.message(AdminCategoryState.waiting_for_add_title, F.text)
-async def on_category_add_title(message: Message, state: FSMContext, session: AsyncSession) -> None:
-    if message.from_user is None or message.text is None:
-        return
-
-    raw = message.text.strip()
-    if raw.casefold() == "отмена" or raw == REPLY_BTN_BACK:
-        await state.clear()
-        kb = await _admin_reply_menu(session, message.from_user.id)
-        await message.answer("Добавление категории отменено.", reply_markup=kb)
-        return
-    if len(raw) < 2:
-        await message.answer("Слишком короткое название. Попробуй ещё раз.")
-        return
-
-    await state.update_data(add_title=raw)
-    await state.set_state(AdminCategoryState.waiting_for_add_price)
-    await message.answer(
-        "Укажи <b>цену</b> за единицу в <b>USDT</b> (число, например <code>1.50</code>).",
-        parse_mode="HTML",
-    )
-
-
-@router.message(AdminCategoryState.waiting_for_add_price, F.text)
-async def on_category_add_price(message: Message, state: FSMContext, session: AsyncSession) -> None:
-    if message.from_user is None or message.text is None:
-        return
-
-    raw = message.text.strip()
-    if raw.casefold() == "отмена" or raw == REPLY_BTN_BACK:
-        await state.clear()
-        kb = await _admin_reply_menu(session, message.from_user.id)
-        await message.answer("Добавление категории отменено.", reply_markup=kb)
-        return
-
-    try:
-        price = _parse_decimal_price_input(raw)
-    except InvalidOperation:
-        await message.answer("Неверный формат. Пришли число в USDT, например 100.00 (можно с префиксом «цена»).")
-        return
-
-    if price <= 0:
-        await message.answer("Цена должна быть больше 0.")
-        return
-
-    await state.update_data(add_price=price)
-    await state.set_state(AdminCategoryState.waiting_for_add_total_limit)
-    await message.answer(
-        "Введите <code>total_upload_limit</code> (целое число) или <code>-</code> для без лимита.",
-        parse_mode="HTML",
-    )
-
-
-@router.message(AdminCategoryState.waiting_for_add_total_limit, F.text)
-async def on_category_add_total_limit(message: Message, state: FSMContext, session: AsyncSession) -> None:
-    if message.from_user is None or message.text is None:
-        return
-
-    raw = message.text.strip()
-    if raw.casefold() == "отмена" or raw == REPLY_BTN_BACK:
-        await state.clear()
-        kb = await _admin_reply_menu(session, message.from_user.id)
-        await message.answer("Добавление категории отменено.", reply_markup=kb)
-        return
-
-    try:
-        total_limit = _parse_optional_int(raw)
-    except ValueError:
-        await message.answer("Неверный формат total_upload_limit. Пример: 50 или '-'.")
-        return
-
-    await state.update_data(add_total_limit=total_limit)
-    await state.set_state(AdminCategoryState.waiting_for_add_description)
-    await message.answer("Введите описание категории (или '-' чтобы без описания).")
-
-
-@router.message(AdminCategoryState.waiting_for_add_description, F.text)
-async def on_category_add_description(message: Message, state: FSMContext, session: AsyncSession) -> None:
-    if message.from_user is None or message.text is None:
-        return
-
-    raw = message.text.strip()
-    if raw.casefold() == "отмена" or raw == REPLY_BTN_BACK:
-        await state.clear()
-        kb = await _admin_reply_menu(session, message.from_user.id)
-        await message.answer("Добавление категории отменено.", reply_markup=kb)
-        return
-
-    description: str | None = None if raw.strip() == "-" else raw
-    await state.update_data(add_description=description)
-    await state.set_state(AdminCategoryState.waiting_for_add_photo)
-    await message.answer("Отправь фото для категории или напиши 'пропустить'.", reply_markup=None)
-
-
-@router.message(AdminCategoryState.waiting_for_add_photo, F.photo)
-async def on_category_add_photo_photo(message: Message, state: FSMContext, session: AsyncSession) -> None:
-    if message.from_user is None or not message.photo:
-        return
-
-    data = await state.get_data()
-    photo_file_id = message.photo[-1].file_id
-
-    add_title = data.get("add_title")
-    add_price = data.get("add_price")
-    add_total_limit = data.get("add_total_limit")
-    add_description = data.get("add_description")
-    if add_title is None or add_price is None:
-        await message.answer("Ошибка состояния. Начни добавление заново.")
-        await state.clear()
-        return
-
-    await AdminService(session=session).create_category(
-        title=str(add_title),
-        payout_rate=add_price,
-        description=add_description if add_description else None,
-        photo_file_id=photo_file_id,
-        total_upload_limit=add_total_limit,
-    )
-    await state.clear()
-    await message.answer(
-        "Категория добавлена.",
-        reply_markup=None,
-    )
-    text = await _render_admin_categories(session)
-    await message.answer(non_empty_plain(text), reply_markup=_admin_categories_menu_keyboard())
-
-
-@router.message(AdminCategoryState.waiting_for_add_photo, F.text)
-async def on_category_add_photo_text(message: Message, state: FSMContext, session: AsyncSession) -> None:
-    if message.from_user is None or message.text is None:
-        return
-
-    raw = message.text.strip()
-    if raw == REPLY_BTN_BACK or raw.casefold() == "отмена":
-        await state.clear()
-        kb = await _admin_reply_menu(session, message.from_user.id)
-        await message.answer("Добавление категории отменено.", reply_markup=kb)
-        return
-
-    if raw.casefold() in {"пропустить", "skip", "none", "-"}:
-        data = await state.get_data()
-        add_title = data.get("add_title")
-        add_price = data.get("add_price")
-        add_total_limit = data.get("add_total_limit")
-        add_description = data.get("add_description")
-        if add_title is None or add_price is None:
-            await message.answer("Ошибка состояния. Начни добавление заново.")
-            await state.clear()
-            return
-
-        await AdminService(session=session).create_category(
-            title=str(add_title),
-            payout_rate=add_price,
-            description=add_description if add_description else None,
-            photo_file_id=None,
-            total_upload_limit=add_total_limit,
-        )
-        await state.clear()
-        text = await _render_admin_categories(session)
-        await message.answer("Категория добавлена (без фото).", reply_markup=None)
-        await message.answer(non_empty_plain(text), reply_markup=_admin_categories_menu_keyboard())
-        return
-
-    await message.answer(
-        "Похоже, это не фото и не команда. Напиши <code>пропустить</code> или отправь фото.",
-        parse_mode="HTML",
-    )
-
-
-@router.message(AdminCategoryState.waiting_for_edit_value, F.text)
-async def on_category_edit_value(message: Message, state: FSMContext, session: AsyncSession) -> None:
-    if message.from_user is None or message.text is None:
-        return
-
-    raw = message.text.strip()
-    if raw.casefold() == "отмена" or raw == REPLY_BTN_BACK:
-        await state.clear()
-        kb = await _admin_reply_menu(session, message.from_user.id)
-        await message.answer("Редактирование отменено.", reply_markup=kb)
-        return
-
-    data = await state.get_data()
-    edit_action = data.get("edit_action")
-    category_id = data.get("edit_category_id")
-    if not isinstance(edit_action, str) or not isinstance(category_id, int):
-        await state.clear()
-        await message.answer("Ошибка состояния. Начни заново.", reply_markup=_admin_categories_menu_keyboard())
-        return
-    if edit_action == "rate":
-        edit_action = "price"
-
-    result_label: str
-    if edit_action == "price":
-        try:
-            price_usdt = _parse_decimal_price_input(raw)
-        except InvalidOperation:
-            await message.answer("Неверный формат. Число в USDT, например 100.00.")
-            return
-        if price_usdt <= 0:
-            await message.answer("Цена должна быть больше 0.")
-            return
-        await CategoryService(session=session).update_payout_rate(category_id=category_id, payout_rate=price_usdt)
-        result_label = "Цена обновлена."
-
-    elif edit_action == "desc":
-        description: str | None = None if raw == "-" else raw
-        await CategoryService(session=session).update_description(category_id=category_id, description=description)
-        result_label = "Описание обновлено."
-
-    elif edit_action == "total":
-        try:
-            total_limit = _parse_optional_int(raw)
-        except ValueError:
-            await message.answer("Неверный формат total_upload_limit. Пример: 50 или '-'.")
-            return
-        await CategoryService(session=session).set_total_limit(category_id=category_id, total_limit=total_limit)
-        result_label = "Лимит обновлён."
-
-    else:
-        await state.clear()
-        await message.answer("Неизвестное действие. Начни заново.", reply_markup=_admin_categories_menu_keyboard())
-        return
-
-    # Единый, компактный пост-экран для всех edit_action:
-    # возвращаем в picker, чтобы можно было быстро править следующую категорию.
-    pick_page_raw = data.get("pick_page")
-    pick_page = pick_page_raw if isinstance(pick_page_raw, int) and pick_page_raw >= 0 else 0
-    await state.set_state(AdminCategoryState.waiting_for_pick_category)
-    categories = await CategoryService(session=session).get_all_categories()
-    keyboard = _admin_categories_picker_keyboard(categories=categories, page=pick_page)
-    await message.answer(f"{result_label} Выбери следующую категорию.", reply_markup=keyboard)
-
-
-@router.message(F.text.func(_reply_matches_menu_label("Рассылка")))
 async def on_broadcast_start(message: Message, state: FSMContext, session: AsyncSession) -> None:
     """Запускает массовую рассылку всем активным пользователям."""
 
@@ -1755,7 +1116,6 @@ async def on_broadcast_send(
     await state.clear()
     await message.answer(
         f"Рассылка завершена.\nУспешно: {delivered}\nОшибок: {failed}",
-        reply_markup=await _admin_reply_menu(session, message.from_user.id),
     )
     if admin_user is not None:
         await AdminAuditService(session=session).log(
@@ -1766,85 +1126,18 @@ async def on_broadcast_send(
         )
 
 
-@router.message(F.text.func(_reply_matches_menu_label("Запросы")))
-async def on_requests_menu(message: Message, state: FSMContext, session: AsyncSession) -> None:
-    """Вход в раздел «Запросы» с главного меню."""
-
-    await open_requests_section(message, state, session)
-
-
-@router.message(AdminRequestsState.waiting_for_quota_line, F.text)
-async def on_requests_quota_line(
-    message: Message,
-    state: FSMContext,
-    session: AsyncSession,
-) -> None:
-    """Задаёт дневной запрос: лимит и цену за единицу."""
-
-    if message.from_user is None or message.text is None:
-        return
-    if not await AdminService(session=session).is_admin(message.from_user.id):
-        await state.clear()
-        return
-    raw = message.text.strip()
-    if raw.casefold() == "отмена" or raw == REPLY_BTN_BACK:
-        await state.clear()
-        await message.answer("Выход.", reply_markup=await _admin_reply_menu(session, message.from_user.id))
-        return
-    m = _QUOTA_LINE_RE.match(raw)
-    if not m:
-        await message.answer("Нужна строка: id_категории лимит цена_USDT. Пример: 12 10 1.50")
-        return
-    category_id = int(m.group(1))
-    limit = int(m.group(2))
-    price_raw = m.group(3).replace(",", ".")
-    try:
-        unit_price = Decimal(price_raw)
-    except InvalidOperation:
-        await message.answer("Цена должна быть числом, например 1.50")
-        return
-    if limit < 0:
-        await message.answer("Лимит не может быть отрицательным.")
-        return
-    if unit_price < Decimal("0"):
-        await message.answer("Цена не может быть отрицательной.")
-        return
-    category = await CategoryService(session=session).get_by_id(category_id)
-    if category is None or not category.is_active:
-        await message.answer("Категория с таким id не найдена или неактивна.")
-        return
-    today = datetime.now(timezone.utc).date()
-    sellers = await UserService(session=session).list_active_sellers()
-    quota_svc = SellerQuotaService(session=session)
-    for seller in sellers:
-        await quota_svc.upsert_quota(
-            seller.id,
-            category_id,
-            today,
-            limit,
-            unit_price=unit_price,
-        )
-    await state.clear()
-    await message.answer(
-        (
-            f"На {today} (UTC) по категории «{category.title}» (id {category_id}) "
-            f"задан общий запрос: лимит {limit}, цена {unit_price} USDT/шт.\n"
-            f"Применено к продавцам: {len(sellers)}."
-        ),
-        reply_markup=await _admin_reply_menu(session, message.from_user.id),
-    )
-
-
 @router.message(Command("daily_report"))
-@router.message(F.text.func(_reply_matches_menu_label("Выплаты")))
-async def on_daily_report(message: Message, state: FSMContext, session: AsyncSession) -> None:
+async def on_daily_report(
+    message: Message, state: FSMContext, session: AsyncSession, *, _caller_id: int | None = None
+) -> None:
     """Показывает итоговую ведомость к выплате (одно сообщение)."""
 
-    if message.from_user is None:
+    tid = _caller_id or (message.from_user.id if message.from_user else None)
+    if tid is None:
         return
 
     admin_service = AdminService(session=session)
-    if not await admin_service.can_manage_payouts(message.from_user.id):
+    if not await admin_service.can_manage_payouts(tid):
         await message.answer("Недостаточно прав.")
         return
 
@@ -1869,7 +1162,6 @@ async def on_daily_report(message: Message, state: FSMContext, session: AsyncSes
     await _admin_store_panel_message(state, sent)
 
 
-@router.message(F.text.func(_reply_matches_menu_label("Архив (7days)")))
 async def on_archive_help(message: Message, session: AsyncSession) -> None:
     """Показывает, как искать номер в архиве за 7 дней."""
 
@@ -1883,7 +1175,6 @@ async def on_archive_help(message: Message, session: AsyncSession) -> None:
         "/archive 1234  (последние цифры)\n"
         "/archive +79999999999  (полный номер)\n\n"
         f"{HINT_ARCHIVE}",
-        reply_markup=await _admin_reply_menu(session, message.from_user.id),
     )
 
 
@@ -1919,7 +1210,7 @@ async def on_archive_search(message: Message, session: AsyncSession) -> None:
             parse_mode="HTML",
         )
     await message.answer(
-        "Навигация архива:",
+        "\u2060",
         reply_markup=pagination_keyboard(
             CB_ADMIN_ARCHIVE_PAGE,
             page=0,
@@ -1952,7 +1243,7 @@ async def on_archive_page(callback: CallbackQuery, session: AsyncSession) -> Non
                 parse_mode="HTML",
             )
         await callback.message.answer(
-            "Навигация архива:",
+            "\u2060",
             reply_markup=pagination_keyboard(
                 CB_ADMIN_ARCHIVE_PAGE,
                 page=page,
@@ -2139,7 +1430,7 @@ async def on_export_report(message: Message, session: AsyncSession) -> None:
         writer.writerow([row["username"], row["accepted_count"], row["to_pay"]])
     await message.answer_document(
         document=("daily_report.csv", sio.getvalue().encode("utf-8")),
-        caption="Экспорт CSV готов.",
+        caption="CSV-файл подготовлен.",
     )
 
 
@@ -2156,9 +1447,148 @@ async def on_payout_ledger_page(callback: CallbackQuery, session: AsyncSession) 
         await _edit_payout_ledger_message(callback.message, session, page=page)
 
 
+def _parse_pay_topup_page(callback_data: str) -> int:
+    parts = callback_data.split(":")
+    if len(parts) < 3:
+        return 0
+    try:
+        return max(int(parts[2]), 0)
+    except ValueError:
+        return 0
+
+
+@router.callback_query(
+    lambda c: c.data is not None and c.data.startswith(f"{CB_PAY_TOPUP}:") and len(c.data.split(":")) == 3
+)
+async def on_payout_topup_open(callback: CallbackQuery, session: AsyncSession, state: FSMContext) -> None:
+    """Открывает ввод суммы пополнения CryptoPay из экрана ведомости."""
+
+    if callback.from_user is None or callback.data is None:
+        return
+    if not await AdminService(session=session).can_manage_payouts(callback.from_user.id):
+        await callback.answer("Недостаточно прав", show_alert=True)
+        return
+
+    ledger_page = _parse_pay_topup_page(callback.data)
+    await state.set_state(AdminPayoutState.waiting_for_topup_amount)
+    await state.update_data(payout_topup_ledger_page=ledger_page)
+
+    await callback.answer()
+    if callback.message is not None:
+        await edit_message_text_safe(
+            callback.message,
+            (
+                "💳 <b>ПОПОЛНЕНИЕ APP БАЛАНСА</b>\n\n"
+                "Введите сумму пополнения в USDT одним сообщением.\n"
+                "Например: <code>1000</code> или <code>1000.50</code>."
+            ),
+            reply_markup=InlineKeyboardMarkup(
+                inline_keyboard=[
+                    [InlineKeyboardButton(text="⬅️ К ведомости", callback_data=f"{CB_PAY_LEDGER_PAGE}:{ledger_page}")],
+                    [InlineKeyboardButton(text=REPLY_BTN_BACK, callback_data=CALLBACK_INLINE_BACK)],
+                ]
+            ),
+            parse_mode="HTML",
+        )
+
+
+@router.message(AdminPayoutState.waiting_for_topup_amount, F.text)
+async def on_payout_topup_amount_entered(message: Message, session: AsyncSession, state: FSMContext) -> None:
+    """Создаёт invoice на введённую сумму для пополнения app-баланса CryptoPay."""
+
+    if message.from_user is None:
+        return
+    if not await AdminService(session=session).can_manage_payouts(message.from_user.id):
+        await state.clear()
+        await message.answer("Недостаточно прав.")
+        return
+
+    raw = (message.text or "").strip().replace(",", ".")
+    try:
+        amount = Decimal(raw)
+    except (InvalidOperation, TypeError):
+        await message.answer("Некорректная сумма. Введите число, например: 1000 или 1000.50")
+        return
+
+    if amount <= Decimal("0"):
+        await message.answer("Сумма должна быть больше 0.")
+        return
+
+    data = await state.get_data()
+    ledger_page = int(data.get("payout_topup_ledger_page", 0))
+
+    try:
+        invoice = await CryptoBotService().create_topup_invoice(
+            amount=amount,
+            description=f"Manual top-up by chief admin {message.from_user.id}",
+        )
+    except RuntimeError as exc:
+        await message.answer(f"Не удалось создать invoice: {exc}")
+        return
+
+    await state.clear()
+    await message.answer(
+        (
+            "✅ <b>Invoice для пополнения создан</b>\n\n"
+            f"<b>Сумма:</b> <code>{amount} USDT</code>\n"
+            "\n"
+            "После оплаты нажмите «✅ Я оплатил», бот проверит статус и вернёт в «Выплаты»."
+        ),
+        parse_mode="HTML",
+        reply_markup=InlineKeyboardMarkup(
+            inline_keyboard=[
+                [
+                    InlineKeyboardButton(
+                        text="✅ Я оплатил",
+                        callback_data=f"{CB_PAY_TOPUP_CHECK}:{invoice.invoice_id}:{ledger_page}:{amount}",
+                    )
+                ],
+                [InlineKeyboardButton(text="Открыть", url=invoice.invoice_url)],
+            ]
+        ),
+    )
+
+
+@router.callback_query(lambda c: c.data is not None and c.data.startswith(f"{CB_PAY_TOPUP_CHECK}:"))
+async def on_payout_topup_check_paid(callback: CallbackQuery, session: AsyncSession) -> None:
+    """Проверяет статус topup-invoice и при оплате возвращает в раздел «Выплаты»."""
+
+    if callback.from_user is None or callback.data is None:
+        return
+    if not await AdminService(session=session).can_manage_payouts(callback.from_user.id):
+        await callback.answer("Недостаточно прав", show_alert=True)
+        return
+
+    parts = callback.data.split(":", 4)
+    if len(parts) < 5:
+        await callback.answer("Некорректные данные invoice", show_alert=True)
+        return
+    try:
+        invoice_id = int(parts[2])
+        ledger_page = max(int(parts[3]), 0)
+    except ValueError:
+        await callback.answer("Некорректный invoice id", show_alert=True)
+        return
+    amount_label = parts[4]
+
+    try:
+        status = await CryptoBotService().get_invoice_status(invoice_id)
+    except RuntimeError as exc:
+        await callback.answer(f"Ошибка проверки invoice: {exc}", show_alert=True)
+        return
+
+    if status.status != "paid":
+        await callback.answer("Invoice ещё не оплачен", show_alert=True)
+        return
+
+    await callback.answer(f"✅ APP пополнен на {amount_label} USDT", show_alert=True)
+    if callback.message is not None:
+        await _edit_payout_ledger_message(callback.message, session, page=ledger_page)
+
+
 @router.callback_query(lambda c: c.data is not None and c.data.startswith(f"{CB_PAY_MARK}:"))
-async def on_mark_paid(callback: CallbackQuery, session: AsyncSession) -> None:
-    """Запрашивает подтверждение выплаты пользователю."""
+async def on_mark_paid(callback: CallbackQuery, session: AsyncSession, state: FSMContext) -> None:
+    """Запрашивает подтверждение выплаты с показом статистики (первый уровень)."""
 
     if callback.from_user is None or callback.data is None:
         return
@@ -2177,26 +1607,203 @@ async def on_mark_paid(callback: CallbackQuery, session: AsyncSession) -> None:
         await callback.answer("Пользователь не найден", show_alert=True)
         return
 
+    # Получаем PENDING payouts для этого пользователя
+    pending_stmt = (
+        select(Payout)
+        .where(
+            Payout.user_id == user_id,
+            Payout.status == PayoutStatus.PENDING,
+        )
+        .order_by(Payout.created_at.asc())
+    )
+    pending_payouts = list((await session.execute(pending_stmt)).scalars().all())
+    
+    if not pending_payouts:
+        await callback.answer("Нет ожидающих выплат для этого пользователя", show_alert=True)
+        return
+
+    # Считаем статистику
+    total_amount = Decimal("0.00")
+    total_accepted_count = 0
+    
+    for payout in pending_payouts:
+        total_amount += payout.amount
+        total_accepted_count += payout.accepted_count
+
+    # Получаем статистику отклонений за день
+    day_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+    
+    rejected_stmt = select(func.count(Submission.id)).where(
+        Submission.user_id == user_id,
+        Submission.status.in_([
+            SubmissionStatus.REJECTED,
+            SubmissionStatus.BLOCKED,
+            SubmissionStatus.NOT_A_SCAN,
+        ]),
+        Submission.reviewed_at >= day_start,
+    )
+    rejected_count = int((await session.execute(rejected_stmt)).scalar_one())
+
+    # Сохраняем данные в FSM для следующего экрана подтверждения
+    await state.set_state(AdminPayoutState.waiting_for_payout_confirm)
+    await state.update_data(
+        payout_user_id=user_id,
+        payout_total_amount=str(total_amount),
+        payout_accepted_count=total_accepted_count,
+        payout_rejected_count=rejected_count,
+        payout_username=f"@{user.username}" if user.username else f"id:{user.telegram_id}",
+        payout_ledger_page=ledger_page,
+    )
+
     await callback.answer()
     if callback.message is not None:
         username = f"@{user.username}" if user.username else f"id:{user.telegram_id}"
+        stats_text = (
+            f"💰 <b>ПОДТВЕРЖДЕНИЕ ВЫПЛАТЫ (Шаг 1)</b>\n\n"
+            f"<b>Продавец:</b> {username}\n"
+            f"<b>Период:</b> сегодня (UTC)\n\n"
+            f"<b>📊 СТАТИСТИКА:</b>\n"
+            f"✅ Зачёт (принято): {total_accepted_count} шт.\n"
+            f"❌ Не зачёт: {rejected_count} шт.\n\n"
+            f"<b>💵 СУММА К ВЫПЛАТЕ:</b> {total_amount} USDT\n\n"
+            f"<i>Внимание: За каждой карточкой закреплена своя цена.</i>\n\n"
+            f"<b>➡️ Нажмите «Подтвердить» для проверки данных...</b>"
+        )
         await edit_message_text_safe(
             callback.message,
-            f"💰 Подтверждение выплаты\n\nПользователь: {username}\nСумма к выплате: {user.pending_balance} USDT",
+            stats_text,
             reply_markup=payout_confirm_keyboard(user_id=user_id, ledger_page=ledger_page),
+            parse_mode="HTML",
         )
 
 
 @router.callback_query(lambda c: c.data is not None and c.data.startswith(f"{CB_PAY_CANCEL}:"))
-async def on_mark_paid_cancel(callback: CallbackQuery, session: AsyncSession) -> None:
+async def on_mark_paid_cancel(callback: CallbackQuery, session: AsyncSession, state: FSMContext) -> None:
     """Отменяет подтверждение выплаты и возвращает ведомость."""
 
     if callback.data is None:
         return
+    await state.clear()
     user_id, ledger_page = _parse_pay_uid_page(callback.data)
     await callback.answer("Оплата отменена")
     if callback.message is not None:
         await _edit_payout_ledger_message(callback.message, session, page=ledger_page)
+
+
+@router.callback_query(
+    StateFilter(AdminPayoutState.waiting_for_payout_confirm),
+    lambda c: c.data is not None and c.data.startswith(f"{CB_PAY_CONFIRM}:")
+)
+async def on_payout_confirmation(callback: CallbackQuery, session: AsyncSession, state: FSMContext) -> None:
+    """Показывает финальное подтверждение перед отправкой чека в CryptoBot (шаг 2)."""
+
+    if callback.from_user is None or callback.data is None:
+        return
+
+    data = await state.get_data()
+    total_amount = data.get("payout_total_amount", "0.00")
+    username = data.get("payout_username", "Unknown")
+    try:
+        payout_amount = Decimal(str(total_amount))
+    except (InvalidOperation, TypeError):
+        payout_amount = Decimal("0")
+
+    available_usdt: Decimal | None = None
+    balance_error: str | None = None
+    try:
+        available_usdt = await CryptoBotService().get_available_balance(asset_code="USDT")
+    except RuntimeError as exc:
+        balance_error = str(exc)
+    
+    if callback.message is not None:
+        if balance_error is not None:
+            balance_line = f"⚠️ <b>Баланс CryptoPay:</b> не удалось получить ({escape(balance_error)})"
+            warning_line = "⚠️ <i>Проверьте токен/доступность CryptoPay перед отправкой.</i>"
+        else:
+            assert available_usdt is not None
+            balance_line = f"💳 <b>Доступно в CryptoPay:</b> <code>{available_usdt} USDT</code>"
+            warning_line = (
+                "⚠️ <i>Недостаточно средств. Сначала пополните баланс через invoice.</i>"
+                if available_usdt < payout_amount
+                else "✅ <i>Средств достаточно для отправки чека.</i>"
+            )
+
+        final_text = (
+            f"🔐 <b>ФИНАЛЬНОЕ ПОДТВЕРЖДЕНИЕ (Шаг 2)</b>\n\n"
+            f"<b>Вы действительно хотите отправить чек?</b>\n\n"
+            f"<b>Сумма:</b> <code>{total_amount} USDT</code>\n"
+            f"<b>Получатель:</b> {username}\n"
+            f"{balance_line}\n\n"
+            f"{warning_line}\n"
+            f"⚠️ <i>После отправки чека операцию нельзя будет отменить!</i>"
+        )
+        
+        user_id = data.get("payout_user_id")
+        ledger_page = data.get("payout_ledger_page", 0)
+        
+        await callback.answer()
+        await edit_message_text_safe(
+            callback.message,
+            final_text,
+            reply_markup=payout_final_confirm_keyboard(user_id=user_id, ledger_page=ledger_page),
+            parse_mode="HTML",
+        )
+
+
+@router.callback_query(
+    StateFilter(AdminPayoutState.waiting_for_payout_confirm),
+    lambda c: c.data is not None and c.data.startswith(f"{CB_PAY_TOPUP}:")
+)
+async def on_create_topup_invoice(callback: CallbackQuery, state: FSMContext) -> None:
+    """Создаёт invoice для пополнения баланса CryptoPay и показывает ссылку на оплату."""
+
+    if callback.from_user is None or callback.data is None or callback.message is None:
+        return
+
+    data = await state.get_data()
+    total_amount = data.get("payout_total_amount", "0.00")
+    username = data.get("payout_username", "Unknown")
+    user_id = data.get("payout_user_id")
+    ledger_page = int(data.get("payout_ledger_page", 0))
+
+    if user_id is None:
+        await callback.answer("Данные сессии потеряны", show_alert=True)
+        return
+
+    try:
+        invoice_amount = Decimal(str(total_amount))
+    except (InvalidOperation, TypeError):
+        invoice_amount = Decimal("0")
+    if invoice_amount <= Decimal("0"):
+        invoice_amount = Decimal("1")
+
+    try:
+        invoice = await CryptoBotService().create_topup_invoice(
+            amount=invoice_amount,
+            description=f"Top-up for payout {username}",
+        )
+    except RuntimeError as exc:
+        await callback.answer("Не удалось создать invoice", show_alert=True)
+        await edit_message_text_safe(
+            callback.message,
+            f"⚠️ Ошибка создания invoice:\n<code>{escape(str(exc))}</code>",
+            reply_markup=payout_final_confirm_keyboard(user_id=user_id, ledger_page=ledger_page),
+            parse_mode="HTML",
+        )
+        return
+
+    await callback.answer("Invoice создан")
+    await edit_message_text_safe(
+        callback.message,
+        (
+            "💳 <b>Invoice для пополнения создан</b>\n\n"
+            f"<b>Сумма:</b> <code>{invoice_amount} USDT</code>\n"
+            "\n"
+            "После оплаты нажмите «Точно отправить чек»."
+        ),
+        reply_markup=payout_final_confirm_keyboard(user_id=user_id, ledger_page=ledger_page),
+        parse_mode="HTML",
+    )
 
 
 @router.callback_query(lambda c: c.data is not None and c.data.startswith(f"{CB_PAY_TRASH}:"))
@@ -2233,9 +1840,12 @@ async def on_mark_trash(callback: CallbackQuery, session: AsyncSession) -> None:
         await _edit_payout_ledger_message(callback.message, session, page=ledger_page)
 
 
-@router.callback_query(lambda c: c.data is not None and c.data.startswith(f"{CB_PAY_CONFIRM}:"))
-async def on_mark_paid_confirm(callback: CallbackQuery, session: AsyncSession, bot: Bot) -> None:
-    """Создает чек в CryptoBot и фиксирует выплату."""
+@router.callback_query(
+    StateFilter(AdminPayoutState.waiting_for_payout_confirm),
+    lambda c: c.data is not None and c.data.startswith(f"{CB_PAY_FINAL_CONFIRM}:")
+)
+async def on_mark_paid_final(callback: CallbackQuery, session: AsyncSession, bot: Bot, state: FSMContext) -> None:
+    """Создает чек в CryptoBot и фиксирует выплату (шаг 3 - финальный)."""
 
     if callback.from_user is None or callback.data is None:
         return
@@ -2248,21 +1858,73 @@ async def on_mark_paid_confirm(callback: CallbackQuery, session: AsyncSession, b
     admin_user = await UserService(session=session).get_by_telegram_id(callback.from_user.id)
     if admin_user is None:
         await callback.answer("Админ не найден в БД", show_alert=True)
+        await state.clear()
         return
 
-    user_id, ledger_page = _parse_pay_uid_page(callback.data)
+    # Получаем данные из FSM
+    data = await state.get_data()
+    user_id = data.get("payout_user_id")
+    total_amount_str = data.get("payout_total_amount", "0.00")
+    ledger_page = data.get("payout_ledger_page", 0)
+    
+    if user_id is None:
+        await callback.answer("Ошибка: данные сессии потеряны", show_alert=True)
+        await state.clear()
+        if callback.message is not None:
+            await _edit_payout_ledger_message(callback.message, session, page=int(ledger_page))
+        return
+
     user = await session.get(User, user_id)
     if user is None:
         await callback.answer("Пользователь не найден", show_alert=True)
+        await state.clear()
+        if callback.message is not None:
+            await _edit_payout_ledger_message(callback.message, session, page=int(ledger_page))
         return
 
-    amount = Decimal(user.pending_balance)
+    amount = Decimal(total_amount_str)
     if amount <= Decimal("0.00"):
         await callback.answer("Баланс к выплате уже пустой", show_alert=True)
+        await state.clear()
+        if callback.message is not None:
+            await _edit_payout_ledger_message(callback.message, session, page=int(ledger_page))
+        return
+
+    try:
+        available_usdt = await CryptoBotService().get_available_balance(asset_code="USDT")
+    except RuntimeError as exc:
+        await callback.answer("Не удалось получить баланс CryptoPay", show_alert=True)
+        if callback.message is not None:
+            await edit_message_text_safe(
+                callback.message,
+                (
+                    "⚠️ <b>Ошибка проверки баланса CryptoPay</b>\n\n"
+                    f"<code>{escape(str(exc))}</code>"
+                ),
+                reply_markup=payout_final_confirm_keyboard(user_id=user_id, ledger_page=ledger_page),
+                parse_mode="HTML",
+            )
+        return
+
+    if available_usdt < amount:
+        await callback.answer("Недостаточно средств в CryptoPay", show_alert=True)
+        if callback.message is not None:
+            await edit_message_text_safe(
+                callback.message,
+                (
+                    "⚠️ <b>Недостаточно средств в CryptoPay</b>\n\n"
+                    f"<b>Нужно:</b> <code>{amount} USDT</code>\n"
+                    f"<b>Доступно:</b> <code>{available_usdt} USDT</code>\n\n"
+                    "Нажмите «Пополнить через invoice», оплатите счёт и повторите отправку."
+                ),
+                reply_markup=payout_final_confirm_keyboard(user_id=user_id, ledger_page=ledger_page),
+                parse_mode="HTML",
+            )
         return
 
     username = f"@{user.username}" if user.username else f"id:{user.telegram_id}"
     comment = f"Payment from @GDPX1 for {username}"
+    
     try:
         check = await CryptoBotService().create_usdt_check(amount=amount, comment=comment)
     except RuntimeError as exc:
@@ -2275,17 +1937,28 @@ async def on_mark_paid_confirm(callback: CallbackQuery, session: AsyncSession, b
                     callback.message,
                     f"<b>⚠️ Ошибка CryptoBot:</b>\n{error_msg}\n\n"
                     f"<b>Решение:</b> Пополните баланс CryptoBot и повторите попытку.",
-                    reply_markup=None,
+                    reply_markup=payout_final_confirm_keyboard(user_id=user_id, ledger_page=ledger_page),
                     parse_mode="HTML",
                 )
+            return
         else:
             await callback.answer("Не удалось создать чек CryptoBot", show_alert=True)
             if callback.message is not None:
                 await edit_message_text_safe(
                     callback.message,
                     f"Ошибка CryptoBot: {exc}\n\nПопробуйте снова из ведомости.",
-                    reply_markup=None,
+                    reply_markup=InlineKeyboardMarkup(
+                        inline_keyboard=[
+                            [
+                                InlineKeyboardButton(
+                                    text="💰 К ведомости",
+                                    callback_data=f"{CB_PAY_LEDGER_PAGE}:{int(ledger_page)}",
+                                )
+                            ]
+                        ]
+                    ),
                 )
+        await state.clear()
         return
 
     payout = await BillingService(session=session).mark_user_paid_with_crypto(
@@ -2297,9 +1970,12 @@ async def on_mark_paid_confirm(callback: CallbackQuery, session: AsyncSession, b
     )
     if payout is None:
         await callback.answer("Выплата уже зафиксирована или баланс нулевой", show_alert=True)
+        await state.clear()
+        if callback.message is not None:
+            await _edit_payout_ledger_message(callback.message, session, page=int(ledger_page))
         return
 
-    await callback.answer("Выплата зафиксирована")
+    await callback.answer("✅ Выплата зафиксирована!")
     await AdminAuditService(session=session).log(
         admin_id=admin_user.id,
         action="mark_paid",
@@ -2307,12 +1983,31 @@ async def on_mark_paid_confirm(callback: CallbackQuery, session: AsyncSession, b
         target_id=user_id,
         details=f"amount={payout.amount};check_id={check.check_id}",
     )
+    
+    # Очищаем состояние после успешной выплаты
+    await state.clear()
+    
     if callback.message is not None:
+        success_text = (
+            f"✅ <b>ВЫПЛАТА УСПЕШНО ОТПРАВЛЕНА</b>\n\n"
+            f"<b>Сумма:</b> {payout.amount} USDT\n"
+            f"<b>Получатель:</b> {username}\n"
+            f"<b>Чек:</b> <a href='{check.check_url}'>Открыть чек</a>\n\n"
+            f"<i>Возврат в ведомость...</i>"
+        )
+        await edit_message_text_safe(
+            callback.message,
+            success_text,
+            reply_markup=None,
+            parse_mode="HTML",
+        )
+        # Отправляем обновленную ведомость
         await _edit_payout_ledger_message(callback.message, session, page=ledger_page)
+    
     try:
         await bot.send_message(
             user.telegram_id,
-            f"Выплата сформирована.\nСумма: {payout.amount} USDT\nПолучить чек: {check.check_url}",
+            f"✅ Выплата сформирована.\n\nСумма: {payout.amount} USDT\nПолучить чек: {check.check_url}",
         )
     except TelegramAPIError:
         pass

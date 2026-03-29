@@ -85,7 +85,7 @@ docker compose logs -f bot
 export ENV_FILE=.env.local
 python -m scripts.make_admin --telegram-id 123456789
 # или роль админа выплат:
-python -m scripts.make_admin --telegram-id 123456789 --role payout_admin
+python -m scripts.make_admin --telegram-id 123456789 --role chief_admin
 # или тех. админ:
 python -m scripts.make_admin --telegram-id 123456789 --role admin
 ```
@@ -114,7 +114,6 @@ make check
 
 ## Текущий workflow
 
-- Админ: `Запросы -> Очередь -> В работе -> Отработанные`.
+- Админ: `Очередь -> В работе -> Выплаты -> Рассылка/Архив`.
 - Финал карточки в `В работе` ставится вручную кнопками `Зачёт / Незачёт`.
-- `Отработанные` содержит вкладки `Зачёт` и `Незачёт`, пагинацию и экспорт CSV по текущей вкладке.
 - Продавец: `Материал` (папки по операторам, карточка, edit/delete только для `pending`) и `История выплат` (пагинация по выплатам).

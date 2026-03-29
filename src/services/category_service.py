@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 from decimal import Decimal
+from typing import Literal
 
+from sqlalchemy import delete as sql_delete
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -92,3 +94,48 @@ class CategoryService:
         await self._session.commit()
         await self._session.refresh(category)
         return category
+
+    async def delete_category(self, category_id: int) -> Literal["deleted", "deactivated", "not_found"]:
+        """Удаляет категорию, если нет связанных submissions; иначе мягко выключает категорию.
+
+        Возвращает:
+        - "deleted": категория физически удалена;
+        - "deactivated": категория связана с submissions и только выключена (is_active=False);
+        - "not_found": категория не найдена.
+        """
+
+        category = await self.get_by_id(category_id)
+        if category is None:
+            return "not_found"
+
+        from src.database.models.submission import Submission
+
+        linked_stmt = select(func.count(Submission.id)).where(Submission.category_id == category_id)
+        linked_count = int((await self._session.execute(linked_stmt)).scalar_one())
+        if linked_count > 0:
+            category.is_active = False
+            await self._session.commit()
+            await self._session.refresh(category)
+            return "deactivated"
+
+        await self._session.delete(category)
+        await self._session.commit()
+        return "deleted"
+
+    async def force_delete_category(self, category_id: int) -> Literal["deleted", "not_found"]:
+        """Принудительно удаляет категорию вместе со всеми связанными submissions."""
+
+        category = await self.get_by_id(category_id)
+        if category is None:
+            return "not_found"
+
+        from src.database.models.submission import Submission
+
+        await self._session.execute(
+            sql_delete(Submission)
+            .where(Submission.category_id == category_id)
+            .execution_options(synchronize_session=False)
+        )
+        await self._session.delete(category)
+        await self._session.commit()
+        return "deleted"

@@ -14,8 +14,8 @@ router = Router(name="inline-query-router")
 def _format_inline_result_title(submission) -> str:
     """Форматирует заголовок результата inline query."""
     
-    phone = submission.description_text or "N/A"
-    category = submission.category.title if submission.category else "N/A"
+    phone = submission.description_text or "н/д"
+    category = submission.category.title if submission.category else "н/д"
     seller = submission.seller.username or f"#{submission.seller.telegram_id}"
     
     return f"☑️ {phone} | {category} | @{seller}"
@@ -24,10 +24,10 @@ def _format_inline_result_title(submission) -> str:
 def _format_inline_result_description(submission) -> str:
     """Форматирует описание результата inline query."""
     
-    status = submission.status.value if submission.status else "unknown"
-    file_type = "📷 Photo" if submission.attachment_type == "photo" else "📦 Archive"
+    status = submission.status.value if submission.status else "неизвестно"
+    file_type = "\U0001f4f7 Фото" if submission.attachment_type == "photo" else "\U0001f4e6 Архив"
     
-    return f"{file_type} | Status: {status} | ID: {submission.id}"
+    return f"{file_type} | Статус: {status} | ID: {submission.id}"
 
 
 @router.inline_query()

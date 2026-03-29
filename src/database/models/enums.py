@@ -9,15 +9,12 @@ class UserRole(StrEnum):
     SELLER = "seller"
     ADMIN = "admin"
     CHIEF_ADMIN = "chief_admin"
-    PAYOUT_ADMIN = "payout_admin"
 
 
 class UserLanguage(StrEnum):
-    """Поддерживаемые языки интерфейса."""
+    """Поддерживаемые языки интерфейса. Бот работает только на русском."""
 
     RU = "ru"
-    EN = "en"
-    PL = "pl"
 
 
 class SubmissionStatus(StrEnum):

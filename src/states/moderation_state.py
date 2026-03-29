@@ -8,6 +8,7 @@ class AdminModerationForwardState(StatesGroup):
 
     waiting_for_target = State()
     waiting_for_confirm = State()
+    waiting_for_hold_selection = State()
 
 
 class AdminBatchPickState(StatesGroup):

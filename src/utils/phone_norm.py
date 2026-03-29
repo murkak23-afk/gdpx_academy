@@ -17,12 +17,23 @@ def normalize_phone_key(text: str | None) -> str | None:
 
 
 def normalize_phone_strict(text: str | None) -> str | None:
-    """Строгий формат для БД: +7XXXXXXXXXX."""
+    """Строгий формат для БД: 79XXXXXXXXX (11 цифр, без +)."""
 
     key = normalize_phone_key(text)
-    if key is None or len(key) != 11 or not key.startswith("7"):
+    if key is None or len(key) != 11 or not key.startswith("79"):
         return None
-    return f"+{key}"
+    return key
+
+
+PHONE_NORM_ERROR_HTML = (
+    "❌ <b>Неверный формат номера</b>\n\n"
+    "Введите российский мобильный номер.\n"
+    "Допустимые форматы:\n"
+    "<code>+79001112233</code>\n"
+    "<code>89001112233</code>\n"
+    "<code>9001112233</code>\n\n"
+    "Бот автоматически приведёт к формату <code>79XXXXXXXXX</code>."
+)
 
 
 def mask_phone_public(phone: str | None) -> str:

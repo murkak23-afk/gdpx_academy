@@ -9,7 +9,7 @@ from src.database.models.base import Base, TimestampMixin
 
 
 class Category(Base, TimestampMixin):
-    """Оператор (eSIM) — цена за единицу в USDT, фото, лимит."""
+    """Продукт (eSIM) — Оператор | Тип | Холд — цена за единицу в USDT."""
 
     __tablename__ = "categories"
     __table_args__ = (UniqueConstraint("slug", name="uq_categories_slug"),)
@@ -23,9 +23,19 @@ class Category(Base, TimestampMixin):
     total_upload_limit: Mapped[int | None] = mapped_column(nullable=True)
     is_active: Mapped[bool] = mapped_column(nullable=False, default=True)
 
+    # Конструктор категории: Оператор | Тип | Холд
+    operator: Mapped[str | None] = mapped_column(String(60), nullable=True)
+    sim_type: Mapped[str | None] = mapped_column(String(60), nullable=True)
+    hold_condition: Mapped[str | None] = mapped_column(String(60), nullable=True)
+
     submissions = relationship("Submission", back_populates="category")
     seller_daily_quotas = relationship(
         "SellerDailyQuota",
         back_populates="category",
         cascade="all, delete-orphan",
     )
+
+    def compose_title(self) -> str:
+        """Собирает человекочитаемый title из компонентов конструктора."""
+        parts = [p for p in (self.operator, self.sim_type, self.hold_condition) if p]
+        return " | ".join(parts) if parts else self.title

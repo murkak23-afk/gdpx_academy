@@ -1,11 +1,91 @@
+# Python environments
 .venv/
+venv/
+env/
+ENV/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Caches
 __pycache__/
-*.pyc
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.class
+
+# Testing & Coverage
+.pytest_cache/
+.mypy_cache/
+.hypothesis/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+*.cover
+.hypothesis/
+coverage.xml
+*.report
+
+# IDE & Editors
+.idea/
+.vscode/
+.cursor/
+*.swp
+*.swo
+*~
+.DS_Store
+*.sublime-project
+*.sublime-workspace
+
+# Environment & Secrets
 .env
 .env.local
 .env.docker
-.idea/
-.cursor/
-.pytest_cache/
+.env.production
+.env.*.local
+!.env.*.example
+
+# Build & Dist
+dist/
+build/
+*.egg-info/
+.ruff_cache/
 .mypy_cache/
+
+# Database & Data
 postgres_data/
+*.db
+*.sqlite
+*.sqlite3
+*.dump
+
+# Docker
+docker-compose.override.yml
+.dockerignore
+
+# OS
+.DS_Store
+Thumbs.db
+*.log
+.idea/
+.vscode/
+__pycache__/
+database (2).db

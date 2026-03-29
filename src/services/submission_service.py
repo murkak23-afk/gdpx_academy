@@ -7,13 +7,13 @@ from typing import Any
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
-from src.main_operators import MAIN_OPERATOR_GROUPS, category_title_to_main_group_label
 
 from src.database.models.category import Category
-from src.database.models.enums import RejectionReason, SubmissionStatus
-from src.database.models.publication import PublicationArchive
+from src.database.models.enums import PayoutStatus, RejectionReason, SubmissionStatus, UserRole
+from src.database.models.publication import Payout, PublicationArchive
 from src.database.models.submission import ReviewAction, Submission
 from src.database.models.user import User
+from src.main_operators import MAIN_OPERATOR_GROUPS, category_title_to_main_group_label
 from src.utils.phone_norm import normalize_phone_key
 
 
@@ -25,6 +25,18 @@ class SubmissionService:
 
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
+
+    async def get_by_id(self, submission_id: int) -> Submission | None:
+        """Возвращает карточку по ID или None."""
+
+        return await self._session.get(Submission, submission_id)
+
+    async def _is_chief_admin(self, admin_id: int) -> bool:
+        """Проверяет, является ли админ chief_admin."""
+
+        stmt = select(User.role).where(User.id == admin_id)
+        role = (await self._session.execute(stmt)).scalar_one_or_none()
+        return role == UserRole.CHIEF_ADMIN
 
     async def get_daily_count(self, user_id: int) -> int:
         """Считает количество материалов пользователя за текущие сутки UTC."""
@@ -379,7 +391,15 @@ class SubmissionService:
         return list((await self._session.execute(stmt)).scalars().all())
 
     async def list_in_review_submissions(self, admin_id: int, limit: int = 10) -> list[Submission]:
-        """Возвращает карточки админа в статусе in_review."""
+        """Возвращает карточки админа в статусе in_review.
+        Chief admin видит все карточки в статусе in_review, другие админы видят только свои.
+        """
+
+        is_chief = await self._is_chief_admin(admin_id)
+
+        conditions = [Submission.status == SubmissionStatus.IN_REVIEW]
+        if not is_chief:
+            conditions.append(Submission.admin_id == admin_id)
 
         stmt = (
             select(Submission)
@@ -388,10 +408,7 @@ class SubmissionService:
                 joinedload(Submission.seller),
                 joinedload(Submission.locked_by_admin),
             )
-            .where(
-                Submission.status == SubmissionStatus.IN_REVIEW,
-                Submission.admin_id == admin_id,
-            )
+            .where(*conditions)
             .order_by(Submission.assigned_at.asc())
             .limit(limit)
         )
@@ -407,12 +424,15 @@ class SubmissionService:
         category_id: int | None = None,
         date_from: datetime | None = None,
     ) -> tuple[list[Submission], int]:
-        """Возвращает page карточек in_review и общее число карточек."""
+        """Возвращает page карточек in_review и общее число карточек.
+        Chief admin видит все карточки в статусе in_review, другие админы видят только свои.
+        """
 
-        conditions = [
-            Submission.status == SubmissionStatus.IN_REVIEW,
-            Submission.admin_id == admin_id,
-        ]
+        is_chief = await self._is_chief_admin(admin_id)
+
+        conditions = [Submission.status == SubmissionStatus.IN_REVIEW]
+        if not is_chief:
+            conditions.append(Submission.admin_id == admin_id)
         if seller_id is not None:
             conditions.append(Submission.user_id == seller_id)
         if category_id is not None:
@@ -513,6 +533,33 @@ class SubmissionService:
         results = list((await self._session.execute(stmt)).scalars().all())
         return results
 
+    async def search_by_phone_suffix(
+        self,
+        digits: str,
+        limit: int = 10,
+    ) -> list[Submission]:
+        """Поиск симок по последним цифрам номера (все статусы).
+
+        Используется в админском «🔍 Поиск симки».
+        """
+
+        clean = "".join(ch for ch in digits if ch.isdigit())
+        if len(clean) < 3:
+            return []
+
+        stmt = (
+            select(Submission)
+            .options(
+                joinedload(Submission.category),
+                joinedload(Submission.seller),
+                joinedload(Submission.locked_by_admin),
+            )
+            .where(Submission.phone_normalized.like(f"%{clean}"))
+            .order_by(Submission.created_at.desc())
+            .limit(limit)
+        )
+        return list((await self._session.execute(stmt)).scalars().all())
+
     async def accept_submission(
         self,
         submission_id: int,
@@ -557,6 +604,24 @@ class SubmissionService:
                 archived_by_user_id=admin_id,
             )
         )
+        
+        # Создаем запись о выплате (PENDING) для отображения в списке выплат
+        day_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+        payout = Payout(
+            user_id=seller.id,
+            amount=category.payout_rate,
+            accepted_count=1,
+            period_key=day_start.date().isoformat(),
+            period_date=day_start.date(),
+            status=PayoutStatus.PENDING,
+            uploaded_count=0,
+            blocked_count=0,
+            not_a_scan_count=0,
+            category_id=category.id,
+            unit_price=category.payout_rate,
+        )
+        self._session.add(payout)
+        
         await self._session.commit()
         await self._session.refresh(submission)
         return submission
@@ -778,7 +843,18 @@ class SubmissionService:
         submission_id: int,
         admin_id: int,
     ) -> Submission | None:
-        """Одна карточка «в работе» у админа: без блокировки, только для показа."""
+        """Одна карточка «в работе» у админа: без блокировки, только для показа.
+        Chief admin может видеть любую карточку в IN_REVIEW статусе.
+        """
+
+        is_chief = await self._is_chief_admin(admin_id)
+
+        conditions = [
+            Submission.id == submission_id,
+            Submission.status == SubmissionStatus.IN_REVIEW,
+        ]
+        if not is_chief:
+            conditions.append(Submission.locked_by_admin_id == admin_id)
 
         stmt = (
             select(Submission)
@@ -787,11 +863,7 @@ class SubmissionService:
                 joinedload(Submission.seller),
                 joinedload(Submission.locked_by_admin),
             )
-            .where(
-                Submission.id == submission_id,
-                Submission.status == SubmissionStatus.IN_REVIEW,
-                Submission.locked_by_admin_id == admin_id,
-            )
+            .where(*conditions)
         )
         return (await self._session.execute(stmt)).scalar_one_or_none()
 
@@ -806,7 +878,18 @@ class SubmissionService:
         return True
 
     async def get_admin_active_submissions(self, admin_id: int) -> list[Submission]:
-        """Возвращает карточки, заблокированные текущим админом."""
+        """Возвращает карточки в работе.
+        Chief admin видит все карточки в работе (заблокированные любым админом).
+        Обычный админ видит только свои заблокированные карточки.
+        """
+
+        is_chief = await self._is_chief_admin(admin_id)
+
+        conditions = [Submission.status == SubmissionStatus.IN_REVIEW]
+        if not is_chief:
+            # Обычный админ видит только свои заблокированные карточки
+            conditions.append(Submission.locked_by_admin_id == admin_id)
+        # Chief admin видит все активные карточки (независимо от locked_by_admin_id)
 
         stmt = (
             select(Submission)
@@ -815,10 +898,7 @@ class SubmissionService:
                 joinedload(Submission.seller),
                 joinedload(Submission.locked_by_admin),
             )
-            .where(
-                Submission.status == SubmissionStatus.IN_REVIEW,
-                Submission.locked_by_admin_id == admin_id,
-            )
+            .where(*conditions)
             .order_by(Submission.assigned_at.asc(), Submission.id.asc())
         )
         return list((await self._session.execute(stmt)).scalars().all())

@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.database.models.enums import UserLanguage
 from src.database.models.user import User
 from src.keyboards import language_choice_keyboard, seller_main_inline_keyboard
-from src.services import SubmissionService, UserService
+from src.services import BillingService, SubmissionService, UserService
 from src.states.registration_state import RegistrationState
 from src.utils.ui_builder import GDPXRenderer
 
@@ -24,6 +24,7 @@ async def _send_welcome_banner(
     message: Message,
     user: User,
     dashboard: dict[str, object],
+    total_earned: object,
 ) -> None:
     render_text = GDPXRenderer().render_dashboard(
         {
@@ -32,7 +33,8 @@ async def _send_welcome_banner(
             "in_review_count": 0,
             "approved_count": int(dashboard.get("accepted", 0)),
             "rejected_count": int(dashboard.get("rejected", 0)),
-            "total_payout_amount": dashboard.get("balance"),
+            "total_payout_amount": total_earned,
+            "payout_label": "Общий заработок",
         },
     )
     # Hide legacy reply keyboard before opening the inline profile hub.
@@ -66,10 +68,12 @@ async def on_start(message: Message, state: FSMContext, session: AsyncSession) -
     if existing_user is not None:
         await state.clear()
         dashboard = await SubmissionService(session=session).get_user_dashboard_stats(user_id=existing_user.id)
+        total_earned = await BillingService(session=session).get_user_total_paid_amount(existing_user.id)
         await _send_welcome_banner(
             message,
             existing_user,
             dashboard,
+            total_earned,
         )
         return
 
@@ -80,22 +84,18 @@ async def on_start(message: Message, state: FSMContext, session: AsyncSession) -
     )
 
 
-@router.message(RegistrationState.waiting_for_language, F.text.in_({"Русский", "English"}))
+@router.message(RegistrationState.waiting_for_language, F.text == "Русский")
 async def on_language_selected(
     message: Message,
     state: FSMContext,
     session: AsyncSession,
 ) -> None:
-    """Завершает регистрацию после выбора языка."""
+    """Завершает регистрацию — интерфейс только на русском."""
 
     if message.from_user is None or message.text is None:
         return
 
-    language_map: dict[str, UserLanguage] = {
-        "Русский": UserLanguage.RU,
-        "English": UserLanguage.EN,
-    }
-    selected_language = language_map[message.text]
+    selected_language = UserLanguage.RU
 
     service = UserService(session=session)
     user = await service.register_seller(
@@ -105,7 +105,8 @@ async def on_language_selected(
 
     await state.clear()
     dashboard = await SubmissionService(session=session).get_user_dashboard_stats(user_id=user.id)
-    await _send_welcome_banner(message, user, dashboard)
+    total_earned = await BillingService(session=session).get_user_total_paid_amount(user.id)
+    await _send_welcome_banner(message, user, dashboard, total_earned)
 
 
 @router.message(RegistrationState.waiting_for_language)

@@ -8,25 +8,34 @@ from src.keyboards.callbacks import (
     CB_ADMIN_QUEUE,
     CB_ADMIN_REPORT_SUBMISSION,
     CB_ADMIN_RESTRICT,
-    CB_ADMIN_STATS,
+    CB_ADMIN_SEARCH_SIM,
     CB_ADMIN_UNRESTRICT,
+    CB_GRADE_ACCEPT,
+    CB_GRADE_BLOCKED,
+    CB_GRADE_NOT_SCAN,
+    CB_GRADE_OTHER,
+    CB_GRADE_TAKE,
     CB_MOD_ACCEPT,
     CB_MOD_DEBIT,
+    CB_MOD_HOLD_SELECT,
+    CB_MOD_HOLD_SKIP,
     CB_MOD_REJECT,
     CB_MOD_REJTPL,
     CB_MOD_REJTPL_BACK,
     CB_MOD_TAKE,
     CB_MOD_TAKE_PICK,
+    CB_ADMIN_ARCHIVE,
+    CB_ADMIN_BROADCAST,
     CB_NOOP,
     CB_PAY_CANCEL,
     CB_PAY_CONFIRM,
+    CB_PAY_FINAL_CONFIRM,
     CB_PAY_MARK,
     CB_PAY_TRASH,
     CB_SELLER_MENU_INFO,
     CB_SELLER_MENU_MATERIAL,
     CB_SELLER_MENU_PAYHIST,
     CB_SELLER_MENU_PROFILE,
-    CB_SELLER_MENU_QUICK_ADD,
     CB_SELLER_MENU_SELL,
     CB_SELLER_MENU_SUPPORT,
 )
@@ -41,10 +50,15 @@ def admin_main_inline_keyboard(*, show_payout_finance: bool = False) -> InlineKe
     rows: list[list[InlineKeyboardButton]] = [
         [InlineKeyboardButton(text="📜 Очередь", callback_data=CB_ADMIN_QUEUE)],
         [InlineKeyboardButton(text="🛡 В работе", callback_data=CB_ADMIN_INWORK_HUB)],
-        [InlineKeyboardButton(text="💰 Выплаты", callback_data=CB_ADMIN_PAYOUTS)],
+        [
+            InlineKeyboardButton(text="💰 Выплаты", callback_data=CB_ADMIN_PAYOUTS),
+        ],
+        [
+            InlineKeyboardButton(text="📡 Рассылка", callback_data=CB_ADMIN_BROADCAST),
+            InlineKeyboardButton(text="🗄 Архив (7д)", callback_data=CB_ADMIN_ARCHIVE),
+        ],
+        [InlineKeyboardButton(text="🔍 Поиск симки", callback_data=CB_ADMIN_SEARCH_SIM)],
     ]
-    if show_payout_finance:
-        rows.append([InlineKeyboardButton(text="📊 Статистика", callback_data=CB_ADMIN_STATS)])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
@@ -52,14 +66,11 @@ def seller_main_inline_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [InlineKeyboardButton(text="👤 Профиль", callback_data=CB_SELLER_MENU_PROFILE)],
-            [
-                InlineKeyboardButton(text="📤 Сдать материал", callback_data=CB_SELLER_MENU_SELL),
-                InlineKeyboardButton(text="🚀 Быстро", callback_data=CB_SELLER_MENU_QUICK_ADD),
-            ],
-            [InlineKeyboardButton(text="🧾 Мои номера", callback_data=CB_SELLER_MENU_MATERIAL)],
+            [InlineKeyboardButton(text="📥 Сдать материал", callback_data=CB_SELLER_MENU_SELL)],
+            [InlineKeyboardButton(text="📄 Мои номера", callback_data=CB_SELLER_MENU_MATERIAL)],
             [
                 InlineKeyboardButton(text="💸 История выплат", callback_data=CB_SELLER_MENU_PAYHIST),
-                InlineKeyboardButton(text="ℹ️ INFO", callback_data=CB_SELLER_MENU_INFO),
+                InlineKeyboardButton(text="ℹ️ Помощь", callback_data=CB_SELLER_MENU_INFO),
             ],
             [InlineKeyboardButton(text="🆘 Поддержка", callback_data=CB_SELLER_MENU_SUPPORT)],
         ]
@@ -67,21 +78,48 @@ def seller_main_inline_keyboard() -> InlineKeyboardMarkup:
 
 
 def moderation_item_keyboard(submission_id: int) -> InlineKeyboardMarkup:
-    """Кнопки модерации для симки pending."""
+    """Кнопка «Взять в работу» для pending-симки."""
 
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text="Взять в работу",
-                    callback_data=f"{CB_MOD_TAKE}:{submission_id}",
-                ),
-                InlineKeyboardButton(
-                    text="Reject",
-                    callback_data=f"{CB_MOD_REJECT}:{submission_id}",
+                    text="🔒 Взять в работу",
+                    callback_data=f"{CB_GRADE_TAKE}:{submission_id}",
                 ),
             ],
             _inline_back_row(),
+        ]
+    )
+
+
+def grading_matrix_keyboard(submission_id: int) -> InlineKeyboardMarkup:
+    """Матрица оценки — одноклавишные вердикты после взятия симки в работу."""
+
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="✅ ЗАЧЁТ",
+                    callback_data=f"{CB_GRADE_ACCEPT}:{submission_id}",
+                ),
+            ],
+            [
+                InlineKeyboardButton(
+                    text="❌ Брак: Не скан",
+                    callback_data=f"{CB_GRADE_NOT_SCAN}:{submission_id}",
+                ),
+                InlineKeyboardButton(
+                    text="❌ Брак: Блок на холде",
+                    callback_data=f"{CB_GRADE_BLOCKED}:{submission_id}",
+                ),
+            ],
+            [
+                InlineKeyboardButton(
+                    text="❌ Брак: Другое",
+                    callback_data=f"{CB_GRADE_OTHER}:{submission_id}",
+                ),
+            ],
         ]
     )
 
@@ -162,6 +200,26 @@ def payout_confirm_keyboard(user_id: int, *, ledger_page: int = 0) -> InlineKeyb
     )
 
 
+def payout_final_confirm_keyboard(user_id: int, *, ledger_page: int = 0) -> InlineKeyboardMarkup:
+    """Финальное подтверждение перед отправкой чека в CryptoBot."""
+
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="✅ Точно отправить чек",
+                    callback_data=f"{CB_PAY_FINAL_CONFIRM}:{user_id}:{ledger_page}",
+                ),
+                InlineKeyboardButton(
+                    text="❌ Отмена",
+                    callback_data=f"{CB_PAY_CANCEL}:{user_id}:{ledger_page}",
+                ),
+            ],
+            _inline_back_row(),
+        ]
+    )
+
+
 def search_report_keyboard(submission_id: int, seller_user_id: int | None = None) -> InlineKeyboardMarkup:
     """Кнопка открытия детального отчета по найденному товару."""
 
@@ -211,3 +269,16 @@ def pagination_keyboard(prefix: str, page: int, total: int, page_size: int, quer
     rows.append(nav)
     rows.append(_inline_back_row())
     return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def hold_condition_keyboard(submission_id: int) -> InlineKeyboardMarkup:
+    """Выбор условия холда для переслана товара."""
+
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="Безхолд", callback_data=f"{CB_MOD_HOLD_SELECT}:{submission_id}:no_hold")],
+            [InlineKeyboardButton(text="15 минут", callback_data=f"{CB_MOD_HOLD_SELECT}:{submission_id}:15m")],
+            [InlineKeyboardButton(text="30 минут", callback_data=f"{CB_MOD_HOLD_SELECT}:{submission_id}:30m")],
+            [InlineKeyboardButton(text="Пропустить", callback_data=f"{CB_MOD_HOLD_SKIP}:{submission_id}")],
+        ]
+    )

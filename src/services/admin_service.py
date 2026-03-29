@@ -22,7 +22,7 @@ class AdminService:
 
         stmt = select(User.role).where(User.telegram_id == telegram_id)
         role = (await self._session.execute(stmt)).scalar_one_or_none()
-        return role in {UserRole.CHIEF_ADMIN, UserRole.PAYOUT_ADMIN, UserRole.ADMIN}
+        return role in {UserRole.CHIEF_ADMIN, UserRole.ADMIN}
 
     async def can_manage_payouts(self, telegram_id: int) -> bool:
         """Проверяет доступ к финансовой консоли (только chief_admin)."""
@@ -32,11 +32,11 @@ class AdminService:
         return role == UserRole.CHIEF_ADMIN
 
     async def can_access_payout_finance(self, telegram_id: int) -> bool:
-        """Доступ к разделу «Статистика», /withdraw и связанным финансовым экранам."""
+        """Доступ к разделу «Статистика», /withdraw и связанным финансовым экранам (chief_admin)."""
 
         stmt = select(User.role).where(User.telegram_id == telegram_id)
         role = (await self._session.execute(stmt)).scalar_one_or_none()
-        return role in {UserRole.CHIEF_ADMIN, UserRole.PAYOUT_ADMIN}
+        return role == UserRole.CHIEF_ADMIN
 
     async def create_category(
         self,

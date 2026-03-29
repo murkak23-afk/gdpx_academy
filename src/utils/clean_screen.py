@@ -16,6 +16,7 @@ async def send_clean_text_screen(
     text: str,
     key: str,
     reply_markup: InlineKeyboardMarkup | None = None,
+    parse_mode: str | None = None,
 ) -> Message:
     """Безопасно заменяет прошлый экран бота в чате на новый."""
 
@@ -27,6 +28,6 @@ async def send_clean_text_screen(
         except TelegramAPIError:
             pass
 
-    sent = await trigger_message.answer(non_empty_plain(text), reply_markup=reply_markup)
+    sent = await trigger_message.answer(non_empty_plain(text), reply_markup=reply_markup, parse_mode=parse_mode)
     _LAST_SCREEN_BY_CHAT[chat_id][key] = sent.message_id
     return sent

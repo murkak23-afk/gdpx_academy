@@ -1,0 +1,42 @@
+"""Объединённый роутер для приватных (личных) сообщений пользователя.
+
+Включает хендлеры:
+- ``start``      — /start, выбор языка, приветствие
+- ``seller``     — профиль, подача материала, история выплат и пр.
+- ``withdrawal`` — FSM вывода средств
+
+Роутер ограничен типом чата ``private``, чтобы команды не срабатывали
+в групповых чатах модерации.
+
+Почему так устроено?
+--------------------
+В aiogram 3 фильтры роутера применяются ко ВСЕМ дочерним роутерам.
+Значит, достаточно поставить ``F.chat.type == ChatType.PRIVATE`` один раз
+здесь — и все вложенные хендлеры автоматически игнорируют групповые чаты.
+Это чище, чем дублировать фильтр в каждом хендлере.
+
+Подключение в диспетчере (уже сделано в src/handlers/__init__.py)::
+
+    from src.handlers.user_private import user_private_router
+    dp.include_router(user_private_router)
+"""
+
+from __future__ import annotations
+
+from aiogram import F, Router
+from aiogram.enums import ChatType
+
+from src.handlers.seller import router as _seller_router
+from src.handlers.start import router as _start_router
+from src.handlers.withdrawal import router as _withdrawal_router
+
+# Корневой роутер для всего private-флоу пользователя.
+# Фильтр F.chat.type == ChatType.PRIVATE применяется ко всем дочерним роутерам.
+user_private_router = Router(name="user-private-router")
+user_private_router.message.filter(F.chat.type == ChatType.PRIVATE)
+user_private_router.callback_query.filter(F.message.chat.type == ChatType.PRIVATE)
+
+# Порядок важен: start — первым, чтобы /start перехватывался раньше seller-меню
+user_private_router.include_router(_start_router)
+user_private_router.include_router(_seller_router)
+user_private_router.include_router(_withdrawal_router)

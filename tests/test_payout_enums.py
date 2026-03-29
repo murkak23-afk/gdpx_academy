@@ -7,8 +7,8 @@ def test_payout_status_values() -> None:
     assert PayoutStatus.CANCELLED.value == "cancelled"
 
 
-def test_user_role_includes_payout_admin() -> None:
-    assert UserRole.PAYOUT_ADMIN.value == "payout_admin"
+def test_user_role_includes_chief_admin() -> None:
+    assert UserRole.CHIEF_ADMIN.value == "chief_admin"
 
 
 def test_user_role_includes_admin() -> None:

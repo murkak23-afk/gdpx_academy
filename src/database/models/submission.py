@@ -68,6 +68,7 @@ class Submission(Base, TimestampMixin):
     assigned_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     accepted_amount: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)
+    hold_assigned: Mapped[str | None] = mapped_column(String(60), nullable=True)
 
     seller = relationship("User", foreign_keys=[user_id], back_populates="submissions")
     admin = relationship(

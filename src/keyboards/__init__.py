@@ -3,7 +3,6 @@ from src.keyboards.constants import (
     BUTTON_ENTER_ADMIN_PANEL,
     BUTTON_EXIT_ADMIN_PANEL,
     CALLBACK_INLINE_BACK,
-    COMMAND_ADM_OPER,
     REPLY_BTN_BACK,
     is_admin_main_menu_text,
     is_sell_esim_button,
@@ -12,12 +11,15 @@ from src.keyboards.constants import (
 )
 from src.keyboards.inline import (
     admin_main_inline_keyboard,
+    grading_matrix_keyboard,
+    hold_condition_keyboard,
     moderation_item_keyboard,
     moderation_reject_template_keyboard,
     moderation_review_keyboard,
     moderation_seller_group_keyboard,
     pagination_keyboard,
     payout_confirm_keyboard,
+    payout_final_confirm_keyboard,
     payout_mark_paid_keyboard,
     search_report_keyboard,
     seller_main_inline_keyboard,
@@ -26,13 +28,9 @@ from src.keyboards.reply import (
     FORWARD_REQ_CHAT_CHANNEL,
     FORWARD_REQ_CHAT_GROUP,
     FORWARD_REQ_USER_DM,
-    admin_main_menu_keyboard,
-    admin_payout_menu_keyboard,
-    categories_keyboard,
     forward_target_reply_keyboard,
     language_choice_keyboard,
     seller_main_menu_keyboard,
-    seller_submission_step_keyboard,
 )
 
 __all__ = [
@@ -41,7 +39,7 @@ __all__ = [
     "BUTTON_EXIT_ADMIN_PANEL",
     "ADMIN_MAIN_MENU_TEXTS",
     "CALLBACK_INLINE_BACK",
-    "COMMAND_ADM_OPER",
+
     "normalize_reply_menu_text",
     "match_admin_menu_canonical",
     "is_admin_main_menu_text",
@@ -49,13 +47,11 @@ __all__ = [
     "language_choice_keyboard",
     "seller_main_menu_keyboard",
     "seller_main_inline_keyboard",
-    "seller_submission_step_keyboard",
-    "admin_main_menu_keyboard",
     "admin_main_inline_keyboard",
-    "admin_payout_menu_keyboard",
-    "categories_keyboard",
     "moderation_item_keyboard",
+    "grading_matrix_keyboard",
     "payout_confirm_keyboard",
+    "payout_final_confirm_keyboard",
     "FORWARD_REQ_CHAT_GROUP",
     "FORWARD_REQ_CHAT_CHANNEL",
     "FORWARD_REQ_USER_DM",
@@ -66,4 +62,5 @@ __all__ = [
     "pagination_keyboard",
     "payout_mark_paid_keyboard",
     "search_report_keyboard",
+    "hold_condition_keyboard",
 ]
