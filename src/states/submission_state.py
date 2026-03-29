@@ -9,5 +9,7 @@ class SubmissionState(StatesGroup):
     waiting_for_category = State()
     waiting_for_photo = State()
     waiting_for_description = State()
+    waiting_for_batch_delete_phone = State()
+    waiting_for_batch_csv_choice = State()
     waiting_for_material_edit_description = State()
     waiting_for_material_edit_media = State()

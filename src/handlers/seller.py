@@ -1,13 +1,26 @@
 from __future__ import annotations
 
+import asyncio
+import csv
 import hashlib
+import re
+from dataclasses import dataclass
 from datetime import datetime, timezone
+from io import StringIO
 
 from aiogram import Bot, F, Router
 from aiogram.exceptions import TelegramAPIError
 from aiogram.filters import Command, CommandStart, StateFilter
 from aiogram.fsm.context import FSMContext
-from aiogram.types import CallbackQuery, Document, InlineKeyboardButton, InlineKeyboardMarkup, Message
+from aiogram.types import (
+    BufferedInputFile,
+    CallbackQuery,
+    Document,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    InputMediaPhoto,
+    Message,
+)
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.config import get_settings
@@ -22,6 +35,11 @@ from src.keyboards.callbacks import (
     CB_CAPTCHA_START,
     CB_NOOP,
     CB_SELLER_CANCEL_FSM,
+    CB_SELLER_BATCH_CSV_NO,
+    CB_SELLER_BATCH_CSV_YES,
+    CB_SELLER_BATCH_REJECT,
+    CB_SELLER_BATCH_SEND,
+    CB_SELLER_FINISH_BATCH,
     CB_SELLER_FSM_CAT,
     CB_SELLER_INFO_FAQ,
     CB_SELLER_INFO_MANUALS,
@@ -81,6 +99,99 @@ MATERIAL_FILTER_ORDER = (
     MATERIAL_FILTER_DEBIT,
 )
 _renderer = GDPXRenderer()
+_batch_idle_tasks: dict[int, asyncio.Task] = {}
+
+# ---------- SPA-мануалы ----------
+_CB_MANUAL_OPEN = "seller:info:manual:open:"
+_CB_MANUAL_PHOTO_OPEN = "seller:info:manual:photo_open:"
+_CB_MANUAL_PHOTO_NAV = "seller:info:manual:photo_nav:"
+_CB_MANUAL_PHOTO_CLOSE = "seller:info:manual:photo_close"
+
+
+@dataclass(frozen=True)
+class ManualCard:
+    id: str
+    title: str
+    body: str
+    photos: tuple[str, ...] = ()
+
+
+_MANUALS: tuple[ManualCard, ...] = (
+    ManualCard(
+        id="quick_start",
+        title="Быстрый старт: первая отправка eSIM",
+        body=(
+            "1) Нажми «Продать eSIM» и выбери категорию.\n"
+            "2) Отправь фото или архив с материалом.\n"
+            "3) Укажи номер в формате +79999999999.\n"
+            "4) Дождись статуса в разделе «Материал»."
+        ),
+    ),
+    ManualCard(
+        id="quality_check",
+        title="Качество материалов: как избегать брака",
+        body=(
+            "1) Проверь читаемость и целостность файлов перед отправкой.\n"
+            "2) Не отправляй один и тот же номер повторно.\n"
+            "3) Для спорных кейсов сразу добавляй пояснение в описание.\n"
+            "4) Следи за причинами незачёта в истории, чтобы не повторять ошибки."
+        ),
+    ),
+    ManualCard(
+        id="payout_flow",
+        title="Выплаты: где смотреть суммы и статусы",
+        body=(
+            "1) Открой «История выплат» из главного меню.\n"
+            "2) Проверь статус каждой операции и итоговую сумму.\n"
+            "3) Если есть задержка, сверяй статусы материалов и payout-уведомления."
+        ),
+    ),
+)
+_MANUALS_BY_ID: dict[str, ManualCard] = {m.id: m for m in _MANUALS}
+
+
+def _manuals_root_text() -> str:
+    return "📚 Мануалы · Центр инструкций\n\nОткрой нужный мануал кнопкой ниже."
+
+
+def _manuals_root_keyboard() -> InlineKeyboardMarkup:
+    rows: list[list[InlineKeyboardButton]] = [
+        [InlineKeyboardButton(text=f"📘 {m.title}", callback_data=f"{_CB_MANUAL_OPEN}{m.id}")]
+        for m in _MANUALS
+    ]
+    rows.append([InlineKeyboardButton(text="⬅️ В INFO", callback_data=CB_SELLER_INFO_ROOT)])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def _manual_detail_text(manual: ManualCard) -> str:
+    lines = [f"📘 {manual.title}", "", manual.body]
+    if manual.photos:
+        lines.extend(["", f"🖼 Фото: {len(manual.photos)}"])
+    return "\n".join(lines)
+
+
+def _manual_detail_keyboard(manual: ManualCard) -> InlineKeyboardMarkup:
+    rows: list[list[InlineKeyboardButton]] = []
+    if manual.photos:
+        rows.append([InlineKeyboardButton(
+            text=f"🖼 Открыть фото ({len(manual.photos)})",
+            callback_data=f"{_CB_MANUAL_PHOTO_OPEN}{manual.id}",
+        )])
+    rows.append([InlineKeyboardButton(text="⬅️ К мануалам", callback_data=CB_SELLER_INFO_MANUALS)])
+    rows.append([InlineKeyboardButton(text="🏠 В INFO", callback_data=CB_SELLER_INFO_ROOT)])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def _manual_photo_keyboard(manual_id: str, index: int, total: int) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(text="◀️", callback_data=f"{_CB_MANUAL_PHOTO_NAV}{manual_id}:{(index - 1) % total}"),
+            InlineKeyboardButton(text=f"{index + 1}/{total}", callback_data=CB_NOOP),
+            InlineKeyboardButton(text="▶️", callback_data=f"{_CB_MANUAL_PHOTO_NAV}{manual_id}:{(index + 1) % total}"),
+        ],
+        [InlineKeyboardButton(text="❌ Закрыть", callback_data=_CB_MANUAL_PHOTO_CLOSE)],
+    ])
+
 
 SELLER_DELETABLE_STATUSES = {
     SubmissionStatus.PENDING,
@@ -89,11 +200,23 @@ SELLER_DELETABLE_STATUSES = {
     SubmissionStatus.NOT_A_SCAN,
 }
 
+REJECT_NO_NUMBER = "no_number"
+REJECT_BAD_FILE = "bad_file"
+REJECT_DUPLICATE_BATCH = "duplicate_batch"
+REJECT_NUMBER_WITHOUT_MEDIA = "number_without_media"
+
+REJECT_LABELS: dict[str, str] = {
+    REJECT_NO_NUMBER: "без номера",
+    REJECT_BAD_FILE: "неподдерживаемый файл",
+    REJECT_DUPLICATE_BATCH: "дубликат в батче",
+    REJECT_NUMBER_WITHOUT_MEDIA: "номер без фото/файла",
+}
+
 
 def _format_seller_esim_stats(user, stats: dict) -> str:
     """Текст раздела «Статистика» для продавца eSIM."""
 
-    nick = f"@{user.username}" if user.username else "нет username"
+    nick = f"@{user.username}" if user.username else f"@{user.telegram_id}"
     lines = [
         "Статистика eSIM",
         "",
@@ -118,7 +241,7 @@ def _format_seller_esim_stats(user, stats: dict) -> str:
 def _format_seller_profile(user, dashboard: dict, esim_stats: dict) -> str:
     """Компактный современный экран профиля продавца."""
 
-    nickname = f"@{user.username}" or "без username"
+    nickname = f"@{user.username}" if user.username else f"@{user.telegram_id}"
     if user.is_restricted:
         account_status = "ограничен"
     elif user.duplicate_timeout_until is not None:
@@ -169,7 +292,7 @@ def _stats_period_keyboard(active_period: str) -> InlineKeyboardMarkup:
 
 
 def _format_seller_stats_dashboard(user, stats: dict, *, period_label: str) -> str:
-    nick = f"@{user.username}" if user.username else "без username"
+    nick = f"@{user.username}" if user.username else f"@{user.telegram_id}"
     by_op = stats["by_main_operator"]
     operator_rows = sorted(
         ((name, int(count)) for name, count in by_op.items()),
@@ -203,7 +326,7 @@ def _info_root_keyboard(channel_url: str | None, chat_url: str | None) -> Inline
     if channel_url:
         links_row.append(InlineKeyboardButton(text="Канал", url=channel_url))
     if chat_url:
-        links_row.append(InlineKeyboardButton(text="Чат", url=chat_url))
+        links_row.append(InlineKeyboardButton(text="GDPX Academic | Чат", url=chat_url))
     if links_row:
         rows.append(links_row)
     rows.append(
@@ -295,6 +418,188 @@ def _seller_fsm_cancel_keyboard() -> InlineKeyboardMarkup:
             [InlineKeyboardButton(text="❌ Отменить операцию", callback_data=CB_SELLER_CANCEL_FSM)],
         ]
     )
+
+
+def _batch_action_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(text="✅ Отправить", callback_data=CB_SELLER_BATCH_SEND),
+                InlineKeyboardButton(text="🗑 Отклонить", callback_data=CB_SELLER_BATCH_REJECT),
+            ],
+            [InlineKeyboardButton(text="❌ Отменить операцию", callback_data=CB_SELLER_CANCEL_FSM)],
+        ]
+    )
+
+
+def _batch_csv_choice_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(text="📄 Скачать CSV", callback_data=CB_SELLER_BATCH_CSV_YES),
+                InlineKeyboardButton(text="Без CSV", callback_data=CB_SELLER_BATCH_CSV_NO),
+            ],
+        ]
+    )
+
+
+def _batch_status_text(*, accepted: int, rejected: int) -> str:
+    if accepted <= 1 and rejected == 0:
+        return (
+            "Материал отправлен на модерацию. Можешь отправить ещё фото или архив "
+            "(удобно с подписью +79999999999 в том же сообщении — сразу на модерацию)."
+        )
+    return f"Добавлено: {accepted} шт. | Отклонено: {rejected} шт."
+
+
+async def _show_batch_action_menu_after_idle(message: Message, state: FSMContext, user_id: int) -> None:
+    await asyncio.sleep(3)
+    data = await state.get_data()
+    status_msg_id = data.get("batch_status_msg_id")
+    if not status_msg_id:
+        return
+    try:
+        await message.bot.edit_message_reply_markup(
+            chat_id=message.chat.id,
+            message_id=int(status_msg_id),
+            reply_markup=_batch_action_keyboard(),
+        )
+    except TelegramAPIError:
+        return
+
+
+def _schedule_batch_idle_menu(message: Message, state: FSMContext, user_id: int) -> None:
+    prev = _batch_idle_tasks.get(user_id)
+    if prev is not None and not prev.done():
+        prev.cancel()
+    _batch_idle_tasks[user_id] = asyncio.create_task(_show_batch_action_menu_after_idle(message, state, user_id))
+
+
+async def _refresh_batch_status_message(message: Message, state: FSMContext, *, show_actions: bool = False) -> None:
+    data = await state.get_data()
+    accepted = int(data.get("batch_accepted", 0))
+    rejected = int(data.get("batch_rejected", 0))
+    status_msg_id = data.get("batch_status_msg_id")
+    text = _batch_status_text(accepted=accepted, rejected=rejected)
+    keyboard = _batch_action_keyboard() if show_actions else None
+
+    if status_msg_id:
+        try:
+            await message.bot.edit_message_text(
+                text=text,
+                chat_id=message.chat.id,
+                message_id=int(status_msg_id),
+                reply_markup=keyboard,
+            )
+            return
+        except TelegramAPIError:
+            pass
+
+    sent = await message.answer(text=text, reply_markup=keyboard)
+    await state.update_data(batch_status_msg_id=sent.message_id)
+
+
+async def _batch_inc(state: FSMContext, key: str, delta: int = 1) -> None:
+    data = await state.get_data()
+    current = int(data.get(key, 0))
+    await state.update_data(**{key: current + delta})
+
+
+def _normalize_phone_batch(raw: str | None) -> str | None:
+    strict = normalize_phone_strict(raw or "")
+    if strict is not None:
+        return strict
+    digits = re.sub(r"\D+", "", raw or "")
+    if not digits:
+        return None
+    if len(digits) == 11 and digits.startswith("8"):
+        digits = "7" + digits[1:]
+    elif len(digits) == 10:
+        digits = "7" + digits
+    if len(digits) == 11 and digits.startswith("7"):
+        return f"+{digits}"
+    return None
+
+
+async def _batch_add_row(state: FSMContext, *, status: str, phone: str | None, reason: str) -> None:
+    data = await state.get_data()
+    rows = list(data.get("batch_rows", []))
+    rows.append(
+        {
+            "time": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC"),
+            "status": status,
+            "phone": phone or "",
+            "reason": reason,
+        }
+    )
+    await state.update_data(batch_rows=rows)
+
+
+async def _batch_reject(state: FSMContext, *, reason_code: str, phone: str | None = None) -> None:
+    await _batch_inc(state, "batch_rejected", 1)
+    data = await state.get_data()
+    reasons = dict(data.get("batch_reject_reasons", {}))
+    reasons[reason_code] = int(reasons.get(reason_code, 0)) + 1
+    await state.update_data(batch_reject_reasons=reasons)
+    await _batch_add_row(
+        state,
+        status="rejected",
+        phone=phone,
+        reason=REJECT_LABELS.get(reason_code, reason_code),
+    )
+
+
+async def _batch_accept(state: FSMContext, *, phone: str) -> None:
+    await _batch_inc(state, "batch_accepted", 1)
+    await _batch_add_row(state, status="accepted", phone=phone, reason="")
+
+
+async def _batch_mark_seen_or_duplicate(state: FSMContext, *, phone: str, file_unique_id: str) -> bool:
+    data = await state.get_data()
+    seen_numbers = set(str(x) for x in data.get("batch_seen_numbers", []))
+    seen_files = set(str(x) for x in data.get("batch_seen_file_uids", []))
+    if phone in seen_numbers or file_unique_id in seen_files:
+        return True
+    seen_numbers.add(phone)
+    seen_files.add(file_unique_id)
+    await state.update_data(
+        batch_seen_numbers=sorted(seen_numbers),
+        batch_seen_file_uids=sorted(seen_files),
+    )
+    return False
+
+
+def _batch_report_text(accepted: int, rejected: int, reasons: dict[str, int] | None = None) -> str:
+    total = accepted + rejected
+    lines = [
+        "📦 Загрузка завершена.\n\n"
+        f"Всего обработано: <b>{total}</b>\n"
+        f"✅ Принято: <b>{accepted}</b>\n"
+        f"❌ Отклонено: <b>{rejected}</b>"
+    ]
+    if reasons:
+        lines.append("\n\nПричины отклонений:")
+        for code, label in REJECT_LABELS.items():
+            cnt = int(reasons.get(code, 0))
+            if cnt > 0:
+                lines.append(f"• {label}: <b>{cnt}</b>")
+    return "".join(lines)
+
+
+def _batch_csv_file(rows: list[dict[str, str]]) -> BufferedInputFile:
+    buf = StringIO()
+    writer = csv.writer(buf)
+    writer.writerow(["time", "status", "phone", "reason"])
+    for row in rows:
+        writer.writerow([
+            row.get("time", ""),
+            row.get("status", ""),
+            row.get("phone", ""),
+            row.get("reason", ""),
+        ])
+    content = buf.getvalue().encode("utf-8-sig")
+    filename = f"batch_report_{datetime.now(timezone.utc):%Y%m%d_%H%M%S}.csv"
+    return BufferedInputFile(content, filename=filename)
 
 
 def _seller_fsm_categories_keyboard(categories) -> InlineKeyboardMarkup:
@@ -1240,7 +1545,16 @@ async def on_seller_fsm_category_pick(callback: CallbackQuery, state: FSMContext
     if category is None or not category.is_active:
         await callback.answer("Категория недоступна", show_alert=True)
         return
-    await state.update_data(category_id=category.id)
+    await state.update_data(
+        category_id=category.id,
+        batch_accepted=0,
+        batch_rejected=0,
+        batch_reject_reasons={},
+        batch_rows=[],
+        batch_seen_numbers=[],
+        batch_seen_file_uids=[],
+        batch_status_msg_id=None,
+    )
     await state.set_state(SubmissionState.waiting_for_photo)
     await callback.answer()
     if callback.message is not None:
@@ -1273,6 +1587,8 @@ async def on_seller_fsm_category_pick(callback: CallbackQuery, state: FSMContext
         SubmissionState.waiting_for_category,
         SubmissionState.waiting_for_photo,
         SubmissionState.waiting_for_description,
+        SubmissionState.waiting_for_batch_delete_phone,
+        SubmissionState.waiting_for_batch_csv_choice,
     ),
 )
 async def on_seller_cancel_fsm(callback: CallbackQuery, state: FSMContext, session: AsyncSession) -> None:
@@ -1303,6 +1619,134 @@ async def on_seller_cancel_fsm(callback: CallbackQuery, state: FSMContext, sessi
         )
 
 
+@router.callback_query(
+    F.data.in_({CB_SELLER_FINISH_BATCH, CB_SELLER_BATCH_SEND}),
+    StateFilter(
+        SubmissionState.waiting_for_photo,
+        SubmissionState.waiting_for_description,
+    ),
+)
+async def on_seller_finish_batch(callback: CallbackQuery, state: FSMContext, session: AsyncSession) -> None:
+    if callback.from_user is None:
+        return
+    user = await UserService(session=session).get_by_telegram_id(callback.from_user.id)
+    if user is None:
+        await callback.answer("Сначала /start", show_alert=True)
+        return
+
+    data = await state.get_data()
+    accepted = int(data.get("batch_accepted", 0))
+    rejected = int(data.get("batch_rejected", 0))
+    reasons = dict(data.get("batch_reject_reasons", {}))
+    rows = list(data.get("batch_rows", []))
+
+    await state.update_data(batch_final_accepted=accepted, batch_final_rejected=rejected, batch_final_reasons=reasons)
+    await state.set_state(SubmissionState.waiting_for_batch_csv_choice)
+
+    await callback.answer("Загрузка завершена")
+    if callback.message is not None:
+        await edit_message_text_safe(
+            callback.message,
+            _batch_report_text(accepted, rejected, reasons),
+            parse_mode="HTML",
+            reply_markup=_batch_csv_choice_keyboard(),
+        )
+
+
+@router.callback_query(F.data == CB_SELLER_BATCH_REJECT, StateFilter(SubmissionState.waiting_for_photo))
+async def on_seller_batch_reject_request(callback: CallbackQuery, state: FSMContext) -> None:
+    await state.set_state(SubmissionState.waiting_for_batch_delete_phone)
+    await callback.answer()
+    if callback.message is not None:
+        await callback.message.answer(
+            "Введи номер телефона для удаления из всей БХ (например, +79999999999).",
+            reply_markup=_seller_fsm_cancel_keyboard(),
+        )
+
+
+@router.message(SubmissionState.waiting_for_batch_delete_phone, F.text)
+async def on_seller_batch_delete_phone(message: Message, state: FSMContext, session: AsyncSession) -> None:
+    if message.text is None:
+        return
+    phone = _normalize_phone_batch(message.text)
+    if phone is None:
+        await message.answer("Неверный формат номера. Введи номер в формате +79999999999.")
+        return
+
+    deleted = await SubmissionService(session=session).delete_by_phone_global(phone)
+    await state.set_state(SubmissionState.waiting_for_photo)
+    await message.answer(f"Удалено из БХ по номеру {phone}: {deleted} записей.")
+    await _refresh_batch_status_message(message, state, show_actions=True)
+
+
+@router.callback_query(F.data == CB_SELLER_BATCH_CSV_YES, StateFilter(SubmissionState.waiting_for_batch_csv_choice))
+async def on_seller_batch_csv_yes(callback: CallbackQuery, state: FSMContext, session: AsyncSession) -> None:
+    if callback.from_user is None:
+        return
+    user = await UserService(session=session).get_by_telegram_id(callback.from_user.id)
+    if user is None:
+        await callback.answer("Сначала /start", show_alert=True)
+        return
+
+    data = await state.get_data()
+    rows = list(data.get("batch_rows", []))
+    await state.clear()
+
+    dashboard = await SubmissionService(session=session).get_user_dashboard_stats(user_id=user.id)
+    profile_text = _renderer.render_user_profile(
+        {
+            "username": user.username or "resident",
+            "user_id": user.telegram_id,
+            "approved_count": int(dashboard.get("accepted", 0)),
+            "pending_count": int(dashboard.get("pending", 0)),
+            "rejected_count": int(dashboard.get("rejected", 0)),
+        }
+    )
+
+    await callback.answer("CSV отправлен")
+    if callback.message is not None:
+        if rows:
+            await callback.message.answer_document(
+                document=_batch_csv_file(rows),
+                caption="📄 CSV-отчёт по батчу",
+            )
+        await callback.message.answer(
+            profile_text,
+            reply_markup=seller_main_inline_keyboard(),
+            parse_mode="HTML",
+        )
+
+
+@router.callback_query(F.data == CB_SELLER_BATCH_CSV_NO, StateFilter(SubmissionState.waiting_for_batch_csv_choice))
+async def on_seller_batch_csv_no(callback: CallbackQuery, state: FSMContext, session: AsyncSession) -> None:
+    if callback.from_user is None:
+        return
+    user = await UserService(session=session).get_by_telegram_id(callback.from_user.id)
+    if user is None:
+        await callback.answer("Сначала /start", show_alert=True)
+        return
+
+    await state.clear()
+    dashboard = await SubmissionService(session=session).get_user_dashboard_stats(user_id=user.id)
+    profile_text = _renderer.render_user_profile(
+        {
+            "username": user.username or "resident",
+            "user_id": user.telegram_id,
+            "approved_count": int(dashboard.get("accepted", 0)),
+            "pending_count": int(dashboard.get("pending", 0)),
+            "rejected_count": int(dashboard.get("rejected", 0)),
+        }
+    )
+
+    await callback.answer("Без CSV")
+    if callback.message is not None:
+        await callback.message.answer(
+            profile_text,
+            reply_markup=seller_main_inline_keyboard(),
+            parse_mode="HTML",
+        )
+
+
 @router.message(SubmissionState.waiting_for_category)
 async def on_category_selected(
     message: Message,
@@ -1324,7 +1768,16 @@ async def on_category_selected(
         await message.answer("Выбери категорию кнопками ниже.")
         return
 
-    await state.update_data(category_id=category.id)
+    await state.update_data(
+        category_id=category.id,
+        batch_accepted=0,
+        batch_rejected=0,
+        batch_reject_reasons={},
+        batch_rows=[],
+        batch_seen_numbers=[],
+        batch_seen_file_uids=[],
+        batch_status_msg_id=None,
+    )
     await state.set_state(SubmissionState.waiting_for_photo)
     await message.answer(
         text=FSMProgressFormatter.format_fsm_message(
@@ -1440,6 +1893,7 @@ async def _finalize_submission_after_upload(
         description_text=description_text,
         attachment_type=attachment_type,
     )
+    await _batch_accept(state, phone=description_text)
 
     if stay_in_batch:
         await state.update_data(
@@ -1449,16 +1903,9 @@ async def _finalize_submission_after_upload(
             attachment_type=ATTACHMENT_PHOTO,
         )
         await state.set_state(SubmissionState.waiting_for_photo)
-        await _send_fsm_step_message(
-            message,
-            state,
-            text=(
-                "Материал отправлен на модерацию. Можешь отправить ещё фото или архив "
-                "(удобно с подписью +79999999999 в том же сообщении — сразу на модерацию) "
-                "или нажми «❌ Отменить операцию», чтобы выйти в хаб."
-            ),
-            reply_markup=_seller_fsm_cancel_keyboard(),
-        )
+        await _refresh_batch_status_message(message, state)
+        if message.from_user is not None:
+            _schedule_batch_idle_menu(message, state, message.from_user.id)
     else:
         await state.clear()
         dashboard = await SubmissionService(session=session).get_user_dashboard_stats(user_id=user.id)
@@ -1561,50 +2008,42 @@ async def on_photo_received(
     best_photo = message.photo[-1]
     image_sha256 = hashlib.sha256(best_photo.file_unique_id.encode()).hexdigest()
 
-    caption = normalize_phone_strict(message.caption or "")
-    if caption is not None:
-        if await submission_service.is_duplicate_accepted(image_sha256=image_sha256):
-            await UserService(session=session).set_duplicate_timeout(user_id=user.id, minutes=60)
-            await state.clear()
-            await message.answer(
-                "Эта симка уже была принята ранее. Выдан таймаут 60 минут и ограничение до прохождения капчи.",
-                reply_markup=seller_main_inline_keyboard(),
-            )
-            return
-        await _finalize_submission_after_upload(
-            message=message,
-            state=state,
-            session=session,
-            bot=bot,
-            user=user,
-            category_id=category_id,
-            telegram_file_id=best_photo.file_id,
-            file_unique_id=best_photo.file_unique_id,
-            image_sha256=image_sha256,
-            attachment_type=ATTACHMENT_PHOTO,
-            description_text=caption,
-            stay_in_batch=True,
+    caption = _normalize_phone_batch(message.caption or "")
+    if caption is None:
+        await _batch_reject(state, reason_code=REJECT_NO_NUMBER)
+        await _refresh_batch_status_message(message, state)
+        _schedule_batch_idle_menu(message, state, message.from_user.id)
+        return
+
+    if await _batch_mark_seen_or_duplicate(state, phone=caption, file_unique_id=best_photo.file_unique_id):
+        await _batch_reject(state, reason_code=REJECT_DUPLICATE_BATCH, phone=caption)
+        await _refresh_batch_status_message(message, state)
+        _schedule_batch_idle_menu(message, state, message.from_user.id)
+        return
+
+    if await submission_service.is_duplicate_accepted(image_sha256=image_sha256):
+        await UserService(session=session).set_duplicate_timeout(user_id=user.id, minutes=60)
+        await state.clear()
+        await message.answer(
+            "Эта симка уже была принята ранее. Выдан таймаут 60 минут и ограничение до прохождения капчи.",
+            reply_markup=seller_main_inline_keyboard(),
         )
         return
-    raw_caption = (message.caption or "").strip()
-    if raw_caption:
-        await message.answer(
-            "Подпись к фото не в формате номера +79999999999 (ровно +7 и 10 цифр). "
-            "Отправь номер **отдельным сообщением** ниже.",
-            parse_mode="Markdown",
-            reply_markup=_seller_fsm_cancel_keyboard(),
-        )
-
-    await _store_file_and_ask_description(
-        state=state,
+    await _finalize_submission_after_upload(
         message=message,
+        state=state,
         session=session,
-        submission_service=submission_service,
+        bot=bot,
         user=user,
-        file_id=best_photo.file_id,
+        category_id=category_id,
+        telegram_file_id=best_photo.file_id,
         file_unique_id=best_photo.file_unique_id,
+        image_sha256=image_sha256,
         attachment_type=ATTACHMENT_PHOTO,
+        description_text=caption,
+        stay_in_batch=True,
     )
+    return
 
 
 @router.message(SubmissionState.waiting_for_photo, F.document)
@@ -1622,11 +2061,9 @@ async def on_archive_document_received(
 
     document: Document = message.document
     if not is_allowed_archive_document(document):
-        await message.answer(
-            "Пришли архив известного формата (zip, rar, 7z, tar, gz, …) **файлом**.\nИли отправь фото как картинку.",
-            parse_mode="Markdown",
-            reply_markup=_seller_fsm_cancel_keyboard(),
-        )
+        await _batch_reject(state, reason_code=REJECT_BAD_FILE)
+        await _refresh_batch_status_message(message, state)
+        _schedule_batch_idle_menu(message, state, message.from_user.id)
         return
 
     user = await UserService(session=session).get_by_telegram_id(message.from_user.id)
@@ -1644,50 +2081,42 @@ async def on_archive_document_received(
 
     image_sha256 = hashlib.sha256(document.file_unique_id.encode()).hexdigest()
 
-    caption = normalize_phone_strict(message.caption or "")
-    if caption is not None:
-        if await submission_service.is_duplicate_accepted(image_sha256=image_sha256):
-            await UserService(session=session).set_duplicate_timeout(user_id=user.id, minutes=60)
-            await state.clear()
-            await message.answer(
-                "Эта симка уже была принята ранее. Выдан таймаут 60 минут и ограничение до прохождения капчи.",
-                reply_markup=seller_main_inline_keyboard(),
-            )
-            return
-        await _finalize_submission_after_upload(
-            message=message,
-            state=state,
-            session=session,
-            bot=bot,
-            user=user,
-            category_id=category_id,
-            telegram_file_id=document.file_id,
-            file_unique_id=document.file_unique_id,
-            image_sha256=image_sha256,
-            attachment_type=ATTACHMENT_DOCUMENT,
-            description_text=caption,
-            stay_in_batch=True,
+    caption = _normalize_phone_batch(message.caption or "")
+    if caption is None:
+        await _batch_reject(state, reason_code=REJECT_NO_NUMBER)
+        await _refresh_batch_status_message(message, state)
+        _schedule_batch_idle_menu(message, state, message.from_user.id)
+        return
+
+    if await _batch_mark_seen_or_duplicate(state, phone=caption, file_unique_id=document.file_unique_id):
+        await _batch_reject(state, reason_code=REJECT_DUPLICATE_BATCH, phone=caption)
+        await _refresh_batch_status_message(message, state)
+        _schedule_batch_idle_menu(message, state, message.from_user.id)
+        return
+
+    if await submission_service.is_duplicate_accepted(image_sha256=image_sha256):
+        await UserService(session=session).set_duplicate_timeout(user_id=user.id, minutes=60)
+        await state.clear()
+        await message.answer(
+            "Эта симка уже была принята ранее. Выдан таймаут 60 минут и ограничение до прохождения капчи.",
+            reply_markup=seller_main_inline_keyboard(),
         )
         return
-    raw_caption = (message.caption or "").strip()
-    if raw_caption:
-        await message.answer(
-            "Подпись к файлу не в формате номера +79999999999 (ровно +7 и 10 цифр). "
-            "Отправь номер **отдельным сообщением** ниже.",
-            parse_mode="Markdown",
-            reply_markup=_seller_fsm_cancel_keyboard(),
-        )
-
-    await _store_file_and_ask_description(
-        state=state,
+    await _finalize_submission_after_upload(
         message=message,
+        state=state,
         session=session,
-        submission_service=submission_service,
+        bot=bot,
         user=user,
-        file_id=document.file_id,
+        category_id=category_id,
+        telegram_file_id=document.file_id,
         file_unique_id=document.file_unique_id,
+        image_sha256=image_sha256,
         attachment_type=ATTACHMENT_DOCUMENT,
+        description_text=caption,
+        stay_in_batch=True,
     )
+    return
 
 
 @router.message(SubmissionState.waiting_for_photo)
@@ -1739,52 +2168,11 @@ async def on_description_received(
         await _route_admin_menu_from_seller_fsm(message, state, session)
         return
 
-    data = await state.get_data()
-    category_id = data.get("category_id")
-    telegram_file_id = data.get("telegram_file_id")
-    file_unique_id = data.get("file_unique_id")
-    image_sha256 = data.get("image_sha256")
-    attachment_type = str(data.get("attachment_type", ATTACHMENT_PHOTO))
-    if not all([category_id, telegram_file_id, file_unique_id, image_sha256]):
-        await state.clear()
-        await message.answer(
-            "Сессия устарела. Начни заново через «Продать eSIM».",
-            reply_markup=seller_main_inline_keyboard(),
-        )
-        return
-
-    user = await UserService(session=session).get_by_telegram_id(message.from_user.id)
-    if user is None:
-        await state.clear()
-        await message.answer("Сначала пройди регистрацию через /start.")
-        return
-
-    description_text = normalize_phone_strict(message.text)
-    if description_text is None:
-        await _send_fsm_step_message(
-            message,
-            state,
-            text=PHONE_NORM_ERROR_HTML,
-            reply_markup=_seller_fsm_cancel_keyboard(),
-            parse_mode="HTML",
-        )
-        return
-
+    # Новый режим загрузки: только готовые сообщения «медиа + номер».
     await state.set_state(SubmissionState.waiting_for_photo)
-    await _finalize_submission_after_upload(
-        message=message,
-        state=state,
-        session=session,
-        bot=bot,
-        user=user,
-        category_id=int(category_id),
-        telegram_file_id=str(telegram_file_id),
-        file_unique_id=str(file_unique_id),
-        image_sha256=str(image_sha256),
-        attachment_type=attachment_type,
-        description_text=description_text,
-        stay_in_batch=True,
-    )
+    await _batch_reject(state, reason_code=REJECT_NUMBER_WITHOUT_MEDIA)
+    await _refresh_batch_status_message(message, state)
+    _schedule_batch_idle_menu(message, state, message.from_user.id)
 
 
 @router.message(
@@ -1793,6 +2181,8 @@ async def on_description_received(
         SubmissionState.waiting_for_category,
         SubmissionState.waiting_for_photo,
         SubmissionState.waiting_for_description,
+        SubmissionState.waiting_for_batch_delete_phone,
+        SubmissionState.waiting_for_batch_csv_choice,
         SubmissionState.waiting_for_material_edit_description,
         SubmissionState.waiting_for_material_edit_media,
     ),
@@ -1940,16 +2330,83 @@ async def on_info_manuals(callback: CallbackQuery) -> None:
     await callback.answer()
     await edit_message_text_safe(
         callback.message,
-        "Мануалы · Пошагово\n\n"
-        "1) Продать eSIM -> выбрать категорию.\n"
-        "2) Загрузить фото/архив.\n"
-        "3) Добавить номер: +79999999999.\n"
-        "4) Следить за статусом в «Материал».\n"
-        "5) Проверить выплаты в «История выплат».",
-        reply_markup=InlineKeyboardMarkup(
-            inline_keyboard=[[InlineKeyboardButton(text="⬅️ В INFO", callback_data=CB_SELLER_INFO_ROOT)]]
-        ),
+        _manuals_root_text(),
+        reply_markup=_manuals_root_keyboard(),
     )
+
+
+@router.callback_query(F.data.startswith(_CB_MANUAL_OPEN))
+async def on_manual_open(callback: CallbackQuery) -> None:
+    if callback.message is None or callback.data is None:
+        return
+    manual = _MANUALS_BY_ID.get(callback.data.removeprefix(_CB_MANUAL_OPEN))
+    if manual is None:
+        await callback.answer("Мануал не найден", show_alert=True)
+        return
+    await callback.answer()
+    await edit_message_text_safe(
+        callback.message,
+        _manual_detail_text(manual),
+        reply_markup=_manual_detail_keyboard(manual),
+    )
+
+
+@router.callback_query(F.data.startswith(_CB_MANUAL_PHOTO_OPEN))
+async def on_manual_photo_open(callback: CallbackQuery) -> None:
+    if callback.message is None or callback.data is None:
+        return
+    manual = _MANUALS_BY_ID.get(callback.data.removeprefix(_CB_MANUAL_PHOTO_OPEN))
+    if manual is None or not manual.photos:
+        await callback.answer("Фото недоступно", show_alert=True)
+        return
+    await callback.answer()
+    try:
+        await callback.message.answer_photo(
+            photo=manual.photos[0],
+            caption=f"📘 {manual.title}\n🖼 Фото 1/{len(manual.photos)}",
+            reply_markup=_manual_photo_keyboard(manual.id, 0, len(manual.photos)),
+        )
+    except TelegramAPIError:
+        await callback.answer("Не удалось открыть фото", show_alert=True)
+
+
+@router.callback_query(F.data.startswith(_CB_MANUAL_PHOTO_NAV))
+async def on_manual_photo_nav(callback: CallbackQuery) -> None:
+    if callback.message is None or callback.data is None:
+        return
+    payload = callback.data.removeprefix(_CB_MANUAL_PHOTO_NAV)
+    try:
+        manual_id, idx_raw = payload.rsplit(":", 1)
+        idx = int(idx_raw)
+    except ValueError:
+        await callback.answer("Ошибка навигации", show_alert=True)
+        return
+    manual = _MANUALS_BY_ID.get(manual_id)
+    if manual is None or not manual.photos or not (0 <= idx < len(manual.photos)):
+        await callback.answer("Фото недоступно", show_alert=True)
+        return
+    await callback.answer()
+    try:
+        await callback.message.edit_media(
+            media=InputMediaPhoto(
+                media=manual.photos[idx],
+                caption=f"📘 {manual.title}\n🖼 Фото {idx + 1}/{len(manual.photos)}",
+            ),
+            reply_markup=_manual_photo_keyboard(manual.id, idx, len(manual.photos)),
+        )
+    except TelegramAPIError:
+        await callback.answer("Не удалось перелистнуть", show_alert=True)
+
+
+@router.callback_query(F.data == _CB_MANUAL_PHOTO_CLOSE)
+async def on_manual_photo_close(callback: CallbackQuery) -> None:
+    if callback.message is None:
+        return
+    await callback.answer()
+    try:
+        await callback.message.delete()
+    except TelegramAPIError:
+        pass
 
 
 @router.callback_query(F.data == CB_CAPTCHA_CANCEL)

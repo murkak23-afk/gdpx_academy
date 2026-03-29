@@ -70,6 +70,8 @@ from src.keyboards.callbacks import (
     CB_PAY_HISTORY_PAGE,
     CB_PAY_LEDGER_PAGE,
     CB_PAY_MARK,
+    CB_PAY_PENDING_DELETE,
+    CB_PAY_PENDING_PAGE,
     CB_PAY_TOPUP,
     CB_PAY_TOPUP_CHECK,
     CB_PAY_TRASH,
@@ -126,8 +128,9 @@ async def _admin_store_panel_message(state: FSMContext, sent: Message | None) ->
 def _lock_line(submission: Submission) -> str:
     if submission.locked_by_admin is None:
         return ""
-    username = submission.locked_by_admin.username or f"id:{submission.locked_by_admin.id}"
-    return f"🔒 ЗАБЛОКИРОВАНО: @{escape(username)}"
+    if submission.locked_by_admin.username:
+        return f"🔒 ЗАБЛОКИРОВАНО: @{escape(submission.locked_by_admin.username)}"
+    return f"🔒 ЗАБЛОКИРОВАНО: id:{submission.locked_by_admin.id}"
 
 
 def _short_phone(value: str | None) -> str:
@@ -196,13 +199,13 @@ async def _payout_ledger_text_and_markup(
         lines.append("Нет пользователей с ожидающими выплатами.")
     else:
         for i, (payout, user) in enumerate(rows, start=page * LEDGER_PAGE_SIZE + 1):
-            username = f"@{user.username}" if user.username else f"id:{user.telegram_id}"
+            username = f"@{user.username}" if user.username else f"@{user.telegram_id}"
             lines.append(f"{i}. {username} | {payout.accepted_count} шт. | {payout.amount} USDT")
     text = "\n".join(lines)
     kb_rows: list[list[InlineKeyboardButton]] = []
     for payout, user in rows:
         uid = int(payout.user_id)
-        username = f"@{user.username}" if user.username else f"id:{user.telegram_id}"
+        username = f"@{user.username}" if user.username else f"@{user.telegram_id}"
         kb_rows.append(
             [
                 InlineKeyboardButton(
@@ -231,6 +234,11 @@ async def _payout_ledger_text_and_markup(
         [
             InlineKeyboardButton(text="История выплат", callback_data=f"{CB_PAY_HISTORY_PAGE}:0"),
             InlineKeyboardButton(text="Корзина", callback_data=f"{CB_PAY_TRASH_PAGE}:0"),
+        ]
+    )
+    kb_rows.append(
+        [
+            InlineKeyboardButton(text="Управление PENDING", callback_data=f"{CB_PAY_PENDING_PAGE}:0"),
         ]
     )
     kb_rows.append([InlineKeyboardButton(text=REPLY_BTN_BACK, callback_data=CALLBACK_INLINE_BACK)])
@@ -262,7 +270,7 @@ async def _payout_history_text_and_markup(session: AsyncSession, *, page: int) -
         lines.append("Пока пусто.")
     else:
         for payout, user in rows:
-            username = f"@{user.username}" if user.username else f"id:{user.telegram_id}"
+            username = f"@{user.username}" if user.username else f"@{user.telegram_id}"
             lines.append(f"- {payout.period_key} | {username} | {payout.amount} USDT")
     text = "\n".join(lines)
     nav: list[InlineKeyboardButton] = []
@@ -301,7 +309,7 @@ async def _payout_trash_text_and_markup(session: AsyncSession, *, page: int) -> 
         lines.append("Пока пусто.")
     else:
         for payout, user in rows:
-            username = f"@{user.username}" if user.username else f"id:{user.telegram_id}"
+            username = f"@{user.username}" if user.username else f"@{user.telegram_id}"
             lines.append(f"- {payout.period_key} | {username} | {payout.amount} USDT")
     text = "\n".join(lines)
     nav: list[InlineKeyboardButton] = []
@@ -318,6 +326,60 @@ async def _payout_trash_text_and_markup(session: AsyncSession, *, page: int) -> 
         ]
     )
     return text, kb
+
+
+async def _payout_pending_manage_text_and_markup(
+    session: AsyncSession,
+    *,
+    page: int,
+) -> tuple[str, InlineKeyboardMarkup]:
+    page = max(page, 0)
+    rows, total = await BillingService(session=session).get_payouts_paginated(
+        status=PayoutStatus.PENDING,
+        page=page,
+        page_size=PAGE_SIZE,
+    )
+    max_page = max((max(total, 1) - 1) // PAGE_SIZE, 0)
+    if page > max_page:
+        page = max_page
+        rows, total = await BillingService(session=session).get_payouts_paginated(
+            status=PayoutStatus.PENDING,
+            page=page,
+            page_size=PAGE_SIZE,
+        )
+
+    lines = ["⚙️ Управление PENDING выплатами", ""]
+    kb_rows: list[list[InlineKeyboardButton]] = []
+
+    if not rows:
+        lines.append("PENDING выплат нет.")
+    else:
+        for payout, user in rows:
+            username = f"@{user.username}" if user.username else f"@{user.telegram_id}"
+            lines.append(
+                f"#{payout.id} | {payout.period_key} | {username} | {payout.accepted_count} шт. | {payout.amount} USDT"
+            )
+            kb_rows.append(
+                [
+                    InlineKeyboardButton(
+                        text=f"🗑 Удалить #{payout.id}",
+                        callback_data=f"{CB_PAY_PENDING_DELETE}:{payout.id}:{page}",
+                    )
+                ]
+            )
+
+    nav: list[InlineKeyboardButton] = []
+    if page > 0:
+        nav.append(InlineKeyboardButton(text="⬅️", callback_data=f"{CB_PAY_PENDING_PAGE}:{page - 1}"))
+    nav.append(InlineKeyboardButton(text=f"{page + 1}/{max_page + 1}", callback_data=CB_NOOP))
+    if page < max_page:
+        nav.append(InlineKeyboardButton(text="➡️", callback_data=f"{CB_PAY_PENDING_PAGE}:{page + 1}"))
+    kb_rows.append(nav)
+
+    kb_rows.append([InlineKeyboardButton(text="💰 К ведомости", callback_data=f"{CB_PAY_LEDGER_PAGE}:0")])
+    kb_rows.append([InlineKeyboardButton(text=REPLY_BTN_BACK, callback_data=CALLBACK_INLINE_BACK)])
+
+    return "\n".join(lines), InlineKeyboardMarkup(inline_keyboard=kb_rows)
 
 
 def _admin_panel_intro_text() -> str:
@@ -565,7 +627,7 @@ async def on_in_work_hub(message: Message, state: FSMContext, session: AsyncSess
     base = page * INWORK_PAGE_SIZE
     for idx, item in enumerate(chunk, start=base + 1):
         seller_label = (
-            f"@{item.seller.username}" if item.seller is not None and item.seller.username else f"id: {item.user_id}"
+            f"@{item.seller.username}" if item.seller is not None and item.seller.username else f"@{item.user_id}"
         )
         phone = (item.description_text or "").strip() or "—"
 
@@ -633,7 +695,7 @@ async def on_in_work_page(callback: CallbackQuery, session: AsyncSession, state:
 
     for idx, item in enumerate(chunk, start=base + 1):
         seller_label = (
-            f"@{item.seller.username}" if item.seller is not None and item.seller.username else f"id: {item.user_id}"
+            f"@{item.seller.username}" if item.seller is not None and item.seller.username else f"@{item.user_id}"
         )
         phone = (item.description_text or "").strip() or "—"
 
@@ -871,6 +933,7 @@ async def on_exit_admin_panel(message: Message, session: AsyncSession) -> None:
 
 
 @router.message(Command("admin"))
+@router.message(Command("a"))
 async def on_admin_panel(message: Message, session: AsyncSession) -> None:
     """Открывает главное меню админа."""
 
@@ -977,7 +1040,7 @@ async def on_admin_inline_inwork(callback: CallbackQuery, session: AsyncSession,
             seller_label = (
                 f"@{item.seller.username}"
                 if item.seller is not None and item.seller.username
-                else f"id: {item.user_id}"
+                else f"@{item.user_id}"
             )
             phone = (item.description_text or "").strip() or "—"
             lines.append(f"{idx}. 📱 <code>{escape(phone)}</code> | Продавец: {escape(seller_label)}")
@@ -1651,13 +1714,13 @@ async def on_mark_paid(callback: CallbackQuery, session: AsyncSession, state: FS
         payout_total_amount=str(total_amount),
         payout_accepted_count=total_accepted_count,
         payout_rejected_count=rejected_count,
-        payout_username=f"@{user.username}" if user.username else f"id:{user.telegram_id}",
+        payout_username=f"@{user.username}" if user.username else f"@{user.telegram_id}",
         payout_ledger_page=ledger_page,
     )
 
     await callback.answer()
     if callback.message is not None:
-        username = f"@{user.username}" if user.username else f"id:{user.telegram_id}"
+        username = f"@{user.username}" if user.username else f"@{user.telegram_id}"
         stats_text = (
             f"💰 <b>ПОДТВЕРЖДЕНИЕ ВЫПЛАТЫ (Шаг 1)</b>\n\n"
             f"<b>Продавец:</b> {username}\n"
@@ -1922,7 +1985,7 @@ async def on_mark_paid_final(callback: CallbackQuery, session: AsyncSession, bot
             )
         return
 
-    username = f"@{user.username}" if user.username else f"id:{user.telegram_id}"
+    username = f"@{user.username}" if user.username else f"@{user.telegram_id}"
     comment = f"Payment from @GDPX1 for {username}"
     
     try:
@@ -2012,6 +2075,14 @@ async def on_mark_paid_final(callback: CallbackQuery, session: AsyncSession, bot
     except TelegramAPIError:
         pass
 
+    try:
+        await bot.send_message(
+            callback.from_user.id,
+            f"Выплачено {payout.amount} USDT {username}",
+        )
+    except TelegramAPIError:
+        pass
+
 
 @router.callback_query(lambda c: c.data is not None and c.data.startswith(f"{CB_PAY_HISTORY_PAGE}:"))
 async def on_payout_history_page(callback: CallbackQuery, session: AsyncSession) -> None:
@@ -2041,6 +2112,63 @@ async def on_payout_trash_page(callback: CallbackQuery, session: AsyncSession) -
         await edit_message_text_safe(callback.message, text, reply_markup=kb)
 
 
+@router.callback_query(lambda c: c.data is not None and c.data.startswith(f"{CB_PAY_PENDING_PAGE}:"))
+async def on_payout_pending_page(callback: CallbackQuery, session: AsyncSession) -> None:
+    if callback.from_user is None or callback.data is None:
+        return
+    if not await AdminService(session=session).can_manage_payouts(callback.from_user.id):
+        await callback.answer("Недостаточно прав", show_alert=True)
+        return
+    page = max(int(callback.data.split(":")[2]), 0)
+    text, kb = await _payout_pending_manage_text_and_markup(session, page=page)
+    await callback.answer()
+    if callback.message is not None:
+        await edit_message_text_safe(callback.message, text, reply_markup=kb)
+
+
+@router.callback_query(lambda c: c.data is not None and c.data.startswith(f"{CB_PAY_PENDING_DELETE}:"))
+async def on_payout_pending_delete(callback: CallbackQuery, session: AsyncSession) -> None:
+    if callback.from_user is None or callback.data is None:
+        return
+    if not await AdminService(session=session).can_manage_payouts(callback.from_user.id):
+        await callback.answer("Недостаточно прав", show_alert=True)
+        return
+
+    parts = callback.data.split(":")
+    if len(parts) < 4:
+        await callback.answer("Некорректные данные", show_alert=True)
+        return
+
+    try:
+        payout_id = int(parts[2])
+        page = max(int(parts[3]), 0)
+    except ValueError:
+        await callback.answer("Некорректные данные", show_alert=True)
+        return
+
+    admin_user = await UserService(session=session).get_by_telegram_id(callback.from_user.id)
+    if admin_user is None:
+        await callback.answer("Админ не найден", show_alert=True)
+        return
+
+    deleted = await BillingService(session=session).delete_pending_payout(payout_id=payout_id)
+    if deleted is None:
+        await callback.answer("PENDING выплата не найдена", show_alert=True)
+    else:
+        await AdminAuditService(session=session).log(
+            admin_id=admin_user.id,
+            action="delete_pending_payout",
+            target_type="payout",
+            target_id=int(deleted["payout_id"]),
+            details=f"amount={deleted['amount']};user_id={deleted['user_id']}",
+        )
+        await callback.answer(f"Удалено: {deleted['amount']} USDT")
+
+    text, kb = await _payout_pending_manage_text_and_markup(session, page=page)
+    if callback.message is not None:
+        await edit_message_text_safe(callback.message, text, reply_markup=kb)
+
+
 @router.callback_query(F.data.startswith(f"{CB_ADMIN_REPORT_SUBMISSION}:"))
 async def on_submission_report(callback: CallbackQuery, session: AsyncSession) -> None:
     """Показывает детальный отчет по выбранному товару."""
@@ -2058,7 +2186,7 @@ async def on_submission_report(callback: CallbackQuery, session: AsyncSession) -
         return
 
     seller = await session.get(User, submission.user_id)
-    seller_nickname = f"@{seller.username}" if seller is not None and seller.username else "без username"
+    seller_nickname = f"@{seller.username}" if seller is not None and seller.username else f"@{submission.user_id}"
     category_title = submission.category.title if submission.category is not None else "Без категории"
 
     actions_stmt = (

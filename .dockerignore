@@ -1,69 +1,16 @@
-# Git
-.git
-.gitignore
-.gitattributes
-
-# Python
-.venv
-venv
 __pycache__
 *.pyc
-*.pyo
-*.pyd
-*.egg-info
-dist
-build
-.eggs
-
-# Testing
-.pytest_cache
-.coverage
-htmlcov
-tests/
-
-# IDE
-.vscode
-.cursor
-.idea
-*.swp
-*.swo
-*~
-
-# CI/CD
-.github
-.gitlab-ci.yml
-
-# OS
-.DS_Store
-Thumbs.db
-
-# Environment files (не копируем в контейнер)
-.env
-.env.local
-.env.docker
-.env.production
-.env.*.local
-
-# Linting / Formatting
+.venv
+.env*
+!.env.example
+.git
+.gitignore
 .ruff_cache
-ruff_cache
-
-# Временные файлы
-*.log
-logs/
-tmp/
-temp/
-
-# Docker
-Dockerfile
-docker-compose.yml
-docker-entrypoint.sh
-
-# README и документация (опционально)
-# README.md
-# docs/
-
-# Node (если есть)
-node_modules
-package-lock.json
-yarn.lock
+tests/
+*.md
+Makefile
+ruff.toml
+pytest.ini
+setup-dev.sh
+run-local.sh
+scripts/

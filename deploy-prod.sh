@@ -4,147 +4,75 @@ set -e
 # ========================================
 # deploy-prod.sh — Развертывание на сервер
 # ========================================
-#
-# Использование: bash deploy-prod.sh
-#
-# Что делает:
-# 1. Проверяет что .env.production существует
-# 2. Проверяет Docker и docker-compose
-# 3. Собирает образ
-# 4. Запускает контейнеры
-# 5. Выполняет миграции БД
-# 6. Показывает статус
-#
 
-set_color() {
-    case $1 in
-        red)    echo -ne "\033[31m" ;;
-        green)  echo -ne "\033[32m" ;;
-        yellow) echo -ne "\033[33m" ;;
-        blue)   echo -ne "\033[34m" ;;
-        reset)  echo -ne "\033[0m" ;;
-    esac
-}
+GREEN='\033[32m' RED='\033[31m' YELLOW='\033[33m' BLUE='\033[34m' NC='\033[0m'
+ok()   { echo -e "${GREEN}✅ $1${NC}"; }
+err()  { echo -e "${RED}❌ $1${NC}"; }
+warn() { echo -e "${YELLOW}⚠️  $1${NC}"; }
+info() { echo -e "${BLUE}ℹ️  $1${NC}"; }
 
-echo_success() { set_color green; echo "✅ $1"; set_color reset; }
-echo_error() { set_color red; echo "❌ $1"; set_color reset; }
-echo_warn() { set_color yellow; echo "⚠️  $1"; set_color reset; }
-echo_info() { set_color blue; echo "ℹ️  $1"; set_color reset; }
+cd "$(dirname "${BASH_SOURCE[0]}")"
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-cd "$SCRIPT_DIR"
-
-echo ""
-echo_info "===================================================="
-echo_info "🚀 Production Deploy для Telegram-бота"
-echo_info "===================================================="
+info "🚀 GDPX Academy — Production Deploy"
 echo ""
 
-# 1. Проверяем .env.production
-if [ ! -f ".env.production" ]; then
-    echo_error ".env.production не найден!"
-    echo_warn "Необходимо создать .env.production:"
-    echo ""
-    echo "  1. cp .env.production.example .env.production"
-    echo "  2. Отредактируй .env.production (真実 токены, пароли)"
-    echo "  3. chmod 600 .env.production    # Только владелец может читать!"
-    echo "  4. bash deploy-prod.sh"
-    echo ""
+# 1. .env
+if [ ! -f ".env" ]; then
+    err ".env не найден!"
+    warn "cp .env.example .env && nano .env"
     exit 1
 fi
+ok ".env найден"
 
-echo_success ".env.production найден"
-
-# 2. Проверяем Docker
-if ! command -v docker &> /dev/null; then
-    echo_error "Docker не установлен!"
-    echo_warn "Установи Docker: https://docs.docker.com/install/"
+# 2. Docker
+if ! command -v docker &>/dev/null; then
+    err "Docker не установлен! https://docs.docker.com/install/"
     exit 1
 fi
-echo_success "Docker доступен: $(docker --version)"
+ok "Docker: $(docker --version | head -1)"
 
-# 3. Проверяем docker-compose
-if ! command -v docker-compose &> /dev/null; then
-    echo_error "docker-compose не установлен!"
-    echo_warn "Установи: sudo apt install docker-compose"
+if ! docker compose version &>/dev/null; then
+    err "docker compose (v2) не доступен!"
     exit 1
 fi
-echo_success "docker-compose доступен: $(docker-compose --version)"
+ok "docker compose: $(docker compose version --short)"
 
-# 4. Проверяем права доступа на .env.production
-if [ "$(stat -c '%a' .env.production)" != "600" ]; then
-    echo_warn ".env.production имеет неправильные права доступа"
-    echo_info "Исправляю: chmod 600 .env.production"
-    chmod 600 .env.production
+# 3. Права .env
+PERMS=$(stat -c '%a' .env 2>/dev/null || stat -f '%A' .env 2>/dev/null)
+if [ "$PERMS" != "600" ]; then
+    chmod 600 .env
+    warn ".env права исправлены → 600"
 fi
 
-# 5. Собираем образ
+# 4. Сборка и запуск
 echo ""
-echo_info "===================================================="
-echo_info "🔨 Сборка Docker образа"
-echo_info "===================================================="
-echo ""
-
-docker-compose build
+info "🔨 Сборка образов..."
+docker compose build --pull
 
 echo ""
-echo_success "Образ собран"
-
-# 6. Запускаем контейнеры
-echo ""
-echo_info "===================================================="
-echo_info "🚀 Запуск контейнеров"
-echo_info "===================================================="
-echo ""
-
-docker-compose --env-file .env.production up -d
+info "🚀 Запуск контейнеров..."
+docker compose up -d
 
 echo ""
-echo_success "Контейнеры запущены"
-
-# 7. Ждём пока бот будет ready
-echo ""
-echo_info "Жду пока bot service станет healthy (~45 сек)..."
+info "⏳ Ожидание healthcheck (~30 сек)..."
 sleep 10
 
-# 8. Проверяем статус
+# 5. Статус
 echo ""
-echo_info "===================================================="
-echo_info "📊 Статус сервисов"
-echo_info "===================================================="
+docker compose ps
 echo ""
 
-docker-compose ps
-
-# 9. Проверяем healthcheck
-echo ""
-if docker-compose ps | grep -q "healthy"; then
-    echo_success "✨ Все сервисы рабочие!"
+if docker compose ps | grep -q "healthy"; then
+    ok "✨ Все сервисы работают!"
 else
-    echo_warn "Некоторые сервисы ещё загружаются..."
-    echo_info "Проверь логи: docker-compose logs bot"
+    warn "Некоторые сервисы загружаются: docker compose logs -f bot"
 fi
 
-# 10. Показываем инструкции
 echo ""
-echo_info "===================================================="
-echo_info "📖 Полезные команды"
-echo_info "===================================================="
+info "Полезные команды:"
+echo "  docker compose logs -f bot      — логи бота"
+echo "  docker compose restart bot      — перезапуск бота"
+echo "  docker compose down             — остановка"
+echo "  docker compose up -d --build    — пересборка"
 echo ""
-echo "Логи бота (real-time):"
-echo "  docker-compose logs -f bot"
-echo ""
-echo "Логи PostgreSQL:"
-echo "  docker-compose logs -f postgres"
-echo ""
-echo "Логи Redis:"
-echo "  docker-compose logs -f redis"
-echo ""
-echo "Перезагрузить контейнеры:"
-echo "  docker-compose restart"
-echo ""
-echo "Остановить все:"
-echo "  docker-compose down"
-echo ""
-echo_success "🎉 Deploy завершён!"
-echo ""
+ok "🎉 Deploy завершён!"

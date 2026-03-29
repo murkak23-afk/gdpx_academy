@@ -289,7 +289,7 @@ class GDPXRenderer:
         if isinstance(username, str) and username.strip():
             return f"@{username.strip()}"
         seller_id = getattr(seller, "id", None)
-        return f"id:{seller_id}" if seller_id is not None else "—"
+        return f"@{seller_id}" if seller_id is not None else "—"
 
     @staticmethod
     def _rank_info(approved_count: int) -> tuple[str, int | None]:

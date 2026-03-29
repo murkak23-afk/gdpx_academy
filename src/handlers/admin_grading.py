@@ -38,7 +38,7 @@ from src.keyboards.constants import CALLBACK_INLINE_BACK, REPLY_BTN_BACK
 from src.services import AdminAuditService, AdminService, SubmissionService, UserService
 from src.states.admin_state import AdminGradeOtherState, AdminSearchSimState
 from src.handlers.moderation_flow import send_in_review_queue
-from src.utils.submission_format import format_submission_title_anonymized
+from src.utils.submission_format import format_submission_chat_forward_title
 from src.utils.submission_media import bot_send_submission
 from src.utils.text_format import edit_message_text_safe
 from src.utils.ui_builder import GDPXRenderer
@@ -154,7 +154,7 @@ async def on_grade_accept(
     if submission_obj.category is None and submission_obj.category_id is not None:
         submission_obj.category = await session.get(Category, submission_obj.category_id)
 
-    archive_text = format_submission_title_anonymized(submission_obj)
+    archive_text = format_submission_chat_forward_title(submission_obj)
     if settings.moderation_chat_id == 0:
         await callback.answer("Не задан MODERATION_CHAT_ID в .env", show_alert=True)
         return

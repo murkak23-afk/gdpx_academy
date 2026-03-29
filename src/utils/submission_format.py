@@ -38,6 +38,37 @@ def format_submission_title_anonymized(submission: Submission) -> str:
     return f"{masked} — {cat}"
 
 
+def _human_hold_label(value: str | None) -> str:
+    hold = (value or "").strip()
+    if not hold:
+        return ""
+    if hold == "no_hold":
+        return "Без холда"
+    return hold
+
+
+def format_submission_chat_forward_title(submission: Submission, hold_override: str | None = None) -> str:
+    """Подпись для чатов при пересылке админом: номер - ГДПХ категория hold."""
+
+    phone = (submission.description_text or "").strip() or "не указан"
+    hold_from_override = _human_hold_label(hold_override)
+    if submission.category is not None:
+        operator = (submission.category.operator or "").strip() or "не указан"
+        sim_type = (submission.category.sim_type or "").strip() or "не указан"
+        hold = (
+            hold_from_override
+            or _human_hold_label(submission.hold_assigned)
+            or _human_hold_label(submission.category.hold_condition)
+            or "не указан"
+        )
+    else:
+        operator = "не указан"
+        sim_type = "не указан"
+        hold = hold_from_override or _human_hold_label(submission.hold_assigned) or "не указан"
+
+    return f"{phone} - ГДПХ {operator} {sim_type} {hold}".strip()
+
+
 def submission_status_emoji_line(status: SubmissionStatus) -> str:
     """Короткая строка статуса с цветовым маркером."""
 

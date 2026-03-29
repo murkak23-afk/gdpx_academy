@@ -14,6 +14,17 @@ from aiogram.types import TelegramObject, Update
 logger = logging.getLogger(__name__)
 
 
+def _is_bulk_upload_message(event: Update) -> bool:
+    """Пропускает burst медиа-сообщений для загрузки товаров без throttling."""
+
+    msg = event.message
+    if msg is None:
+        return False
+    # Пачки товаров приходят как много отдельных сообщений с фото/документом,
+    # иногда пересланных и/или в media group.
+    return bool(msg.photo or msg.document or msg.media_group_id)
+
+
 class UserThrottlingMiddleware(BaseMiddleware):
     """Не чаще одного «логического» апдейта от пользователя за interval_sec (по умолчанию 1 с)."""
 
@@ -34,6 +45,9 @@ class UserThrottlingMiddleware(BaseMiddleware):
         ctx: EventContext | None = data.get(EVENT_CONTEXT_KEY)
         uid = ctx.user_id if ctx else None
         if uid is None:
+            return await handler(event, data)
+
+        if _is_bulk_upload_message(event):
             return await handler(event, data)
 
         now = time.monotonic()

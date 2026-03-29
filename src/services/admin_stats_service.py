@@ -116,7 +116,7 @@ class AdminStatsService:
                     "user_id": user.id,
                     "telegram_id": user.telegram_id,
                     "username": user.username or "",
-                    "label": f"@{user.username}" if user.username else f"id:{user.telegram_id}",
+                    "label": f"@{user.username}" if user.username else f"@{user.telegram_id}",
                     "total_paid": total_amt,
                     "payout_count": int(cnt),
                 }
@@ -161,6 +161,6 @@ class AdminStatsService:
         rows = (await self._session.execute(stmt)).all()
         out: list[tuple[str, Decimal, int]] = []
         for username, telegram_id, amt, cnt in rows:
-            label = f"@{username}" if username else f"id:{telegram_id}"
+            label = f"@{username}" if username else f"@{telegram_id}"
             out.append((label, Decimal(amt or 0), int(cnt or 0)))
         return out

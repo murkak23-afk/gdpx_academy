@@ -70,6 +70,36 @@ def caption_trim(text: str | None, limit: int = 1024) -> str | None:
     return s[:limit] if len(s) > limit else s
 
 
+async def _send_document(
+    bot: Bot,
+    chat_id: int,
+    file_id: str,
+    caption: str | None,
+    **kwargs: Any,
+) -> Any:
+    return await bot.send_document(
+        chat_id=chat_id,
+        document=file_id,
+        caption=caption,
+        **kwargs,
+    )
+
+
+async def _send_photo(
+    bot: Bot,
+    chat_id: int,
+    file_id: str,
+    caption: str | None,
+    **kwargs: Any,
+) -> Any:
+    return await bot.send_photo(
+        chat_id=chat_id,
+        photo=file_id,
+        caption=caption,
+        **kwargs,
+    )
+
+
 async def bot_send_submission(
     bot: Bot,
     chat_id: int,
@@ -77,31 +107,40 @@ async def bot_send_submission(
     caption: str | None,
     **kwargs: Any,
 ) -> Any:
-    """Отправляет в чат фото или документ в зависимости от типа материала."""
+    """Отправляет в чат фото или документ; при ошибке типа пробует второй вариант."""
 
     cap = caption_trim(caption)
+    preferred_document = submission.attachment_type == ATTACHMENT_DOCUMENT
+
+    first_try = _send_document if preferred_document else _send_photo
+    second_try = _send_photo if preferred_document else _send_document
+
     try:
-        if submission.attachment_type == ATTACHMENT_DOCUMENT:
-            return await bot.send_document(
-                chat_id=chat_id,
-                document=submission.telegram_file_id,
-                caption=cap,
-                **kwargs,
-            )
-        return await bot.send_photo(
-            chat_id=chat_id,
-            photo=submission.telegram_file_id,
-            caption=cap,
-            **kwargs,
-        )
-    except TelegramAPIError as exc:
+        return await first_try(bot, chat_id, submission.telegram_file_id, cap, **kwargs)
+    except TelegramAPIError as first_exc:
         logger.warning(
-            "Telegram API: не удалось отправить submission_id=%s в chat_id=%s: %s",
+            "Telegram API: первичная отправка не удалась (submission_id=%s chat_id=%s type=%s): %s",
             submission.id,
             chat_id,
-            exc,
+            submission.attachment_type,
+            first_exc,
         )
-        raise
+        try:
+            result = await second_try(bot, chat_id, submission.telegram_file_id, cap, **kwargs)
+            logger.info(
+                "Telegram API: fallback-отправка успешна (submission_id=%s chat_id=%s)",
+                submission.id,
+                chat_id,
+            )
+            return result
+        except TelegramAPIError as second_exc:
+            logger.warning(
+                "Telegram API: fallback тоже не удался (submission_id=%s chat_id=%s): %s",
+                submission.id,
+                chat_id,
+                second_exc,
+            )
+            raise
 
 
 async def message_answer_submission(

@@ -58,7 +58,7 @@ class BillingService:
                 {
                     "user_id": user.id,
                     "telegram_id": user.telegram_id,
-                    "username": f"@{user.username}" if user.username else f"id:{user.telegram_id}",
+                    "username": f"@{user.username}" if user.username else f"@{user.telegram_id}",
                     "accepted_count": accepted_map.get(user.id, (0, Decimal("0.00")))[0],
                     "to_pay": accepted_map.get(user.id, (0, Decimal("0.00")))[1],
                 }
@@ -208,6 +208,32 @@ class BillingService:
         await self._session.commit()
         await self._session.refresh(payout)
         return payout
+
+    async def delete_pending_payout(self, *, payout_id: int) -> dict[str, int | str | Decimal] | None:
+        """Удаляет одну PENDING-выплату и корректирует pending_balance пользователя."""
+
+        payout = await self._session.get(Payout, payout_id)
+        if payout is None or payout.status != PayoutStatus.PENDING:
+            return None
+
+        user = await self._session.get(User, payout.user_id)
+        if user is not None:
+            user.pending_balance = max(Decimal("0.00"), Decimal(user.pending_balance) - Decimal(payout.amount))
+            self._session.add(user)
+
+        snapshot = {
+            "payout_id": int(payout.id),
+            "user_id": int(payout.user_id),
+            "telegram_id": int(user.telegram_id) if user is not None else 0,
+            "username": str(user.username) if user is not None and user.username else "",
+            "amount": Decimal(payout.amount),
+            "accepted_count": int(payout.accepted_count),
+            "period_key": str(payout.period_key),
+        }
+
+        await self._session.delete(payout)
+        await self._session.commit()
+        return snapshot
 
     async def get_payouts_paginated(
         self,

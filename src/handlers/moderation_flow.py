@@ -65,7 +65,7 @@ from src.utils.forward_target import target_chat_id_from_forward_pick
 from src.utils.submission_format import (
     duplicate_warning_html,
     format_phone_category_html,
-    format_submission_title_anonymized,
+    format_submission_chat_forward_title,
     submission_status_emoji_line,
 )
 from src.utils.submission_media import bot_send_submission, message_answer_submission
@@ -651,6 +651,9 @@ async def on_moderation_forward_target_shared(
     if target_chat_id is None:
         await message.answer("Используй кнопки выбора группы, канала или пользователя.")
         return
+    if target_chat_id == bot.id:
+        await message.answer("Нельзя выбирать самого бота как цель пересылки. Выбери группу, канал или пользователя.")
+        return
 
     data = await state.get_data()
     picked_ids_for_audit = list(data.get("picked_submission_ids", []))
@@ -713,17 +716,21 @@ async def on_moderation_forward_confirm(
 
     sent_count = 0
     failed_ids: list[int] = []
+    failed_errors: list[str] = []
     for item in submissions:
         try:
             await bot_send_submission(
                 bot,
                 target_chat_id,
                 item,
-                caption=format_submission_title_anonymized(item),
+                caption=format_submission_chat_forward_title(item),
             )
             sent_count += 1
-        except TelegramAPIError:
+        except TelegramAPIError as exc:
             failed_ids.append(item.id)
+            err = str(exc)
+            if err:
+                failed_errors.append(err)
 
     if sent_count > 0:
         await AdminChatForwardStatsService(session=session).add_forwards_for_telegram_chat(
@@ -745,10 +752,14 @@ async def on_moderation_forward_confirm(
         target_id=seller_user_id,
         details=(
             f"chat_id={target_chat_id}, submission_ids={picked_ids_for_audit}, "
-            f"sent={sent_count}, failed_ids={failed_ids}, marked={len(marked)}"
+            f"sent={sent_count}, failed_ids={failed_ids}, errors={failed_errors[:3]}, marked={len(marked)}"
         ),
     )
-    await callback.answer("Пересылка выполнена")
+
+    if sent_count == 0:
+        await callback.answer("Не удалось отправить карточки", show_alert=True)
+    else:
+        await callback.answer(f"Пересылка выполнена: {sent_count}")
 
     # Сохраняем переслано список и показываем первую карточку для выбора холда
     if successfully_sent:
@@ -778,9 +789,17 @@ async def on_moderation_forward_confirm(
         await state.clear()
         if callback.message is not None:
             await callback.message.edit_reply_markup(reply_markup=None)
+            sample_error = failed_errors[0] if failed_errors else "неизвестная ошибка"
             await callback.message.answer(
-                f"Переслано: {sent_count}. Ошибок пересылки: {len(failed_ids)}. "
-                f"Остальные pending остались в очереди."
+                (
+                    "❌ Не удалось отправить ни одной карточки. "
+                    "Проверь, что бот добавлен в целевой чат и имеет право отправлять сообщения.\n"
+                    f"Ошибок пересылки: {len(failed_ids)}.\n"
+                    f"Причина Telegram: {sample_error}"
+                    if sent_count == 0
+                    else f"Переслано: {sent_count}. Ошибок пересылки: {len(failed_ids)}. "
+                    f"Остальные pending остались в очереди."
+                )
             )
             await send_admin_dashboard(callback.message, session, callback.from_user.id)
 
@@ -1311,7 +1330,7 @@ async def on_accept(callback: CallbackQuery, session: AsyncSession, bot: Bot) ->
     await session.refresh(submission_obj, ["category"])
     if submission_obj.category is None and submission_obj.category_id is not None:
         submission_obj.category = await session.get(Category, submission_obj.category_id)
-    archive_text = format_submission_title_anonymized(submission_obj)
+    archive_text = format_submission_chat_forward_title(submission_obj)
     if settings.moderation_chat_id == 0:
         await callback.answer("Не задан MODERATION_CHAT_ID в .env", show_alert=True)
         return
@@ -1498,7 +1517,7 @@ async def _handle_final_reject(
 
     seller = await session.get(User, submission.user_id)
     if seller is not None:
-        seller_nickname = f"@{seller.username}" if seller.username else "без username"
+        seller_nickname = f"@{seller.username}" if seller.username else f"@{seller.telegram_id}"
         await bot.send_message(
             chat_id=seller.telegram_id,
             text=f"Симка #{submission.id}: {user_text}\nПродавец: {seller_nickname}",

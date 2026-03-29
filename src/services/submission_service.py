@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import delete, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
@@ -673,6 +673,117 @@ class SubmissionService:
         await self._session.refresh(submission)
         return submission
 
+    async def final_reject_in_review_by_phone(
+        self,
+        *,
+        phone: str,
+        admin_id: int | None,
+        to_status: SubmissionStatus,
+        reason: RejectionReason,
+        comment: str,
+    ) -> list[Submission]:
+        """Финально отклоняет все IN_REVIEW карточки по номеру телефона."""
+
+        if to_status not in self._FINAL_REJECT_STATUSES:
+            return []
+
+        normalized = normalize_phone_key(phone)
+        if not normalized:
+            return []
+
+        plus_variant = f"+{normalized}"
+        stmt = (
+            select(Submission)
+            .where(
+                Submission.status == SubmissionStatus.IN_REVIEW,
+                or_(
+                    Submission.phone_normalized == normalized,
+                    Submission.description_text == normalized,
+                    Submission.description_text == plus_variant,
+                ),
+            )
+            .order_by(Submission.id.asc())
+        )
+        submissions = list((await self._session.execute(stmt)).scalars().all())
+        if not submissions:
+            return []
+
+        now = datetime.now(timezone.utc)
+        for submission in submissions:
+            old_status = submission.status
+            submission.status = to_status
+            submission.admin_id = admin_id
+            submission.locked_by_admin_id = None
+            submission.reviewed_at = now
+            submission.rejection_reason = reason
+            submission.rejection_comment = comment
+            submission.last_status_change = now
+
+            self._session.add(
+                ReviewAction(
+                    submission_id=submission.id,
+                    admin_id=admin_id,
+                    from_status=old_status,
+                    to_status=to_status,
+                    comment=comment,
+                )
+            )
+
+        await self._session.commit()
+        return submissions
+
+    async def final_reject_in_review_by_phone_suffix(
+        self,
+        *,
+        suffix: str,
+        admin_id: int | None,
+        to_status: SubmissionStatus,
+        reason: RejectionReason,
+        comment: str,
+    ) -> list[Submission]:
+        """Финально отклоняет все IN_REVIEW карточки, phone_normalized которых оканчивается на suffix."""
+
+        if to_status not in self._FINAL_REJECT_STATUSES:
+            return []
+        if not suffix or not suffix.isdigit() or not (4 <= len(suffix) <= 9):
+            return []
+
+        stmt = (
+            select(Submission)
+            .where(
+                Submission.status == SubmissionStatus.IN_REVIEW,
+                Submission.phone_normalized.like(f"%{suffix}"),
+            )
+            .order_by(Submission.id.asc())
+        )
+        submissions = list((await self._session.execute(stmt)).scalars().all())
+        if not submissions:
+            return []
+
+        now = datetime.now(timezone.utc)
+        for submission in submissions:
+            old_status = submission.status
+            submission.status = to_status
+            submission.admin_id = admin_id
+            submission.locked_by_admin_id = None
+            submission.reviewed_at = now
+            submission.rejection_reason = reason
+            submission.rejection_comment = comment
+            submission.last_status_change = now
+
+            self._session.add(
+                ReviewAction(
+                    submission_id=submission.id,
+                    admin_id=admin_id,
+                    from_status=old_status,
+                    to_status=to_status,
+                    comment=comment,
+                )
+            )
+
+        await self._session.commit()
+        return submissions
+
     _DEBIT_WORKED_STATUSES = (
         SubmissionStatus.REJECTED,
         SubmissionStatus.BLOCKED,
@@ -915,6 +1026,34 @@ class SubmissionService:
         )
         count = int((await self._session.execute(stmt)).scalar_one())
         return count > 0
+
+    async def delete_by_phone_global(self, phone: str) -> int:
+        """Удаляет все карточки по номеру телефона из всей БД submissions."""
+
+        normalized = normalize_phone_key(phone)
+        if not normalized:
+            return 0
+
+        count_stmt = select(func.count(Submission.id)).where(
+            or_(
+                Submission.phone_normalized == normalized,
+                Submission.description_text == normalized,
+            )
+        )
+        total = int((await self._session.execute(count_stmt)).scalar_one())
+        if total <= 0:
+            return 0
+
+        await self._session.execute(
+            delete(Submission).where(
+                or_(
+                    Submission.phone_normalized == normalized,
+                    Submission.description_text == normalized,
+                )
+            )
+        )
+        await self._session.commit()
+        return total
 
     async def get_user_material_folders(self, user_id: int) -> list[dict[str, Any]]:
         """Папки «Материал»: категории с хотя бы одной карточкой у пользователя."""

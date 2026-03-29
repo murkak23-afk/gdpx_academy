@@ -16,9 +16,15 @@ def _format_inline_result_title(submission) -> str:
     
     phone = submission.description_text or "н/д"
     category = submission.category.title if submission.category else "н/д"
-    seller = submission.seller.username or f"#{submission.seller.telegram_id}"
+    seller_obj = submission.seller
+    if seller_obj is not None and seller_obj.username:
+        seller = f"@{seller_obj.username}"
+    elif seller_obj is not None:
+        seller = f"@{seller_obj.telegram_id}"
+    else:
+        seller = f"@{submission.user_id}"
     
-    return f"☑️ {phone} | {category} | @{seller}"
+    return f"☑️ {phone} | {category} | {seller}"
 
 
 def _format_inline_result_description(submission) -> str:
@@ -78,11 +84,21 @@ async def on_inline_search(
             description=_format_inline_result_description(submission),
             input_message_content=InputTextMessageContent(
                 message_text=(
-                    f"<b>Товар #{submission.id}</b>\n"
-                    f"<code>{submission.description_text}</code>\n"
-                    f"Категория: {submission.category.title}\n"
-                    f"Статус: {submission.status.value}\n"
-                    f"Продавец: @{submission.seller.username or submission.seller.telegram_id}"
+                    (
+                        f"<b>Товар #{submission.id}</b>\n"
+                        f"<code>{submission.description_text}</code>\n"
+                        f"Категория: {submission.category.title}\n"
+                        f"Статус: {submission.status.value}\n"
+                        f"Продавец: @{submission.seller.username}"
+                    )
+                    if submission.seller is not None and submission.seller.username
+                    else (
+                        f"<b>Товар #{submission.id}</b>\n"
+                        f"<code>{submission.description_text}</code>\n"
+                        f"Категория: {submission.category.title}\n"
+                        f"Статус: {submission.status.value}\n"
+                        f"Продавец: @{submission.seller.telegram_id if submission.seller is not None else submission.user_id}"
+                    )
                 ),
                 parse_mode="HTML",
             ),
