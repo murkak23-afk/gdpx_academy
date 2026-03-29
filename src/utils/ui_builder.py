@@ -20,11 +20,13 @@ from typing import Any
 
 # ─── Визуальные константы ───────────────────────────────────────────
 HEADER_MAIN = "🏛 <b>GDPX</b> · Панель управления"
+HEADER_ADMIN_MAIN = "🏛 <b>GDPX</b> · Панель администратора"
 HEADER_FINANCE = "💎 <b>GDPX</b> · Финансы"
 HEADER_PROFILE = "👤 <b>GDPX</b> · Профиль резидента"
 HEADER_QUEUE = "📋 <b>GDPX</b> · Очередь"
 HEADER_ASSET = "📱 <b>GDPX</b> · Карточка актива"
 HEADER_INWORK = "🛡 <b>GDPX</b> · В работе"
+HEADER_SEARCH = "🔍 <b>GDPX</b> · Поиск"
 HEADER_CATCON = "⚙️ <b>GDPX</b> · Конструктор категорий"
 
 DIVIDER = "━━━━━━━━━━━━━━━"
@@ -226,6 +228,133 @@ class GDPXRenderer:
             seller = self._pick(sub, "seller", default=None)
             username = self._username_label(seller)
             lines.append(f"{PREFIX_ITEM} 📱 {format_phone(str(phone))}  │ 👤 {username}")
+
+        lines.append(DIVIDER)
+        return "\n".join(lines)
+
+    # ─── Дашборд для администратора ─────────────────────────────
+    def render_admin_dashboard(self, stats: Mapping[str, Any]) -> str:
+        """Главный экран панели администратора с системными KPI."""
+        pending = int(stats.get("pending_count", 0) or 0)
+        in_review = int(stats.get("in_review_count", 0) or 0)
+        approved = int(stats.get("approved_count", 0) or 0)
+        rejected = int(stats.get("rejected_count", 0) or 0)
+        actor = str(stats.get("username") or "—")
+        has_epoch = bool(stats.get("has_epoch", False))
+        greeting = get_time_greeting()
+
+        counters_note = " <i>(с посл. сброса)</i>" if has_epoch else ""
+        return "\n".join([
+            HEADER_ADMIN_MAIN,
+            DIVIDER,
+            f"⚜️ {greeting}, <b>@{escape(actor)}</b>",
+            "",
+            "📊 <b>Состояние системы</b>",
+            f"  ⏳ В очереди: <code>{pending}</code>",
+            f"  🔍 В работе: <code>{in_review}</code>",
+            f"  ✅ Принято всего: <code>{approved}</code>{counters_note}",
+            f"  ❌ Брак всего: <code>{rejected}</code>{counters_note}",
+            DIVIDER,
+        ])
+
+    # ─── Хаб «В работе» (список с нумерацией) ───────────────────
+    def render_inwork_hub(
+        self,
+        items: Sequence[Any],
+        *,
+        is_chief: bool = False,
+        index_offset: int = 0,
+    ) -> str:
+        """Экран хаба «В работе»: сводка с нумерованным списком карточек."""
+        lines: list[str] = [HEADER_INWORK, DIVIDER]
+
+        if not items:
+            label = "В системе нет активных проверок" if is_chief else "У вас нет активных проверок"
+            lines.extend([f"{PREFIX_ITEM} <i>{label}</i>", DIVIDER])
+            return "\n".join(lines)
+
+        label = "Все проверки" if is_chief else "Ваши проверки"
+        lines.append(f"📝 <b>{label}</b>")
+        lines.append("")
+
+        for idx, item in enumerate(items, start=index_offset + 1):
+            phone = self._pick(item, "description_text", "phone_normalized", default="—")
+            phone_str = (str(phone) or "").strip() or "—"
+
+            seller = self._pick(item, "seller", default=None)
+            seller_label = self._username_label(seller)
+            if seller_label == "—":
+                uid = self._pick(item, "user_id", default="?")
+                seller_label = f"@{uid}"
+
+            if is_chief:
+                locked_admin = self._pick(item, "locked_by_admin", default=None)
+                if locked_admin is not None:
+                    fn = getattr(locked_admin, "first_name", None)
+                    aid = getattr(locked_admin, "id", None)
+                    admin_name = str(fn or (f"id:{aid}" if aid else "—"))
+                else:
+                    admin_name = "—"
+                lines.append(
+                    f"{idx}. <code>{escape(phone_str[:22])}</code>"
+                    f"  │ 👤 {seller_label}"
+                    f"  │ 🛡 {escape(admin_name)}"
+                )
+            else:
+                lines.append(
+                    f"{idx}. <code>{escape(phone_str[:22])}</code>"
+                    f"  │ 👤 {seller_label}"
+                )
+
+        lines.append(DIVIDER)
+        lines.append("👆 Нажми кнопку ниже, чтобы открыть карточку")
+        return "\n".join(lines)
+
+    # ─── Подсказка поиска в «В работе» ──────────────────────────
+    def render_inwork_search_prompt(self) -> str:
+        """Экран запроса поиска по номеру в «В работе» (edit-first)."""
+        return "\n".join([
+            HEADER_SEARCH,
+            DIVIDER,
+            "",
+            "🔍 Введи номер для поиска в «В работе»:",
+            f"  {PREFIX_ITEM} Полный формат: <code>+7XXXXXXXXXX</code>",
+            f"  {PREFIX_ITEM} Или последние цифры: <code>1234</code>",
+            DIVIDER,
+        ])
+
+    # ─── История выплат продавца ───────────────────────────────
+    def render_payout_history(
+        self,
+        items: Sequence[Any],
+        *,
+        page: int,
+        total: int,
+        page_size: int,
+    ) -> str:
+        max_page = max((total - 1) // page_size, 0)
+        lines: list[str] = [
+            HEADER_FINANCE,
+            DIVIDER,
+            f"💸 <b>История выплат</b>  ·  стр. {page + 1}/{max_page + 1}",
+            "",
+        ]
+        if not items:
+            lines.extend([f"{PREFIX_ITEM} <i>Выплат пока не было</i>", DIVIDER])
+            return "\n".join(lines)
+
+        for p in items:
+            period = str(self._pick(p, "period_key", default="—"))
+            amount = float(self._pick(p, "amount", default=0))
+            status_raw = str(self._pick(p, "status", default="pending"))
+            status_val = status_raw.split(".")[-1].lower()  # PayoutStatus.PAID → paid
+            emoji = _status_emoji(status_val)
+            check_url = self._pick(p, "crypto_check_url", default=None)
+
+            row = f"{PREFIX_ITEM} {emoji} <code>{escape(period)}</code>  │  {format_currency(amount)}"
+            if check_url:
+                row += f"\n   🔗 <a href=\"{escape(str(check_url))}\">Чек</a>"
+            lines.append(row)
 
         lines.append(DIVIDER)
         return "\n".join(lines)

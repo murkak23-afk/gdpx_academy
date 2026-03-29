@@ -33,3 +33,15 @@ def test_period_bounds_unknown_defaults_to_week() -> None:
     delta = end - start
     assert delta.total_seconds() >= 7 * 24 * 3600 - 5
     assert delta.total_seconds() <= 7 * 24 * 3600 + 5
+
+
+def test_month_bounds_utc_regular_month() -> None:
+    start, end = AdminStatsService.month_bounds_utc(2026, 3)
+    assert start.isoformat() == "2026-03-01T00:00:00+00:00"
+    assert end.isoformat() == "2026-04-01T00:00:00+00:00"
+
+
+def test_month_bounds_utc_december_rollover() -> None:
+    start, end = AdminStatsService.month_bounds_utc(2026, 12)
+    assert start.isoformat() == "2026-12-01T00:00:00+00:00"
+    assert end.isoformat() == "2027-01-01T00:00:00+00:00"

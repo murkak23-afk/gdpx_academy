@@ -23,7 +23,7 @@ class Settings(BaseSettings):
     postgres_port: int = Field(default=5432, alias="POSTGRES_PORT")
     postgres_db: str = Field(default="tgpriem", alias="POSTGRES_DB")
     postgres_user: str = Field(default="tgpriem", alias="POSTGRES_USER")
-    postgres_password: str = Field(..., alias="POSTGRES_PASSWORD")
+    postgres_password: str = Field(default="tgpriem", alias="POSTGRES_PASSWORD")
 
     redis_url: str | None = Field(
         default=None,

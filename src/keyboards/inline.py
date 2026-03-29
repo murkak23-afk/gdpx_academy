@@ -8,6 +8,7 @@ from src.keyboards.callbacks import (
     CB_ADMIN_QUEUE,
     CB_ADMIN_REPORT_SUBMISSION,
     CB_ADMIN_RESTRICT,
+    CB_ADMIN_STATS_MONTH,
     CB_ADMIN_SEARCH_SIM,
     CB_ADMIN_UNRESTRICT,
     CB_GRADE_ACCEPT,
@@ -24,7 +25,6 @@ from src.keyboards.callbacks import (
     CB_MOD_REJTPL_BACK,
     CB_MOD_TAKE,
     CB_MOD_TAKE_PICK,
-    CB_ADMIN_ARCHIVE,
     CB_ADMIN_BROADCAST,
     CB_NOOP,
     CB_PAY_CANCEL,
@@ -42,23 +42,58 @@ from src.keyboards.callbacks import (
 from src.keyboards.constants import CALLBACK_INLINE_BACK, REPLY_BTN_BACK
 
 
+# ─── Единый словарь меток кнопок ──────────────────────────────────────────
+BTN_ADMIN_QUEUE         = "📋 Очередь"
+BTN_ADMIN_INWORK        = "🛡 В работе"
+BTN_ADMIN_PAYOUTS       = "💰 Выплаты"
+BTN_ADMIN_STATS_SIM     = "📊 Статистика SIM"
+BTN_ADMIN_BROADCAST     = "📡 Рассылка"
+BTN_ADMIN_SEARCH_SIM    = "🔍 Поиск симки"
+
+BTN_MOD_TAKE            = "🔒 Взять в работу"
+BTN_MOD_REPORT          = "📄 Отчёт по сим"
+BTN_MOD_ACCEPT          = "✅ ПРИНЯТЬ"
+BTN_MOD_REJECT          = "❌ БРАК"
+
+BTN_GRADE_ACCEPT        = "✅ ЗАЧЁТ"
+BTN_GRADE_NOT_SCAN      = "❌ Не скан"
+BTN_GRADE_BLOCKED       = "❌ Блок на холде"
+BTN_GRADE_OTHER         = "❌ Другое"
+
+BTN_PAY_MARK            = "💳 Выплатить"
+BTN_PAY_TRASH           = "🗑 В корзину"
+BTN_PAY_CONFIRM         = "✅ Подтвердить оплату"
+BTN_PAY_CANCEL          = "❌ Отмена"
+BTN_PAY_FINAL_CONFIRM   = "✅ Точно отправить чек"
+
+BTN_SEARCH_REPORT       = "📄 Отчёт по симке"
+BTN_RESTRICT            = "⛔ Ограничить"
+BTN_UNRESTRICT          = "✅ Снять ограничение"
+
+
 def _inline_back_row() -> list[InlineKeyboardButton]:
     return [InlineKeyboardButton(text=REPLY_BTN_BACK, callback_data=CALLBACK_INLINE_BACK)]
 
 
 def admin_main_inline_keyboard(*, show_payout_finance: bool = False) -> InlineKeyboardMarkup:
     rows: list[list[InlineKeyboardButton]] = [
-        [InlineKeyboardButton(text="📜 Очередь", callback_data=CB_ADMIN_QUEUE)],
-        [InlineKeyboardButton(text="🛡 В работе", callback_data=CB_ADMIN_INWORK_HUB)],
+        [InlineKeyboardButton(text=BTN_ADMIN_QUEUE, callback_data=CB_ADMIN_QUEUE)],
+        [InlineKeyboardButton(text=BTN_ADMIN_INWORK, callback_data=CB_ADMIN_INWORK_HUB)],
         [
-            InlineKeyboardButton(text="💰 Выплаты", callback_data=CB_ADMIN_PAYOUTS),
+            InlineKeyboardButton(text=BTN_ADMIN_BROADCAST, callback_data=CB_ADMIN_BROADCAST),
+            InlineKeyboardButton(text=BTN_ADMIN_SEARCH_SIM, callback_data=CB_ADMIN_SEARCH_SIM),
         ],
-        [
-            InlineKeyboardButton(text="📡 Рассылка", callback_data=CB_ADMIN_BROADCAST),
-            InlineKeyboardButton(text="🗄 Архив (7д)", callback_data=CB_ADMIN_ARCHIVE),
-        ],
-        [InlineKeyboardButton(text="🔍 Поиск симки", callback_data=CB_ADMIN_SEARCH_SIM)],
     ]
+    if show_payout_finance:
+        rows.insert(
+            2,
+            [
+                InlineKeyboardButton(text=BTN_ADMIN_PAYOUTS, callback_data=CB_ADMIN_PAYOUTS),
+                InlineKeyboardButton(text=BTN_ADMIN_STATS_SIM, callback_data=CB_ADMIN_STATS_MONTH),
+            ],
+        )
+    else:
+        rows.insert(2, [InlineKeyboardButton(text=BTN_ADMIN_PAYOUTS, callback_data=CB_ADMIN_PAYOUTS)])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
@@ -84,7 +119,7 @@ def moderation_item_keyboard(submission_id: int) -> InlineKeyboardMarkup:
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text="🔒 Взять в работу",
+                    text=BTN_MOD_TAKE,
                     callback_data=f"{CB_GRADE_TAKE}:{submission_id}",
                 ),
             ],
@@ -100,23 +135,23 @@ def grading_matrix_keyboard(submission_id: int) -> InlineKeyboardMarkup:
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text="✅ ЗАЧЁТ",
+                    text=BTN_GRADE_ACCEPT,
                     callback_data=f"{CB_GRADE_ACCEPT}:{submission_id}",
                 ),
             ],
             [
                 InlineKeyboardButton(
-                    text="❌ Брак: Не скан",
+                    text=BTN_GRADE_NOT_SCAN,
                     callback_data=f"{CB_GRADE_NOT_SCAN}:{submission_id}",
                 ),
                 InlineKeyboardButton(
-                    text="❌ Брак: Блок на холде",
+                    text=BTN_GRADE_BLOCKED,
                     callback_data=f"{CB_GRADE_BLOCKED}:{submission_id}",
                 ),
             ],
             [
                 InlineKeyboardButton(
-                    text="❌ Брак: Другое",
+                    text=BTN_GRADE_OTHER,
                     callback_data=f"{CB_GRADE_OTHER}:{submission_id}",
                 ),
             ],
@@ -147,11 +182,17 @@ def moderation_review_keyboard(submission_id: int) -> InlineKeyboardMarkup:
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text="✅ ПРИНЯТЬ",
+                    text=BTN_MOD_REPORT,
+                    callback_data=f"{CB_ADMIN_REPORT_SUBMISSION}:{submission_id}",
+                ),
+            ],
+            [
+                InlineKeyboardButton(
+                    text=BTN_MOD_ACCEPT,
                     callback_data=f"{CB_MOD_ACCEPT}:{submission_id}",
                 ),
                 InlineKeyboardButton(
-                    text="❌ БРАК",
+                    text=BTN_MOD_REJECT,
                     callback_data=f"{CB_MOD_DEBIT}:{submission_id}",
                 ),
             ],
@@ -167,11 +208,11 @@ def payout_mark_paid_keyboard(user_id: int, *, ledger_page: int = 0) -> InlineKe
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text="Оплата",
+                    text=BTN_PAY_MARK,
                     callback_data=f"{CB_PAY_MARK}:{user_id}:{ledger_page}",
                 ),
                 InlineKeyboardButton(
-                    text="В корзину",
+                    text=BTN_PAY_TRASH,
                     callback_data=f"{CB_PAY_TRASH}:{user_id}:{ledger_page}",
                 ),
             ],
@@ -187,11 +228,11 @@ def payout_confirm_keyboard(user_id: int, *, ledger_page: int = 0) -> InlineKeyb
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text="✅ Подтвердить оплату",
+                    text=BTN_PAY_CONFIRM,
                     callback_data=f"{CB_PAY_CONFIRM}:{user_id}:{ledger_page}",
                 ),
                 InlineKeyboardButton(
-                    text="❌ Отмена",
+                    text=BTN_PAY_CANCEL,
                     callback_data=f"{CB_PAY_CANCEL}:{user_id}:{ledger_page}",
                 ),
             ],
@@ -207,11 +248,11 @@ def payout_final_confirm_keyboard(user_id: int, *, ledger_page: int = 0) -> Inli
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text="✅ Точно отправить чек",
+                    text=BTN_PAY_FINAL_CONFIRM,
                     callback_data=f"{CB_PAY_FINAL_CONFIRM}:{user_id}:{ledger_page}",
                 ),
                 InlineKeyboardButton(
-                    text="❌ Отмена",
+                    text=BTN_PAY_CANCEL,
                     callback_data=f"{CB_PAY_CANCEL}:{user_id}:{ledger_page}",
                 ),
             ],
@@ -223,13 +264,13 @@ def payout_final_confirm_keyboard(user_id: int, *, ledger_page: int = 0) -> Inli
 def search_report_keyboard(submission_id: int, seller_user_id: int | None = None) -> InlineKeyboardMarkup:
     """Кнопка открытия детального отчета по найденному товару."""
 
-    row = [InlineKeyboardButton(text="Открыть отчёт", callback_data=f"{CB_ADMIN_REPORT_SUBMISSION}:{submission_id}")]
+    row = [InlineKeyboardButton(text=BTN_SEARCH_REPORT, callback_data=f"{CB_ADMIN_REPORT_SUBMISSION}:{submission_id}")]
     rows = [row]
     if seller_user_id is not None:
         rows.append(
             [
-                InlineKeyboardButton(text="Ограничить", callback_data=f"{CB_ADMIN_RESTRICT}:{seller_user_id}"),
-                InlineKeyboardButton(text="Снять ограничение", callback_data=f"{CB_ADMIN_UNRESTRICT}:{seller_user_id}"),
+                InlineKeyboardButton(text=BTN_RESTRICT, callback_data=f"{CB_ADMIN_RESTRICT}:{seller_user_id}"),
+                InlineKeyboardButton(text=BTN_UNRESTRICT, callback_data=f"{CB_ADMIN_UNRESTRICT}:{seller_user_id}"),
             ]
         )
     rows.append(_inline_back_row())

@@ -18,7 +18,6 @@ depends_on = None
 
 def upgrade() -> None:
     op.execute("ALTER TYPE user_role_enum ADD VALUE IF NOT EXISTS 'admin'")
-    op.execute("ALTER TYPE user_role_enum ADD VALUE IF NOT EXISTS 'payout_admin'")
     op.execute("CREATE TYPE payout_status_enum AS ENUM ('pending', 'paid', 'cancelled')")
 
     op.add_column("payouts", sa.Column("period_date", sa.Date(), nullable=True))

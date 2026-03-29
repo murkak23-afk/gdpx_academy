@@ -106,11 +106,13 @@ async def _return_after_final_review(
         await message.answer(
             f"Проверка завершена. В разделе «В работе» осталось карточек: {len(remaining)}.",
         )
+        await send_in_review_queue(message, session, telegram_id)
         return
 
     await message.answer(
         "Проверка завершена. В разделе «В работе» больше нет карточек. Возврат в главное меню.",
     )
+    await send_admin_dashboard(message, session, telegram_id)
 
 
 def _reply_is_queue(t: str | None) -> bool:

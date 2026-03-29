@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 
 from sqlalchemy import func, select
@@ -11,6 +11,7 @@ from src.database.models.enums import SubmissionStatus
 from src.database.models.publication import Payout
 from src.database.models.submission import Submission
 from src.database.models.user import User
+from src.core.stats_epoch import get_stats_epoch
 
 
 class AdminStatsService:
@@ -18,6 +19,13 @@ class AdminStatsService:
 
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
+        self._epoch = get_stats_epoch()
+
+    def _effective_start(self, start: datetime) -> datetime:
+        """Returns max(start, epoch) to honour stats reset."""
+        if self._epoch is not None and self._epoch > start:
+            return self._epoch
+        return start
 
     @staticmethod
     def period_bounds(period: str) -> tuple[datetime, datetime]:
@@ -35,9 +43,81 @@ class AdminStatsService:
             start = now - timedelta(days=7)
         return start, end
 
+    @staticmethod
+    def month_bounds_utc(year: int, month: int) -> tuple[datetime, datetime]:
+        """UTC-границы календарного месяца [start, end)."""
+
+        start = datetime(year=year, month=month, day=1, tzinfo=timezone.utc)
+        if month == 12:
+            end = datetime(year=year + 1, month=1, day=1, tzinfo=timezone.utc)
+        else:
+            end = datetime(year=year, month=month + 1, day=1, tzinfo=timezone.utc)
+        return start, end
+
+    async def daily_sim_stats_for_month(self, year: int, month: int) -> list[dict[str, int | date]]:
+        """Дневная статистика за месяц по SIM: вход, зачёт и виды брака."""
+
+        start, end = self.month_bounds_utc(year, month)
+        effective_start = self._effective_start(start)
+        days = (end.date() - start.date()).days
+
+        result: dict[date, dict[str, int | date]] = {}
+        for offset in range(days):
+            d = start.date() + timedelta(days=offset)
+            result[d] = {
+                "date": d,
+                "incoming": 0,
+                "accepted": 0,
+                "rejected": 0,
+                "blocked": 0,
+                "not_a_scan": 0,
+            }
+
+        incoming_stmt = (
+            select(
+                func.date(Submission.created_at).label("d"),
+                func.count(Submission.id).label("cnt"),
+            )
+            .where(
+                Submission.created_at >= effective_start,
+                Submission.created_at < end,
+            )
+            .group_by(func.date(Submission.created_at))
+        )
+        for d, cnt in (await self._session.execute(incoming_stmt)).all():
+            if d in result:
+                result[d]["incoming"] = int(cnt or 0)
+
+        reviewed_statuses = [
+            (SubmissionStatus.ACCEPTED, "accepted"),
+            (SubmissionStatus.REJECTED, "rejected"),
+            (SubmissionStatus.BLOCKED, "blocked"),
+            (SubmissionStatus.NOT_A_SCAN, "not_a_scan"),
+        ]
+        for status, key in reviewed_statuses:
+            stmt = (
+                select(
+                    func.date(Submission.reviewed_at).label("d"),
+                    func.count(Submission.id).label("cnt"),
+                )
+                .where(
+                    Submission.reviewed_at.is_not(None),
+                    Submission.reviewed_at >= effective_start,
+                    Submission.reviewed_at < end,
+                    Submission.status == status,
+                )
+                .group_by(func.date(Submission.reviewed_at))
+            )
+            for d, cnt in (await self._session.execute(stmt)).all():
+                if d in result:
+                    result[d][key] = int(cnt or 0)
+
+        return [result[d] for d in sorted(result.keys())]
+
     async def count_incoming_submissions(self, start: datetime, end: datetime) -> int:
+        effective = self._effective_start(start)
         stmt = select(func.count(Submission.id)).where(
-            Submission.created_at >= start,
+            Submission.created_at >= effective,
             Submission.created_at <= end,
         )
         return int((await self._session.execute(stmt)).scalar_one())
@@ -48,15 +128,17 @@ class AdminStatsService:
         start: datetime,
         end: datetime,
     ) -> int:
+        effective = self._effective_start(start)
         stmt = select(func.count(Submission.id)).where(
             Submission.status == status,
             Submission.reviewed_at.is_not(None),
-            Submission.reviewed_at >= start,
+            Submission.reviewed_at >= effective,
             Submission.reviewed_at <= end,
         )
         return int((await self._session.execute(stmt)).scalar_one())
 
     async def accepted_by_category(self, start: datetime, end: datetime) -> list[tuple[str, int, Decimal]]:
+        effective = self._effective_start(start)
         stmt = (
             select(
                 Category.title,
@@ -67,7 +149,7 @@ class AdminStatsService:
             .where(
                 Submission.status == SubmissionStatus.ACCEPTED,
                 Submission.reviewed_at.is_not(None),
-                Submission.reviewed_at >= start,
+                Submission.reviewed_at >= effective,
                 Submission.reviewed_at <= end,
             )
             .group_by(Category.id, Category.title)
@@ -92,7 +174,7 @@ class AdminStatsService:
                 func.count(Payout.id).label("cnt"),
             )
             .where(
-                Payout.created_at >= start,
+                Payout.created_at >= self._effective_start(start),
                 Payout.created_at <= end,
             )
             .group_by(Payout.user_id)
@@ -124,10 +206,11 @@ class AdminStatsService:
         return out, total
 
     async def avg_accept_amount(self, start: datetime, end: datetime) -> Decimal:
+        effective = self._effective_start(start)
         stmt = select(func.avg(Submission.accepted_amount)).where(
             Submission.status == SubmissionStatus.ACCEPTED,
             Submission.reviewed_at.is_not(None),
-            Submission.reviewed_at >= start,
+            Submission.reviewed_at >= effective,
             Submission.reviewed_at <= end,
         )
         val = (await self._session.execute(stmt)).scalar_one_or_none()
@@ -140,6 +223,7 @@ class AdminStatsService:
         *,
         limit: int = 5,
     ) -> list[tuple[str, Decimal, int]]:
+        effective = self._effective_start(start)
         stmt = (
             select(
                 User.username,
@@ -151,7 +235,7 @@ class AdminStatsService:
             .where(
                 Submission.status == SubmissionStatus.ACCEPTED,
                 Submission.reviewed_at.is_not(None),
-                Submission.reviewed_at >= start,
+                Submission.reviewed_at >= effective,
                 Submission.reviewed_at <= end,
             )
             .group_by(User.id, User.username, User.telegram_id)

@@ -4,7 +4,6 @@ import asyncio
 import csv
 import hashlib
 import re
-from dataclasses import dataclass
 from datetime import datetime, timezone
 from io import StringIO
 
@@ -18,7 +17,6 @@ from aiogram.types import (
     Document,
     InlineKeyboardButton,
     InlineKeyboardMarkup,
-    InputMediaPhoto,
     Message,
 )
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -44,6 +42,7 @@ from src.keyboards.callbacks import (
     CB_SELLER_INFO_FAQ,
     CB_SELLER_INFO_MANUALS,
     CB_SELLER_INFO_ROOT,
+    CB_SELLER_MANUAL_OPEN,
     CB_SELLER_MAT_BACK,
     CB_SELLER_MAT_CAT,
     CB_SELLER_MAT_DELETE,
@@ -82,6 +81,7 @@ from src.utils.submission_media import (
     bot_send_submission,
     is_allowed_archive_document,
 )
+from src.manuals import MANUALS, get_manual_by_id
 from src.utils.text_format import edit_message_text_safe
 from src.utils.ui_builder import GDPXRenderer
 
@@ -101,95 +101,27 @@ MATERIAL_FILTER_ORDER = (
 _renderer = GDPXRenderer()
 _batch_idle_tasks: dict[int, asyncio.Task] = {}
 
-# ---------- SPA-мануалы ----------
-_CB_MANUAL_OPEN = "seller:info:manual:open:"
-_CB_MANUAL_PHOTO_OPEN = "seller:info:manual:photo_open:"
-_CB_MANUAL_PHOTO_NAV = "seller:info:manual:photo_nav:"
-_CB_MANUAL_PHOTO_CLOSE = "seller:info:manual:photo_close"
+# ---------- Мануалы ----------
 
 
-@dataclass(frozen=True)
-class ManualCard:
-    id: str
-    title: str
-    body: str
-    photos: tuple[str, ...] = ()
-
-
-_MANUALS: tuple[ManualCard, ...] = (
-    ManualCard(
-        id="quick_start",
-        title="Быстрый старт: первая отправка eSIM",
-        body=(
-            "1) Нажми «Продать eSIM» и выбери категорию.\n"
-            "2) Отправь фото или архив с материалом.\n"
-            "3) Укажи номер в формате +79999999999.\n"
-            "4) Дождись статуса в разделе «Материал»."
-        ),
-    ),
-    ManualCard(
-        id="quality_check",
-        title="Качество материалов: как избегать брака",
-        body=(
-            "1) Проверь читаемость и целостность файлов перед отправкой.\n"
-            "2) Не отправляй один и тот же номер повторно.\n"
-            "3) Для спорных кейсов сразу добавляй пояснение в описание.\n"
-            "4) Следи за причинами незачёта в истории, чтобы не повторять ошибки."
-        ),
-    ),
-    ManualCard(
-        id="payout_flow",
-        title="Выплаты: где смотреть суммы и статусы",
-        body=(
-            "1) Открой «История выплат» из главного меню.\n"
-            "2) Проверь статус каждой операции и итоговую сумму.\n"
-            "3) Если есть задержка, сверяй статусы материалов и payout-уведомления."
-        ),
-    ),
-)
-_MANUALS_BY_ID: dict[str, ManualCard] = {m.id: m for m in _MANUALS}
-
-
-def _manuals_root_text() -> str:
-    return "📚 Мануалы · Центр инструкций\n\nОткрой нужный мануал кнопкой ниже."
-
-
-def _manuals_root_keyboard() -> InlineKeyboardMarkup:
-    rows: list[list[InlineKeyboardButton]] = [
-        [InlineKeyboardButton(text=f"📘 {m.title}", callback_data=f"{_CB_MANUAL_OPEN}{m.id}")]
-        for m in _MANUALS
-    ]
+def _manuals_list_keyboard() -> InlineKeyboardMarkup:
+    """Клавиатура со списком всех мануалов."""
+    rows: list[list[InlineKeyboardButton]] = []
+    for m in MANUALS:
+        rows.append([
+            InlineKeyboardButton(
+                text=f"{m.emoji} {m.title}",
+                callback_data=f"{CB_SELLER_MANUAL_OPEN}:{m.id}",
+            )
+        ])
     rows.append([InlineKeyboardButton(text="⬅️ В INFO", callback_data=CB_SELLER_INFO_ROOT)])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
-def _manual_detail_text(manual: ManualCard) -> str:
-    lines = [f"📘 {manual.title}", "", manual.body]
-    if manual.photos:
-        lines.extend(["", f"🖼 Фото: {len(manual.photos)}"])
-    return "\n".join(lines)
-
-
-def _manual_detail_keyboard(manual: ManualCard) -> InlineKeyboardMarkup:
-    rows: list[list[InlineKeyboardButton]] = []
-    if manual.photos:
-        rows.append([InlineKeyboardButton(
-            text=f"🖼 Открыть фото ({len(manual.photos)})",
-            callback_data=f"{_CB_MANUAL_PHOTO_OPEN}{manual.id}",
-        )])
-    rows.append([InlineKeyboardButton(text="⬅️ К мануалам", callback_data=CB_SELLER_INFO_MANUALS)])
-    rows.append([InlineKeyboardButton(text="🏠 В INFO", callback_data=CB_SELLER_INFO_ROOT)])
-    return InlineKeyboardMarkup(inline_keyboard=rows)
-
-
-def _manual_photo_keyboard(manual_id: str, index: int, total: int) -> InlineKeyboardMarkup:
+def _manual_detail_keyboard() -> InlineKeyboardMarkup:
+    """Кнопка назад к списку мануалов."""
     return InlineKeyboardMarkup(inline_keyboard=[
-        [
-            InlineKeyboardButton(text="◀️", callback_data=f"{_CB_MANUAL_PHOTO_NAV}{manual_id}:{(index - 1) % total}"),
-            InlineKeyboardButton(text=f"{index + 1}/{total}", callback_data=CB_NOOP),
-            InlineKeyboardButton(text="▶️", callback_data=f"{_CB_MANUAL_PHOTO_NAV}{manual_id}:{(index + 1) % total}"),
-        ],
-        [InlineKeyboardButton(text="❌ Закрыть", callback_data=_CB_MANUAL_PHOTO_CLOSE)],
+        [InlineKeyboardButton(text="⬅️ К мануалам", callback_data=CB_SELLER_INFO_MANUALS)],
     ])
 
 
@@ -1394,15 +1326,19 @@ async def on_material_item_delete_confirm(callback: CallbackQuery, session: Asyn
         )
 
 
-def _seller_payout_history_nav(page: int, total: int) -> InlineKeyboardMarkup:
+def _seller_payout_history_kb(page: int, total: int) -> InlineKeyboardMarkup:
     max_page = (max(total, 1) - 1) // SELLER_PAGE_SIZE
+    rows: list[list[InlineKeyboardButton]] = []
     nav: list[InlineKeyboardButton] = []
     if page > 0:
         nav.append(InlineKeyboardButton(text="⬅️", callback_data=f"{CB_SELLER_PAYHIST_PAGE}:{page - 1}"))
     nav.append(InlineKeyboardButton(text=f"{page + 1}/{max_page + 1}", callback_data=CB_NOOP))
     if page < max_page:
         nav.append(InlineKeyboardButton(text="➡️", callback_data=f"{CB_SELLER_PAYHIST_PAGE}:{page + 1}"))
-    return InlineKeyboardMarkup(inline_keyboard=[nav] if nav else [])
+    if nav:
+        rows.append(nav)
+    rows.append([InlineKeyboardButton(text="🏠 Главное меню", callback_data=CB_SELLER_MENU_PROFILE)])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 async def _send_payout_history_page(message: Message, session: AsyncSession, *, user_id: int, page: int) -> None:
@@ -1411,24 +1347,18 @@ async def _send_payout_history_page(message: Message, session: AsyncSession, *, 
         page=page,
         page_size=SELLER_PAGE_SIZE,
     )
-    if not items:
-        await send_clean_text_screen(
-            trigger_message=message,
-            text="История выплат пока пустая.",
-            key="seller:payouts:history",
-        )
-        return
-    lines = [f"История выплат · стр {page + 1}/{((max(total, 1) - 1) // SELLER_PAGE_SIZE) + 1}", ""]
-    for p in items:
-        line = f"• {p.period_key} | {p.amount} USDT | {p.status.value}"
-        if p.crypto_check_url:
-            line += "\n  Чек: есть"
-        lines.append(line)
+    text = GDPXRenderer().render_payout_history(
+        items,
+        page=page,
+        total=max(total, 1),
+        page_size=SELLER_PAGE_SIZE,
+    )
     await send_clean_text_screen(
         trigger_message=message,
-        text="\n".join(lines),
+        text=text,
         key="seller:payouts:history",
-        reply_markup=_seller_payout_history_nav(page=page, total=total),
+        reply_markup=_seller_payout_history_kb(page=page, total=total),
+        parse_mode="HTML",
     )
 
 
@@ -2212,7 +2142,7 @@ async def on_support(message: Message, session: AsyncSession) -> None:
     if user is None:
         await message.answer("Сначала пройди регистрацию через /start.")
         return
-    support_link = get_settings().brand_chat_url or "@GDPX1"
+    support_link = "@GDPX1"
 
     text = (
         "Support / Помощь\n\n"
@@ -2221,7 +2151,7 @@ async def on_support(message: Message, session: AsyncSession) -> None:
         "• Если не зачёт: смотри статус в разделе «Материал».\n"
         "• Выплаты: история и суммы в разделе «История выплат».\n"
         "• Проблема с загрузкой: отправляй архив как файл.\n\n"
-        f"Написать Г: {support_link}"
+        f"Написать: {support_link}"
     )
     await send_clean_text_screen(
         trigger_message=message,
@@ -2239,7 +2169,7 @@ async def on_seller_menu_support(callback: CallbackQuery, session: AsyncSession)
     if user is None:
         await callback.answer("Сначала /start", show_alert=True)
         return
-    support_link = get_settings().brand_chat_url or "@GDPX1"
+    support_link = "@GDPX1"
     text = (
         "Support / Помощь\n\n"
         "FAQ:\n"
@@ -2247,7 +2177,7 @@ async def on_seller_menu_support(callback: CallbackQuery, session: AsyncSession)
         "• Если не зачёт: смотри статус в разделе «Материал».\n"
         "• Выплаты: история и суммы в разделе «История выплат».\n"
         "• Проблема с загрузкой: отправляй архив как файл.\n\n"
-        f"Написать Г: {support_link}"
+        f"Написать: {support_link}"
     )
     await callback.answer()
     if callback.message is not None:
@@ -2264,7 +2194,7 @@ async def on_info_root(message: Message, session: AsyncSession) -> None:
         return
     settings = get_settings()
     channel_url = settings.brand_channel_url
-    chat_url = settings.brand_chat_url or DEFAULT_INFO_CHAT_URL
+    chat_url = settings.brand_chat_url
     await send_clean_text_screen(
         trigger_message=message,
         text=_info_root_text(),
@@ -2279,7 +2209,7 @@ async def on_seller_menu_info(callback: CallbackQuery) -> None:
         return
     settings = get_settings()
     channel_url = settings.brand_channel_url
-    chat_url = settings.brand_chat_url or DEFAULT_INFO_CHAT_URL
+    chat_url = settings.brand_chat_url
     await callback.answer()
     await edit_message_text_safe(
         callback.message,
@@ -2294,7 +2224,7 @@ async def on_info_root_refresh(callback: CallbackQuery) -> None:
         return
     settings = get_settings()
     channel_url = settings.brand_channel_url
-    chat_url = settings.brand_chat_url or DEFAULT_INFO_CHAT_URL
+    chat_url = settings.brand_chat_url
     await callback.answer()
     await edit_message_text_safe(
         callback.message,
@@ -2330,83 +2260,28 @@ async def on_info_manuals(callback: CallbackQuery) -> None:
     await callback.answer()
     await edit_message_text_safe(
         callback.message,
-        _manuals_root_text(),
-        reply_markup=_manuals_root_keyboard(),
+        "<b>🧭 Мануалы</b>\n\nВыбери раздел:",
+        reply_markup=_manuals_list_keyboard(),
+        parse_mode="HTML",
     )
 
 
-@router.callback_query(F.data.startswith(_CB_MANUAL_OPEN))
+@router.callback_query(F.data.startswith(f"{CB_SELLER_MANUAL_OPEN}:"))
 async def on_manual_open(callback: CallbackQuery) -> None:
     if callback.message is None or callback.data is None:
         return
-    manual = _MANUALS_BY_ID.get(callback.data.removeprefix(_CB_MANUAL_OPEN))
-    if manual is None:
+    manual_id = callback.data.split(":")[3]
+    card = get_manual_by_id(manual_id)
+    if card is None:
         await callback.answer("Мануал не найден", show_alert=True)
         return
     await callback.answer()
     await edit_message_text_safe(
         callback.message,
-        _manual_detail_text(manual),
-        reply_markup=_manual_detail_keyboard(manual),
+        card.text,
+        reply_markup=_manual_detail_keyboard(),
+        parse_mode="HTML",
     )
-
-
-@router.callback_query(F.data.startswith(_CB_MANUAL_PHOTO_OPEN))
-async def on_manual_photo_open(callback: CallbackQuery) -> None:
-    if callback.message is None or callback.data is None:
-        return
-    manual = _MANUALS_BY_ID.get(callback.data.removeprefix(_CB_MANUAL_PHOTO_OPEN))
-    if manual is None or not manual.photos:
-        await callback.answer("Фото недоступно", show_alert=True)
-        return
-    await callback.answer()
-    try:
-        await callback.message.answer_photo(
-            photo=manual.photos[0],
-            caption=f"📘 {manual.title}\n🖼 Фото 1/{len(manual.photos)}",
-            reply_markup=_manual_photo_keyboard(manual.id, 0, len(manual.photos)),
-        )
-    except TelegramAPIError:
-        await callback.answer("Не удалось открыть фото", show_alert=True)
-
-
-@router.callback_query(F.data.startswith(_CB_MANUAL_PHOTO_NAV))
-async def on_manual_photo_nav(callback: CallbackQuery) -> None:
-    if callback.message is None or callback.data is None:
-        return
-    payload = callback.data.removeprefix(_CB_MANUAL_PHOTO_NAV)
-    try:
-        manual_id, idx_raw = payload.rsplit(":", 1)
-        idx = int(idx_raw)
-    except ValueError:
-        await callback.answer("Ошибка навигации", show_alert=True)
-        return
-    manual = _MANUALS_BY_ID.get(manual_id)
-    if manual is None or not manual.photos or not (0 <= idx < len(manual.photos)):
-        await callback.answer("Фото недоступно", show_alert=True)
-        return
-    await callback.answer()
-    try:
-        await callback.message.edit_media(
-            media=InputMediaPhoto(
-                media=manual.photos[idx],
-                caption=f"📘 {manual.title}\n🖼 Фото {idx + 1}/{len(manual.photos)}",
-            ),
-            reply_markup=_manual_photo_keyboard(manual.id, idx, len(manual.photos)),
-        )
-    except TelegramAPIError:
-        await callback.answer("Не удалось перелистнуть", show_alert=True)
-
-
-@router.callback_query(F.data == _CB_MANUAL_PHOTO_CLOSE)
-async def on_manual_photo_close(callback: CallbackQuery) -> None:
-    if callback.message is None:
-        return
-    await callback.answer()
-    try:
-        await callback.message.delete()
-    except TelegramAPIError:
-        pass
 
 
 @router.callback_query(F.data == CB_CAPTCHA_CANCEL)

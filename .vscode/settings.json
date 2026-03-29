@@ -11,5 +11,14 @@
     "SQLAlchemy"
   ],
   "github.copilot.nextEditSuggestions.enabled": true,
-  "python-envs.defaultEnvManager": "ms-python.python:system"
+  "python-envs.defaultEnvManager": "ms-python.python:system",
+  "python.testing.unittestArgs": [
+    "-v",
+    "-s",
+    "./alembic",
+    "-p",
+    "*_test.py"
+  ],
+  "python.testing.pytestEnabled": false,
+  "python.testing.unittestEnabled": true
 }

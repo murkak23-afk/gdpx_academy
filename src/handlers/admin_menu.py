@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import csv
 import logging
 import re
@@ -44,13 +45,10 @@ from src.keyboards import (
     seller_main_menu_keyboard,
 )
 from src.keyboards.admin_hints import (
-    HINT_ARCHIVE,
     HINT_BROADCAST,
     HINT_PAYOUTS,
 )
 from src.keyboards.callbacks import (
-    CB_ADMIN_ARCHIVE,
-    CB_ADMIN_ARCHIVE_PAGE,
     CB_ADMIN_BROADCAST,
     CB_ADMIN_INWORK_HUB,
     CB_ADMIN_INWORK_OPEN,
@@ -62,6 +60,12 @@ from src.keyboards.callbacks import (
     CB_ADMIN_REPORT_SUBMISSION,
     CB_ADMIN_RESTRICT,
     CB_ADMIN_SEARCH_PAGE,
+    CB_ADMIN_STATS_EXPORT_MONTH,
+    CB_ADMIN_STATS_MONTH,
+    CB_ADMIN_STATS_RESET,
+    CB_ADMIN_STATS_RESET_CONFIRM,
+    CB_ADMIN_DASHBOARD_RESET,
+    CB_ADMIN_DASHBOARD_RESET_CONFIRM,
     CB_ADMIN_UNRESTRICT,
     CB_NOOP,
     CB_PAY_CANCEL,
@@ -80,7 +84,7 @@ from src.keyboards.callbacks import (
 from src.services import (
     AdminAuditService,
     AdminService,
-    ArchiveService,
+    AdminStatsService,
     BillingService,
     CategoryService,
     CryptoBotService,
@@ -106,6 +110,138 @@ PAGE_SIZE = 5
 LEDGER_PAGE_SIZE = 8
 INWORK_PAGE_SIZE = 8
 _ADMIN_LAST_PANEL_MSG_KEY = "admin_last_panel_message_id"
+
+
+async def _delete_message_later(bot: Bot, chat_id: int, message_id: int, delay_sec: int = 20) -> None:
+    """Удаляет служебное сообщение с задержкой, чтобы не захламлять чат."""
+
+    await asyncio.sleep(delay_sec)
+    try:
+        await bot.delete_message(chat_id=chat_id, message_id=message_id)
+    except TelegramBadRequest:
+        pass
+
+
+def _month_stats_keyboard(year: int, month: int) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="📥 Выгрузить Excel",
+                    callback_data=f"{CB_ADMIN_STATS_EXPORT_MONTH}:{year}:{month}",
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="🗑 Обнулить статистику",
+                    callback_data=CB_ADMIN_STATS_RESET,
+                )
+            ],
+            [InlineKeyboardButton(text=REPLY_BTN_BACK, callback_data=CALLBACK_INLINE_BACK)],
+        ]
+    )
+
+
+def _month_stats_text(rows: list[dict[str, int | object]], year: int, month: int) -> str:
+    lines = [
+        f"📊 <b>Статистика SIM за {month:02d}.{year} (UTC)</b>",
+        "",
+        "<code>День | Вход | ✅ | ❌ | 🚫 | ⛔</code>",
+    ]
+
+    total_incoming = 0
+    total_accepted = 0
+    total_rejected = 0
+    total_blocked = 0
+    total_not_scan = 0
+
+    for row in rows:
+        dt = row["date"]
+        day = getattr(dt, "day", 0)
+        incoming = int(row["incoming"])
+        accepted = int(row["accepted"])
+        rejected = int(row["rejected"])
+        blocked = int(row["blocked"])
+        not_scan = int(row["not_a_scan"])
+
+        total_incoming += incoming
+        total_accepted += accepted
+        total_rejected += rejected
+        total_blocked += blocked
+        total_not_scan += not_scan
+
+        lines.append(
+            f"<code>{day:02d}   | {incoming:4d} | {accepted:3d} | {rejected:3d} | {blocked:3d} | {not_scan:3d}</code>"
+        )
+
+    total_failed = total_rejected + total_blocked + total_not_scan
+    lines.extend(
+        [
+            "",
+            "<b>Итого за месяц</b>",
+            f"📥 Входящих SIM: <b>{total_incoming}</b>",
+            f"✅ Принято: <b>{total_accepted}</b>",
+            f"❌ Брак всего: <b>{total_failed}</b> (rejected={total_rejected}, blocked={total_blocked}, not_a_scan={total_not_scan})",
+        ]
+    )
+    return "\n".join(lines)
+
+
+def _month_stats_workbook_bytes(rows: list[dict[str, int | object]], year: int, month: int) -> bytes:
+    from openpyxl import Workbook
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "SIM Daily"
+    ws.append(["Дата", "Входящие", "Принято", "Rejected", "Blocked", "Not a scan", "Брак всего"])
+
+    total_incoming = 0
+    total_accepted = 0
+    total_rejected = 0
+    total_blocked = 0
+    total_not_scan = 0
+
+    for row in rows:
+        dt = row["date"]
+        incoming = int(row["incoming"])
+        accepted = int(row["accepted"])
+        rejected = int(row["rejected"])
+        blocked = int(row["blocked"])
+        not_scan = int(row["not_a_scan"])
+        failed_total = rejected + blocked + not_scan
+
+        total_incoming += incoming
+        total_accepted += accepted
+        total_rejected += rejected
+        total_blocked += blocked
+        total_not_scan += not_scan
+
+        ws.append([
+            str(dt),
+            incoming,
+            accepted,
+            rejected,
+            blocked,
+            not_scan,
+            failed_total,
+        ])
+
+    ws.append([])
+    ws.append(["ИТОГО", total_incoming, total_accepted, total_rejected, total_blocked, total_not_scan, total_rejected + total_blocked + total_not_scan])
+
+    meta = wb.create_sheet("Summary")
+    meta.append(["Период", f"{month:02d}.{year} UTC"])
+    meta.append(["Входящие SIM", total_incoming])
+    meta.append(["Принято", total_accepted])
+    meta.append(["Rejected", total_rejected])
+    meta.append(["Blocked", total_blocked])
+    meta.append(["Not a scan", total_not_scan])
+    meta.append(["Брак всего", total_rejected + total_blocked + total_not_scan])
+
+    buf = BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    return buf.read()
 
 
 async def _admin_delete_prev_panel_message(message: Message, state: FSMContext) -> None:
@@ -602,51 +738,14 @@ async def on_in_work_hub(message: Message, state: FSMContext, session: AsyncSess
     await state.clear()
     total = len(mine)
     page = 0
-    
+
     # Проверяем, chief_admin ли это
     is_chief = admin_user.role == "chief_admin"
 
-    if not mine:
-        if is_chief:
-            empty_msg = "🏃 В работе\n\nВсего в системе 0 заявок в работе."
-        else:
-            empty_msg = "🏃 В работе\n\nУ вас 0 заявок в работе."
-        sent = await message.answer(
-            empty_msg,
-            reply_markup=_in_work_hub_keyboard(items=[], page=0, total=0),
-        )
-        await _admin_store_panel_message(state, sent)
-        return
-
     chunk = mine[:INWORK_PAGE_SIZE]
-    if is_chief:
-        lines = ["🏃 ВСЕ ЗАЯВКИ В РАБОТЕ:", "", "📝 АКТИВНЫЕ ЗАЯВКИ (все администраторы):"]
-    else:
-        lines = ["🏃 ВАШИ ЗАЯВКИ В РАБОТЕ:", "", "📝 ВАШИ АКТИВНЫЕ ЗАЯВКИ:"]
-
-    base = page * INWORK_PAGE_SIZE
-    for idx, item in enumerate(chunk, start=base + 1):
-        seller_label = (
-            f"@{item.seller.username}" if item.seller is not None and item.seller.username else f"@{item.user_id}"
-        )
-        phone = (item.description_text or "").strip() or "—"
-
-        if is_chief and item.locked_by_admin:
-            # Show which admin is working on this card
-            admin_name = item.locked_by_admin.first_name or f"Admin {item.locked_by_admin.id}"
-            line = (
-                f"{idx}. 📱 <code>{escape(phone)}</code> | "
-                f"Продавец: {escape(seller_label)} | Админ: {escape(admin_name)}"
-            )
-            lines.append(line)
-        else:
-            lines.append(f"{idx}. 📱 <code>{escape(phone)}</code> | Продавец: {escape(seller_label)}")
-
-    lines.append("")
-    lines.append("Нажми на номер ниже, чтобы открыть карточку:")
-
+    text = GDPXRenderer().render_inwork_hub(chunk, is_chief=is_chief, index_offset=0)
     sent = await message.answer(
-        "\n".join(lines),
+        text,
         reply_markup=_in_work_hub_keyboard(items=chunk, page=page, total=total),
         parse_mode="HTML",
     )
@@ -670,53 +769,20 @@ async def on_in_work_page(callback: CallbackQuery, session: AsyncSession, state:
     mine = await SubmissionService(session=session).get_admin_active_submissions(admin_id=admin_user.id)
     total = len(mine)
     if not mine:
-        await callback.answer()
-        if callback.message is not None:
-            if is_chief:
-                empty_msg = "🏃 В работе\n\nВсего в системе 0 заявок в работе."
-            else:
-                empty_msg = "🏃 В работе\n\nУ вас 0 заявок в работе."
-            await edit_message_text_safe(
-                callback.message,
-                empty_msg,
-                reply_markup=_in_work_hub_keyboard(items=[], page=0, total=0),
-            )
-        return
-
-    max_page = max((total - 1) // INWORK_PAGE_SIZE, 0)
-    page = min(page, max_page)
-    chunk = mine[page * INWORK_PAGE_SIZE : page * INWORK_PAGE_SIZE + INWORK_PAGE_SIZE]
-    base = page * INWORK_PAGE_SIZE
-
-    if is_chief:
-        lines = ["🏃 ВСЕ ЗАЯВКИ В РАБОТЕ:", "", "📝 АКТИВНЫЕ ЗАЯВКИ (все администраторы):"]
+        page = 0
+        chunk: list = []
     else:
-        lines = ["🏃 ВАШИ ЗАЯВКИ В РАБОТЕ:", "", "📝 ВАШИ АКТИВНЫЕ ЗАЯВКИ:"]
+        max_page = max((total - 1) // INWORK_PAGE_SIZE, 0)
+        page = min(page, max_page)
+        chunk = mine[page * INWORK_PAGE_SIZE : page * INWORK_PAGE_SIZE + INWORK_PAGE_SIZE]
 
-    for idx, item in enumerate(chunk, start=base + 1):
-        seller_label = (
-            f"@{item.seller.username}" if item.seller is not None and item.seller.username else f"@{item.user_id}"
-        )
-        phone = (item.description_text or "").strip() or "—"
-
-        if is_chief and item.locked_by_admin:
-            # Show which admin is working on this card
-            admin_name = item.locked_by_admin.first_name or f"Admin {item.locked_by_admin.id}"
-            line = (
-                f"{idx}. 📱 <code>{escape(phone)}</code> | "
-                f"Продавец: {escape(seller_label)} | Админ: {escape(admin_name)}"
-            )
-            lines.append(line)
-        else:
-            lines.append(f"{idx}. 📱 <code>{escape(phone)}</code> | Продавец: {escape(seller_label)}")
-
-    lines.append("")
-    lines.append("Нажми на номер ниже, чтобы открыть карточку:")
+    base = page * INWORK_PAGE_SIZE
+    text = GDPXRenderer().render_inwork_hub(chunk, is_chief=is_chief, index_offset=base)
     await callback.answer()
     if callback.message is not None:
         await edit_message_text_safe(
             callback.message,
-            "\n".join(lines),
+            text,
             reply_markup=_in_work_hub_keyboard(items=chunk, page=page, total=total),
             parse_mode="HTML",
         )
@@ -772,7 +838,16 @@ async def on_in_work_search_start(callback: CallbackQuery, state: FSMContext, se
     await state.set_state(AdminInReviewLookupState.waiting_for_query)
     await callback.answer()
     if callback.message is not None:
-        await callback.message.answer("Введи номер для поиска в «В работе» (полный или последние цифры).")
+        await edit_message_text_safe(
+            callback.message,
+            GDPXRenderer().render_inwork_search_prompt(),
+            reply_markup=InlineKeyboardMarkup(
+                inline_keyboard=[
+                    [InlineKeyboardButton(text=REPLY_BTN_BACK, callback_data=CALLBACK_INLINE_BACK)]
+                ]
+            ),
+            parse_mode="HTML",
+        )
 
 
 @router.message(AdminInReviewLookupState.waiting_for_query, F.text)
@@ -861,8 +936,7 @@ async def on_admin_menu_interrupt_fsm(
         await on_daily_report(message, state, session)
     elif label == "Рассылка":
         await on_broadcast_start(message, state, session)
-    elif label == "Архив (7days)":
-        await on_archive_help(message, session)
+
 
 
 @router.message(Command("admin"), StateFilter(*_ADMIN_FSM_STATES))
@@ -904,7 +978,7 @@ async def on_enter_admin_panel(message: Message, session: AsyncSession) -> None:
     await message.answer("⁠", reply_markup=ReplyKeyboardRemove())
     stats = await _fetch_admin_board_stats(session)
     stats["username"] = message.from_user.username or str(message.from_user.id)
-    text = GDPXRenderer().render_dashboard(stats)
+    text = GDPXRenderer().render_admin_dashboard(stats)
     await message.answer(
         text,
         reply_markup=await build_admin_main_inline_keyboard(session, message.from_user.id),
@@ -948,7 +1022,7 @@ async def on_admin_panel(message: Message, session: AsyncSession) -> None:
     await message.answer("\u2060", reply_markup=ReplyKeyboardRemove())
     stats = await _fetch_admin_board_stats(session)
     stats["username"] = message.from_user.username or str(message.from_user.id)
-    text = GDPXRenderer().render_dashboard(stats)
+    text = GDPXRenderer().render_admin_dashboard(stats)
     await message.answer(
         text,
         reply_markup=await build_admin_main_inline_keyboard(session, message.from_user.id),
@@ -967,7 +1041,7 @@ async def on_back_to_admin_menu(callback: CallbackQuery, state: FSMContext, sess
     await state.clear()
     stats = await _fetch_admin_board_stats(session)
     stats["username"] = callback.from_user.username or str(callback.from_user.id)
-    text = GDPXRenderer().render_dashboard(stats)
+    text = GDPXRenderer().render_admin_dashboard(stats)
     await callback.answer()
     if callback.message is not None:
         try:
@@ -1027,27 +1101,11 @@ async def on_admin_inline_inwork(callback: CallbackQuery, session: AsyncSession,
     mine = await SubmissionService(session=session).get_admin_active_submissions(admin_id=admin_user.id)
     await state.clear()
     total = len(mine)
-    page = 0
+    is_chief = admin_user.role == "chief_admin"
 
-    if not mine:
-        text = "🏃 В работе\n\nУ вас 0 заявок в работе."
-        markup = _in_work_hub_keyboard(items=[], page=0, total=0)
-    else:
-        chunk = mine[:INWORK_PAGE_SIZE]
-        lines = ["🏃 ВАШИ ЗАЯВКИ В РАБОТЕ:", "", "📝 ВАШИ АКТИВНЫЕ ЗАЯВКИ:"]
-        base = page * INWORK_PAGE_SIZE
-        for idx, item in enumerate(chunk, start=base + 1):
-            seller_label = (
-                f"@{item.seller.username}"
-                if item.seller is not None and item.seller.username
-                else f"@{item.user_id}"
-            )
-            phone = (item.description_text or "").strip() or "—"
-            lines.append(f"{idx}. 📱 <code>{escape(phone)}</code> | Продавец: {escape(seller_label)}")
-        lines.append("")
-        lines.append("Нажми на номер ниже, чтобы открыть карточку:")
-        text = "\n".join(lines)
-        markup = _in_work_hub_keyboard(items=chunk, page=page, total=total)
+    chunk = mine[:INWORK_PAGE_SIZE]
+    text = GDPXRenderer().render_inwork_hub(chunk, is_chief=is_chief, index_offset=0)
+    markup = _in_work_hub_keyboard(items=chunk, page=0, total=total)
 
     await callback.answer()
     if callback.message is not None:
@@ -1066,6 +1124,180 @@ async def on_admin_inline_payouts(callback: CallbackQuery, session: AsyncSession
         await on_daily_report(callback.message, state, session, _caller_id=callback.from_user.id)
 
 
+@router.callback_query(F.data == CB_ADMIN_STATS_MONTH)
+async def on_admin_inline_stats_month(callback: CallbackQuery, session: AsyncSession) -> None:
+    if callback.from_user is None:
+        return
+    if not await AdminService(session=session).can_manage_payouts(callback.from_user.id):
+        await callback.answer("Недостаточно прав", show_alert=True)
+        return
+
+    now = datetime.now(timezone.utc)
+    year, month = now.year, now.month
+    rows = await AdminStatsService(session=session).daily_sim_stats_for_month(year=year, month=month)
+    text = _month_stats_text(rows, year=year, month=month)
+
+    await callback.answer()
+    if callback.message is not None:
+        await edit_message_text_safe(
+            callback.message,
+            text,
+            reply_markup=_month_stats_keyboard(year=year, month=month),
+            parse_mode="HTML",
+        )
+
+
+@router.callback_query(F.data.startswith(f"{CB_ADMIN_STATS_EXPORT_MONTH}:"))
+async def on_admin_inline_stats_export_month(callback: CallbackQuery, session: AsyncSession) -> None:
+    if callback.from_user is None or callback.data is None:
+        return
+    if not await AdminService(session=session).can_manage_payouts(callback.from_user.id):
+        await callback.answer("Недостаточно прав", show_alert=True)
+        return
+
+    parts = callback.data.split(":")
+    if len(parts) != 4:
+        await callback.answer("Некорректные параметры экспорта", show_alert=True)
+        return
+
+    try:
+        year = int(parts[2])
+        month = int(parts[3])
+    except ValueError:
+        await callback.answer("Некорректный период", show_alert=True)
+        return
+
+    rows = await AdminStatsService(session=session).daily_sim_stats_for_month(year=year, month=month)
+    payload = _month_stats_workbook_bytes(rows, year=year, month=month)
+
+    await callback.answer("Формирую Excel...")
+    if callback.message is not None:
+        await callback.message.answer_document(
+            document=(f"sim_stats_{year}_{month:02d}.xlsx", payload),
+            caption=f"📊 Отчёт по SIM за {month:02d}.{year}",
+        )
+
+
+@router.callback_query(F.data == CB_ADMIN_STATS_RESET)
+async def on_admin_stats_reset_ask(callback: CallbackQuery, session: AsyncSession) -> None:
+    """Запрос подтверждения обнуления статистики (только chief_admin)."""
+    if callback.from_user is None:
+        return
+    if not await AdminService(session=session).can_manage_payouts(callback.from_user.id):
+        await callback.answer("Только для главных админов", show_alert=True)
+        return
+    await callback.answer()
+    if callback.message is not None:
+        await edit_message_text_safe(
+            callback.message,
+            "⚠️ <b>Обнулить статистику?</b>\n\n"
+            "Все счётчики в разделе «Статистика» станут 0.\n"
+            "Данные в БД не удаляются — просто сдвигается точка отсчёта.",
+            reply_markup=InlineKeyboardMarkup(
+                inline_keyboard=[
+                    [
+                        InlineKeyboardButton(
+                            text="✅ Да, обнулить",
+                            callback_data=CB_ADMIN_STATS_RESET_CONFIRM,
+                        ),
+                        InlineKeyboardButton(
+                            text="❌ Отмена",
+                            callback_data=CB_ADMIN_STATS_MONTH,
+                        ),
+                    ]
+                ]
+            ),
+            parse_mode="HTML",
+        )
+
+
+@router.callback_query(F.data == CB_ADMIN_STATS_RESET_CONFIRM)
+async def on_admin_stats_reset_confirm(callback: CallbackQuery, session: AsyncSession) -> None:
+    """Выполняет обнуление: сохраняет текущее время как точку отсчёта."""
+    if callback.from_user is None:
+        return
+    if not await AdminService(session=session).can_manage_payouts(callback.from_user.id):
+        await callback.answer("Только для главных админов", show_alert=True)
+        return
+
+    from src.core.stats_epoch import set_stats_epoch
+    epoch = set_stats_epoch()
+
+    await AdminAuditService(session=session).log(
+        admin_id=(await UserService(session=session).get_by_telegram_id(callback.from_user.id)).id,
+        action="stats_reset",
+        target_type="system",
+        details=f"Stats epoch set to {epoch.isoformat()}",
+    )
+
+    now = datetime.now(timezone.utc)
+    year, month = now.year, now.month
+    rows = await AdminStatsService(session=session).daily_sim_stats_for_month(year=year, month=month)
+    text = _month_stats_text(rows, year=year, month=month)
+
+    await callback.answer("Статистика обнулена ✅")
+    if callback.message is not None:
+        await edit_message_text_safe(
+            callback.message,
+            text,
+            reply_markup=_month_stats_keyboard(year=year, month=month),
+            parse_mode="HTML",
+        )
+
+
+@router.callback_query(F.data == CB_ADMIN_DASHBOARD_RESET)
+async def on_admin_dashboard_reset_ask(callback: CallbackQuery, session: AsyncSession) -> None:
+    """Запрос подтверждения персонального сброса счётчиков дашборда."""
+    if callback.from_user is None:
+        return
+    if not await AdminService(session=session).is_admin(callback.from_user.id):
+        await callback.answer("Недостаточно прав", show_alert=True)
+        return
+    await callback.answer()
+    if callback.message is not None:
+        await edit_message_text_safe(
+            callback.message,
+            "🔄 <b>Сбросить личные счётчики?</b>\n\n"
+            "Счётчики «Принято всего» и «Брак всего» на твоём дашборде\n"
+            "начнут считаться с нуля от текущего момента.\n\n"
+            "Данные других админов не затрагиваются.",
+            reply_markup=InlineKeyboardMarkup(
+                inline_keyboard=[
+                    [
+                        InlineKeyboardButton(
+                            text="✅ Да, обнулить",
+                            callback_data=CB_ADMIN_DASHBOARD_RESET_CONFIRM,
+                        ),
+                        InlineKeyboardButton(
+                            text="❌ Отмена",
+                            callback_data=CALLBACK_INLINE_BACK,
+                        ),
+                    ]
+                ]
+            ),
+            parse_mode="HTML",
+        )
+
+
+@router.callback_query(F.data == CB_ADMIN_DASHBOARD_RESET_CONFIRM)
+async def on_admin_dashboard_reset_confirm(callback: CallbackQuery, session: AsyncSession) -> None:
+    """Сохраняет персональную точку сброса, показывает обновлённый дашборд."""
+    if callback.from_user is None:
+        return
+    if not await AdminService(session=session).is_admin(callback.from_user.id):
+        await callback.answer("Недостаточно прав", show_alert=True)
+        return
+
+    from src.core.personal_epoch import set_personal_epoch
+    from src.utils.admin_keyboard import send_admin_dashboard
+    tg_id = callback.from_user.id
+    set_personal_epoch(tg_id)
+
+    await callback.answer("Счётчики сброшены ✅")
+    if callback.message is not None:
+        await send_admin_dashboard(callback.message, session, tg_id)
+
+
 @router.callback_query(F.data == CB_ADMIN_BROADCAST)
 async def on_admin_inline_broadcast(callback: CallbackQuery, state: FSMContext, session: AsyncSession) -> None:
     """Запускает рассылку из инлайн-дашборда."""
@@ -1081,32 +1313,6 @@ async def on_admin_inline_broadcast(callback: CallbackQuery, state: FSMContext, 
         await edit_message_text_safe(
             callback.message,
             f"📡 <b>РАССЫЛКА</b>\n\nОтправь текст рассылки одним сообщением.\n\n{HINT_BROADCAST}",
-            reply_markup=InlineKeyboardMarkup(
-                inline_keyboard=[
-                    [InlineKeyboardButton(text=REPLY_BTN_BACK, callback_data=CALLBACK_INLINE_BACK)]
-                ]
-            ),
-            parse_mode="HTML",
-        )
-
-
-@router.callback_query(F.data == CB_ADMIN_ARCHIVE)
-async def on_admin_inline_archive(callback: CallbackQuery, session: AsyncSession) -> None:
-    """Показывает инструкции по поиску в архиве из инлайн-дашборда."""
-
-    if callback.from_user is None:
-        return
-    if not await AdminService(session=session).can_manage_payouts(callback.from_user.id):
-        await callback.answer("Недостаточно прав", show_alert=True)
-        return
-    await callback.answer()
-    if callback.message is not None:
-        await edit_message_text_safe(
-            callback.message,
-            f"🗄 <b>АРХИВ (7 ДНЕЙ)</b>\n\n"
-            f"Поиск в архиве:\n"
-            f"/archive 1234  — последние 4 цифры\n"
-            f"/archive +79999999999  — полный номер\n\n{HINT_ARCHIVE}",
             reply_markup=InlineKeyboardMarkup(
                 inline_keyboard=[
                     [InlineKeyboardButton(text=REPLY_BTN_BACK, callback_data=CALLBACK_INLINE_BACK)]
@@ -1223,99 +1429,6 @@ async def on_daily_report(
     await _admin_delete_prev_panel_message(message, state)
     sent = await message.answer(body, reply_markup=kb)
     await _admin_store_panel_message(state, sent)
-
-
-async def on_archive_help(message: Message, session: AsyncSession) -> None:
-    """Показывает, как искать номер в архиве за 7 дней."""
-
-    if message.from_user is None:
-        return
-    if not await AdminService(session=session).can_manage_payouts(message.from_user.id):
-        await message.answer("Недостаточно прав.")
-        return
-    await message.answer(
-        "Поиск в архиве 7 дней:\n"
-        "/archive 1234  (последние цифры)\n"
-        "/archive +79999999999  (полный номер)\n\n"
-        f"{HINT_ARCHIVE}",
-    )
-
-
-@router.message(Command("archive"))
-async def on_archive_search(message: Message, session: AsyncSession) -> None:
-    """Ищет номер в архиве товаров за 7 дней."""
-
-    if message.from_user is None or message.text is None:
-        return
-    if not await AdminService(session=session).is_admin(message.from_user.id):
-        await message.answer("Недостаточно прав.")
-        return
-
-    query = message.text.replace("/archive", "", 1).strip()
-    if not query:
-        await message.answer("Формат: /archive 1234 или /archive +79999999999")
-        return
-
-    archive_service = ArchiveService(session=session)
-    await archive_service.prune_expired()
-    rows, total = await archive_service.search_archive_by_phone_paginated(query=query, page=0, page_size=PAGE_SIZE)
-    if not rows:
-        await message.answer("В архиве за 7 дней ничего не найдено.")
-        return
-
-    for submission, seller in rows:
-        cap = await _render_admin_moderation_card(session=session, submission=submission)
-        await message_answer_submission(
-            message,
-            submission,
-            caption=cap,
-            reply_markup=search_report_keyboard(submission_id=submission.id, seller_user_id=submission.user_id),
-            parse_mode="HTML",
-        )
-    await message.answer(
-        "\u2060",
-        reply_markup=pagination_keyboard(
-            CB_ADMIN_ARCHIVE_PAGE,
-            page=0,
-            total=total,
-            page_size=PAGE_SIZE,
-            query=query,
-        ),
-    )
-
-
-@router.callback_query(F.data.startswith(f"{CB_ADMIN_ARCHIVE_PAGE}:"))
-async def on_archive_page(callback: CallbackQuery, session: AsyncSession) -> None:
-    if callback.from_user is None or callback.data is None:
-        return
-    if not await AdminService(session=session).is_admin(callback.from_user.id):
-        await callback.answer("Недостаточно прав", show_alert=True)
-        return
-    _, _, page_raw, query = callback.data.split(":", 3)
-    page = max(int(page_raw), 0)
-    archive_service = ArchiveService(session=session)
-    rows, total = await archive_service.search_archive_by_phone_paginated(query=query, page=page, page_size=PAGE_SIZE)
-    if callback.message is not None:
-        for submission, seller in rows:
-            cap = await _render_admin_moderation_card(session=session, submission=submission)
-            await message_answer_submission(
-                callback.message,
-                submission,
-                caption=cap,
-                reply_markup=search_report_keyboard(submission_id=submission.id, seller_user_id=submission.user_id),
-                parse_mode="HTML",
-            )
-        await callback.message.answer(
-            "\u2060",
-            reply_markup=pagination_keyboard(
-                CB_ADMIN_ARCHIVE_PAGE,
-                page=page,
-                total=total,
-                page_size=PAGE_SIZE,
-                query=query,
-            ),
-        )
-    await callback.answer()
 
 
 @router.message(Command("s"))
@@ -2216,5 +2329,19 @@ async def on_submission_report(callback: CallbackQuery, session: AsyncSession) -
     )
     if getattr(submission, "is_duplicate", False):
         report_text += "\n⚠️ ВНИМАНИЕ: ЭТОТ НОМЕР УЖЕ БЫЛ В БОТЕ РАНЕЕ!\n"
-    await callback.answer()
-    await callback.message.answer(non_empty_plain(report_text))  # type: ignore[union-attr]
+    await callback.answer("Отчёт сформирован")
+    if callback.message is None:
+        return
+
+    sent = await callback.message.answer(
+        non_empty_plain(report_text) + "\n\n(Сообщение удалится через 20 сек)",
+    )
+    if sent.chat is not None:
+        asyncio.create_task(
+            _delete_message_later(
+                callback.bot,
+                chat_id=sent.chat.id,
+                message_id=sent.message_id,
+                delay_sec=20,
+            )
+        )

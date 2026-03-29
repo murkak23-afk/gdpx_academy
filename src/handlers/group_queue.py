@@ -57,8 +57,97 @@ _CB_FWD = "sim_q_fwd"         # переслать N штук: sim_q_fwd:{cat_id
 _CB_QTY_INPUT = "sim_q_input"  # запрос ручного ввода количества
 _CB_HOLD = "sim_q_hold"       # выбор hold после количества
 
-_AUTO_BRAK_CHAT_ID = -1003724834316
-_AUTO_BRAK_TOPIC_ID = 76
+# ---------- Авто-фиксация: конфигурация чатов и топиков ----------
+#
+# Формат: chat_id → { topic_id: "действие" }
+#
+# Доступные действия:
+#   "blocked"    — БЛОК (нарушение правил)
+#   "not_a_scan" — НЕ СКАН (качество)
+#   "rejected"   — БРАК (качество)
+#
+# Чтобы подключить новый чат — добавь блок.
+# Чтобы добавить топик в чат — добавь строку topic_id: "действие".
+
+AUTO_FIX_CHATS: dict[int, dict[int, str]] = {
+
+    # ── Чат 1: GDPX основной ──
+    -1003724834316: {
+        76:  "blocked",       # топик «Блоки»
+        188: "not_a_scan",    # топик «Не сканы»
+    },
+
+    # ── Чат 2: (пример — раскомментируй и подставь свои id) ──
+    -1003129572986: {
+         13947: "blocked",
+         13949: "not_a_scan",
+     },
+
+    # ── Чат 3: ──
+    # -100YYYYYYYYYY: {
+    #     10: "blocked",
+    # },
+
+}
+
+# ---------- внутренняя механика (не трогать) ----------
+
+from dataclasses import dataclass as _dataclass
+
+
+@_dataclass(frozen=True, slots=True)
+class AutoFixRule:
+    status: SubmissionStatus
+    reason: RejectionReason
+    label: str
+    audit_action: str
+
+
+_ACTION_PRESETS: dict[str, AutoFixRule] = {
+    "blocked": AutoFixRule(
+        status=SubmissionStatus.BLOCKED,
+        reason=RejectionReason.RULES_VIOLATION,
+        label="BLOCKED",
+        audit_action="auto_mark_blocked",
+    ),
+    "not_a_scan": AutoFixRule(
+        status=SubmissionStatus.NOT_A_SCAN,
+        reason=RejectionReason.QUALITY,
+        label="НЕ СКАН",
+        audit_action="auto_mark_not_a_scan",
+    ),
+    "rejected": AutoFixRule(
+        status=SubmissionStatus.REJECTED,
+        reason=RejectionReason.QUALITY,
+        label="БРАК",
+        audit_action="auto_mark_rejected",
+    ),
+}
+
+
+def _build_rules() -> dict[tuple[int, int], AutoFixRule]:
+    rules: dict[tuple[int, int], AutoFixRule] = {}
+    for chat_id, topics in AUTO_FIX_CHATS.items():
+        for topic_id, action in topics.items():
+            preset = _ACTION_PRESETS.get(action)
+            if preset is None:
+                raise ValueError(
+                    f"AUTO_FIX_CHATS: неизвестное действие '{action}' "
+                    f"для chat_id={chat_id}, topic_id={topic_id}. "
+                    f"Допустимые: {list(_ACTION_PRESETS.keys())}"
+                )
+            rules[(chat_id, topic_id)] = preset
+    return rules
+
+
+_AUTO_FIX_RULES = _build_rules()
+
+
+def _get_auto_fix_rule(chat_id: int, topic_id: int | None) -> AutoFixRule | None:
+    if topic_id is None:
+        return None
+    return _AUTO_FIX_RULES.get((chat_id, topic_id))
+
 
 _STATUS_ALIASES: dict[str, tuple[SubmissionStatus, RejectionReason]] = {
     "блок": (SubmissionStatus.BLOCKED, RejectionReason.RULES_VIOLATION),
@@ -121,14 +210,16 @@ async def _in_review_phone_snapshots(
     ]
 
 
-async def _notify_blocked_sides(
+async def _notify_autofix_sides(
     *,
     bot: Bot,
     session: AsyncSession,
     snapshots: list[dict[str, int | str | None]],
     phone_norm: str,
     count: int,
+    status_label: str,
 ) -> None:
+    """Уведомляет продавцов и контролёров об авто-фиксации статуса."""
     seller_ids = {int(s["user_id"]) for s in snapshots if s.get("user_id") is not None}
     controller_ids = {
         int(s["locked_by_admin_id"] or s["admin_id"])
@@ -144,7 +235,7 @@ async def _notify_blocked_sides(
             await bot.send_message(
                 chat_id=seller.telegram_id,
                 text=(
-                    f"⚠️ Симка по номеру +{phone_norm} переведена в статус: <b>В блоке</b>.\n"
+                    f"⚠️ Номеру +{phone_norm} присвоен статус: <b>{status_label}</b>.\n"
                     f"Количество: <b>{count}</b>."
                 ),
                 parse_mode="HTML",
@@ -160,7 +251,7 @@ async def _notify_blocked_sides(
             await bot.send_message(
                 chat_id=controller.telegram_id,
                 text=(
-                    f"⚠️ По номеру +{phone_norm} статус изменен на <b>В блоке</b>.\n"
+                    f"⚠️ Номеру +{phone_norm} присвоен статус: <b>{status_label}</b>.\n"
                     f"Количество сим: <b>{count}</b>."
                 ),
                 parse_mode="HTML",
@@ -199,23 +290,43 @@ def _extract_target_thread_id(message: Message) -> int | None:
     return None
 
 
-def _extract_phone_or_suffix(text: str) -> tuple[str, bool] | None:
-    """Извлекает номер из текста.
+def _extract_all_phones_or_suffixes(text: str) -> list[tuple[str, bool]]:
+    """Извлекает ВСЕ номера/суффиксы из текста (по одному на строку).
 
-    Returns (value, is_partial):
+    Returns list of (value, is_partial):
       - is_partial=False: полный нормализованный номер 7XXXXXXXXXX (11 цифр)
       - is_partial=True:  суффикс 4-9 цифр (поиск по окончанию phone_normalized)
     Распознаёт: +7/8/7 с кодом, номер без 7 в начале (10 цифр), последние 4-9 цифр.
     """
-    # Сначала пробуем извлечь полный номер (11 цифр или 10 цифр → нормализуем до 11)
-    for chunk in re.findall(r"[+\d][\d\s\-()]{6,24}", text):
-        normalized = normalize_phone_key(chunk)
-        if normalized is not None and len(normalized) == 11 and normalized.startswith("7"):
-            return normalized, False
-    # Затем ищем суффикс: 4-9 цифр подряд (без пробелов внутри)
-    for chunk in re.findall(r"(?<!\d)(\d{4,9})(?!\d)", text):
-        return chunk, True
-    return None
+    results: list[tuple[str, bool]] = []
+    seen: set[str] = set()
+    # Разбиваем по строкам, чтобы \n не склеивал номера в один жадный матч.
+    for line in text.splitlines():
+        # Сначала пробуем извлечь полный номер (11 цифр или 10 цифр → нормализуем до 11)
+        found_full = False
+        for chunk in re.findall(r"[+\d][\d \t\-()]{6,24}", line):
+            normalized = normalize_phone_key(chunk)
+            if normalized is not None and len(normalized) == 11 and normalized.startswith("7"):
+                if normalized not in seen:
+                    results.append((normalized, False))
+                    seen.add(normalized)
+                found_full = True
+                break
+        if found_full:
+            continue
+        # Затем ищем суффикс: 4-9 цифр подряд (без пробелов внутри)
+        for chunk in re.findall(r"(?<!\d)(\d{4,9})(?!\d)", line):
+            if chunk not in seen:
+                results.append((chunk, True))
+                seen.add(chunk)
+            break
+    return results
+
+
+def _extract_phone_or_suffix(text: str) -> tuple[str, bool] | None:
+    """Извлекает первый номер из текста (обратная совместимость)."""
+    results = _extract_all_phones_or_suffixes(text)
+    return results[0] if results else None
 
 
 # Backward-compatible alias (используется в _parse_group_status_change_request)
@@ -372,7 +483,7 @@ def _qty_keyboard(category_id: int, available: int) -> InlineKeyboardMarkup:
         if q <= min(available, 999)
     ]
     input_btn = InlineKeyboardButton(
-        text="✍️ Ввести количество", callback_data=f"{_CB_QTY_INPUT}:{category_id}"
+        text="✍️ Количество:", callback_data=f"{_CB_QTY_INPUT}:{category_id}"
     )
     back_btn = InlineKeyboardButton(text="◀️ Назад", callback_data=_CB_QUEUE)
     kb: list[list[InlineKeyboardButton]] = []
@@ -419,7 +530,7 @@ async def _notify_seller(bot: Bot, user: User, description_text: str | None, hol
         await bot.send_message(
             chat_id=user.telegram_id,
             text=(
-                f"⚖️ Ваш актив <code>{escape(num)}</code> передан в управление модератору.\n"
+                f"⚖️ Ваша симка <code>{escape(num)}</code> передана на скан.\n"
                 f"⏱ Холд: <b>{escape(_hold_label(hold_value))}</b>\n"
                 "Ожидайте решения."
             ),
@@ -766,86 +877,81 @@ async def on_queue_qty_input_message(message: Message, session: AsyncSession, bo
 
     raw_text = (message.text or message.caption or "").strip()
 
-    # Авто-правило: конкретный чат/топик, любой пользователь, сообщение с номером.
-    if message.chat.id == _AUTO_BRAK_CHAT_ID and message.message_thread_id == _AUTO_BRAK_TOPIC_ID:
-        phone_info = _extract_phone_or_suffix(raw_text)
-        if phone_info is None:
-            return
-        phone_norm, is_partial = phone_info
-
-        snapshots = await _in_review_phone_snapshots(session, phone_norm, is_partial=is_partial)
-        display_phone = f"…{phone_norm}" if is_partial else f"+{phone_norm}"
-        if not snapshots:
-            await _send_to_thread(
-                source_message=message,
-                text=f"⚠️ По номеру {display_phone} в разделе 'В работе' ничего не найдено.",
-                thread_id=message.message_thread_id,
-            )
-            return
-
-        if is_partial:
-            changed = await SubmissionService(session=session).final_reject_in_review_by_phone_suffix(
-                suffix=phone_norm,
-                admin_id=None,
-                to_status=SubmissionStatus.BLOCKED,
-                reason=RejectionReason.RULES_VIOLATION,
-                comment=(
-                    f"Авто-БЛОК из чата {_AUTO_BRAK_CHAT_ID}, топик {_AUTO_BRAK_TOPIC_ID}, "
-                    f"суффикс …{phone_norm}"
-                ),
-            )
-        else:
-            changed = await SubmissionService(session=session).final_reject_in_review_by_phone(
-                phone=phone_norm,
-                admin_id=None,
-                to_status=SubmissionStatus.BLOCKED,
-                reason=RejectionReason.RULES_VIOLATION,
-                comment=(
-                    f"Авто-БЛОК из чата {_AUTO_BRAK_CHAT_ID}, топик {_AUTO_BRAK_TOPIC_ID}, "
-                    f"номер {phone_norm}"
-                ),
-            )
-
-        if not changed:
-            await _send_to_thread(
-                source_message=message,
-                text=f"⚠️ По номеру {display_phone} в разделе 'В работе' ничего не найдено.",
-                thread_id=message.message_thread_id,
-            )
+    # Авто-фиксация: ищем правило по (chat_id, topic_id)
+    rule = _get_auto_fix_rule(message.chat.id, message.message_thread_id)
+    if rule is not None:
+        all_phones = _extract_all_phones_or_suffixes(raw_text)
+        if not all_phones:
             return
 
         actor_user = await UserService(session=session).get_by_telegram_id(message.from_user.id)
-        if actor_user is not None:
-            await AdminAuditService(session=session).log(
-                admin_id=actor_user.id,
-                action="auto_mark_brak_by_phone",
-                target_type="phone",
-                details=(
-                    f"chat_id={message.chat.id}, thread_id={message.message_thread_id}, "
-                    f"phone={phone_norm}, partial={is_partial}, count={len(changed)}, ids={[item.id for item in changed][:20]}"
-                ),
+        reply_parts: list[str] = []
+
+        for phone_norm, is_partial in all_phones:
+            display_phone = f"…{phone_norm}" if is_partial else f"+{phone_norm}"
+
+            snapshots = await _in_review_phone_snapshots(session, phone_norm, is_partial=is_partial)
+            if not snapshots:
+                reply_parts.append(f"⚠️ По номеру {display_phone} в разделе 'В работе' ничего не найдено.")
+                continue
+
+            comment_prefix = f"Авто-{rule.label} из чата {message.chat.id}, топик {message.message_thread_id}"
+            if is_partial:
+                changed = await SubmissionService(session=session).final_reject_in_review_by_phone_suffix(
+                    suffix=phone_norm,
+                    admin_id=None,
+                    to_status=rule.status,
+                    reason=rule.reason,
+                    comment=f"{comment_prefix}, суффикс …{phone_norm}",
+                )
+            else:
+                changed = await SubmissionService(session=session).final_reject_in_review_by_phone(
+                    phone=phone_norm,
+                    admin_id=None,
+                    to_status=rule.status,
+                    reason=rule.reason,
+                    comment=f"{comment_prefix}, номер {phone_norm}",
+                )
+
+            if not changed:
+                reply_parts.append(f"⚠️ Номер {display_phone} не обнаружен, возможно указаны не те цифры!")
+                continue
+
+            if actor_user is not None:
+                await AdminAuditService(session=session).log(
+                    admin_id=actor_user.id,
+                    action=rule.audit_action,
+                    target_type="phone",
+                    details=(
+                        f"chat_id={message.chat.id}, thread_id={message.message_thread_id}, "
+                        f"phone={phone_norm}, partial={is_partial}, count={len(changed)}, ids={[item.id for item in changed][:20]}"
+                    ),
+                )
+
+            await _notify_autofix_sides(
+                bot=bot,
+                session=session,
+                snapshots=snapshots,
+                phone_norm=phone_norm,
+                count=len(changed),
+                status_label=rule.label,
             )
 
-        await _notify_blocked_sides(
-            bot=bot,
-            session=session,
-            snapshots=snapshots,
-            phone_norm=phone_norm,
-            count=len(changed),
-        )
+            logger.info(
+                "auto-fix applied rule=%s chat_id=%s thread_id=%s phone=%s partial=%s count=%s",
+                rule.label,
+                message.chat.id,
+                message.message_thread_id,
+                phone_norm,
+                is_partial,
+                len(changed),
+            )
 
-        logger.info(
-            "auto block applied chat_id=%s thread_id=%s phone=%s partial=%s count=%s",
-            message.chat.id,
-            message.message_thread_id,
-            phone_norm,
-            is_partial,
-            len(changed),
-        )
+            reply_parts.append(f"⚠️ Номеру {display_phone} присвоен статус '{rule.label}' ({len(changed)} шт.).")
 
         await _send_to_thread(
             source_message=message,
-            text=f"⚠️ По номеру {display_phone} поставил статус 'блок' ({len(changed)} шт.).",
+            text="\n".join(reply_parts),
             thread_id=message.message_thread_id,
         )
         return

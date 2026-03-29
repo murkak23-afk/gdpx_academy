@@ -7,8 +7,9 @@ Create Date: 2026-03-29
 
 from __future__ import annotations
 
-from alembic import op
 from sqlalchemy import text
+
+from alembic import op
 
 revision = "20260329_0020"
 down_revision = "20260328_0019"
@@ -20,7 +21,7 @@ def upgrade() -> None:
     # Update any users with payout_admin role to chief_admin
     conn = op.get_bind()
     conn.execute(
-        text("UPDATE users SET role = 'chief_admin' WHERE role = 'payout_admin'")
+        text("UPDATE users SET role = 'chief_admin' WHERE role::text = 'payout_admin'")
     )
     
     # Recreate the enum type without payout_admin
