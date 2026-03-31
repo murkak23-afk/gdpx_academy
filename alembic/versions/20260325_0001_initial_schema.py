@@ -16,7 +16,7 @@ branch_labels = None
 depends_on = None
 
 
-user_role_enum = sa.Enum("seller", "moderator", "chief_admin", name="user_role_enum")
+user_role_enum = sa.Enum("seller", "moderator", "chief_admin", "sim_root", name="user_role_enum")
 user_language_enum = sa.Enum("ru", "en", "pl", name="user_language_enum")
 submission_status_enum = sa.Enum(
     "pending",

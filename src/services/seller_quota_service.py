@@ -36,21 +36,8 @@ class SellerQuotaService:
             SellerDailyQuota.quota_date == today,
         )
         row = (await self._session.execute(stmt)).scalar_one_or_none()
-        if row is None:
-            # Фолбэк на операторский лимит (категория).
-            cat_stmt = select(Category.total_upload_limit, Category.is_active).where(Category.id == category_id)
-            cat_row = (await self._session.execute(cat_stmt)).one_or_none()
-            if cat_row is None:
-                return 0
-            total_upload_limit, is_active = cat_row
-            if not is_active:
-                return 0
-            # None = безлимит.
-            if total_upload_limit is None:
-                return 10**9
-            return max(0, int(total_upload_limit))
-
-        return max(0, int(row))
+        # Лимит по количеству загрузок отключён по требованию
+        return 10**9
 
     async def upsert_quota(
         self,

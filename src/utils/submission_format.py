@@ -50,7 +50,16 @@ def _human_hold_label(value: str | None) -> str:
 def format_submission_chat_forward_title(submission: Submission, hold_override: str | None = None) -> str:
     """Подпись для чатов при пересылке админом: номер - ГДПХ категория hold."""
 
+    import re
     phone = (submission.description_text or "").strip() or "не указан"
+    # Если после номера есть текст — возвращаем как есть, не добавляем шаблон
+    match = re.match(r"^([+\d][\d \-()]{6,24})($|\D)", phone)
+    if match:
+        only_number = match.group(1).strip()
+        rest = phone[len(only_number):].strip()
+        if rest:
+            return phone
+
     hold_from_override = _human_hold_label(hold_override)
     if submission.category is not None:
         operator = (submission.category.operator or "").strip() or "не указан"

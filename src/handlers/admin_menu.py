@@ -4,6 +4,7 @@ import asyncio
 import csv
 import logging
 import re
+from aiogram.types import InputFile
 from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
 from html import escape
@@ -105,7 +106,7 @@ from src.utils.ui_builder import GDPXRenderer
 
 router = Router(name="admin-router")
 logger = logging.getLogger(__name__)
-PHONE_QUERY_PATTERN = re.compile(r"^\+7\d{10}$")
+PHONE_QUERY_PATTERN = re.compile(r"(?:\+7|7|8)\d{10}")
 PAGE_SIZE = 5
 LEDGER_PAGE_SIZE = 8
 INWORK_PAGE_SIZE = 8
@@ -1172,8 +1173,9 @@ async def on_admin_inline_stats_export_month(callback: CallbackQuery, session: A
 
     await callback.answer("Формирую Excel...")
     if callback.message is not None:
+        file = InputFile(BytesIO(payload), filename=f"sim_stats_{year}_{month:02d}.xlsx")
         await callback.message.answer_document(
-            document=(f"sim_stats_{year}_{month:02d}.xlsx", payload),
+            document=file,
             caption=f"📊 Отчёт по SIM за {month:02d}.{year}",
         )
 
@@ -1594,7 +1596,7 @@ async def on_export_report(message: Message, session: AsyncSession) -> None:
         wb.save(buf)
         buf.seek(0)
         await message.answer_document(
-            document=("daily_report.xlsx", buf.read()),
+            document=InputFile(buf, filename="daily_report.xlsx"),
             caption="Экспорт XLSX готов.",
         )
         return

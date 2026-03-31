@@ -66,14 +66,8 @@ class SubmissionService:
         return {int(cid): int(cnt) for cid, cnt in rows}
 
     async def is_duplicate_accepted(self, image_sha256: str) -> bool:
-        """Проверяет, был ли такой хэш ранее принят админом."""
-
-        stmt = select(Submission.id).where(
-            Submission.image_sha256 == image_sha256,
-            Submission.status == SubmissionStatus.ACCEPTED,
-        )
-        result = await self._session.execute(stmt)
-        return result.scalar_one_or_none() is not None
+        # Проверка дубликатов отключена по требованию
+        return False
 
     async def create_submission(
         self,
@@ -88,12 +82,20 @@ class SubmissionService:
         """Создаёт новую карточку в статусе pending."""
 
         now = datetime.now(timezone.utc)
-        norm = normalize_phone_key(description_text)
-        is_duplicate = False
-        if norm:
-            dup_stmt = select(Submission.id).where(Submission.phone_normalized == norm).limit(1)
-            if (await self._session.execute(dup_stmt)).scalar_one_or_none() is not None:
-                is_duplicate = True
+        import re
+        from src.utils.phone_norm import normalize_phone_strict
+        
+        # 1. Просто ищем первую последовательность цифр (10-11 штук) в тексте
+        # Это позволит писать "Билайн", "холд" и что угодно вокруг номера
+        phone_match = re.search(r"(?:\+7|7|8)\d{10}", description_text)
+        
+        if phone_match:
+            # Если нашли, нормализуем (приводим к виду 79xxxxxxxxx)
+            from src.utils.phone_norm import normalize_phone_strict
+            norm = normalize_phone_strict(phone_match.group())
+        else:
+            # Если в тексте вообще нет цифр, похожих на номер
+            norm = None
 
         submission = Submission(
             user_id=user_id,
@@ -101,11 +103,11 @@ class SubmissionService:
             telegram_file_id=telegram_file_id,
             file_unique_id=file_unique_id,
             image_sha256=image_sha256,
-            description_text=description_text,
+            description_text=description_text or "",
             attachment_type=attachment_type,
             status=SubmissionStatus.PENDING,
             phone_normalized=norm,
-            is_duplicate=is_duplicate,
+            is_duplicate=False, # Добавь это явно, чтобы избежать NameError
             last_status_change=now,
         )
         self._session.add(submission)
@@ -464,11 +466,14 @@ class SubmissionService:
     ) -> tuple[list[tuple[Submission, User]], int]:
         """Ищет в работе/истории по телефону c пагинацией."""
 
-        if query.startswith("+7") and len(query) == 12:
-            where_clause = Submission.description_text == query
+        digits = "".join(ch for ch in query if ch.isdigit())
+        
+        if len(digits) == 11:
+            where_clause = Submission.phone_normalized == digits
+
         else:
-            digits = "".join(ch for ch in query if ch.isdigit())
-            where_clause = Submission.description_text.like(f"%{digits}")
+            where_clause = Submission.phone_normalized.like(f"%{digits}")
+
 
         base_conditions = [
             where_clause,
@@ -605,23 +610,38 @@ class SubmissionService:
             )
         )
         
-        # Создаем запись о выплате (PENDING) для отображения в списке выплат
+        # Группируем выплаты за день: если уже есть PENDING-выплата за этот день и пользователя — увеличиваем сумму и accepted_count
         day_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
-        payout = Payout(
-            user_id=seller.id,
-            amount=category.payout_rate,
-            accepted_count=1,
-            period_key=day_start.date().isoformat(),
-            period_date=day_start.date(),
-            status=PayoutStatus.PENDING,
-            uploaded_count=0,
-            blocked_count=0,
-            not_a_scan_count=0,
-            category_id=category.id,
-            unit_price=category.payout_rate,
+        period_key = day_start.date().isoformat()
+        payout = await self._session.execute(
+            select(Payout)
+            .where(
+                Payout.user_id == seller.id,
+                Payout.period_key == period_key,
+                Payout.status == PayoutStatus.PENDING,
+            )
         )
-        self._session.add(payout)
-        
+        payout = payout.scalars().first()
+        if payout:
+            payout.amount = Decimal(payout.amount) + Decimal(category.payout_rate)
+            payout.accepted_count += 1
+            self._session.add(payout)
+        else:
+            payout = Payout(
+                user_id=seller.id,
+                amount=category.payout_rate,
+                accepted_count=1,
+                period_key=period_key,
+                period_date=day_start.date(),
+                status=PayoutStatus.PENDING,
+                uploaded_count=0,
+                blocked_count=0,
+                not_a_scan_count=0,
+                category_id=category.id,
+                unit_price=category.payout_rate,
+            )
+            self._session.add(payout)
+
         await self._session.commit()
         await self._session.refresh(submission)
         return submission
@@ -692,14 +712,24 @@ class SubmissionService:
             return []
 
         plus_variant = f"+{normalized}"
+        import re
+        # Только если description_text состоит только из цифр, пробелов, +, -, (, )
+
+        def is_pure_number(text):
+            # Только цифры и допустимые символы, не более 11 цифр
+            digits = re.sub(r"\D", "", text)
+            if len(digits) > 11:
+                return False
+            return bool(re.fullmatch(r"[+\d \-()]{6,24}", text.strip()))
+
         stmt = (
             select(Submission)
             .where(
                 Submission.status == SubmissionStatus.IN_REVIEW,
                 or_(
                     Submission.phone_normalized == normalized,
-                    Submission.description_text == normalized,
-                    Submission.description_text == plus_variant,
+                    (Submission.description_text == normalized) & (is_pure_number(normalized)),
+                    (Submission.description_text == plus_variant) & (is_pure_number(plus_variant)),
                 ),
             )
             .order_by(Submission.id.asc())

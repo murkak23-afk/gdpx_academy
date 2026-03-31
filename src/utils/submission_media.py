@@ -50,13 +50,8 @@ _ARCHIVE_MIME_KEYWORDS = (
 def is_allowed_archive_document(document: Document) -> bool:
     """Проверяет, что документ похож на архив (расширение или MIME)."""
 
-    name = (document.file_name or "").lower()
-    if any(name.endswith(suf) for suf in _ARCHIVE_SUFFIXES):
-        return True
-    mt = (document.mime_type or "").lower()
-    if not mt:
-        return False
-    return any(k in mt for k in _ARCHIVE_MIME_KEYWORDS)
+    # Фильтрация по расширению и MIME отключена по требованию
+    return True
 
 
 def caption_trim(text: str | None, limit: int = 1024) -> str | None:

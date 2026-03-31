@@ -22,7 +22,7 @@ class AdminService:
 
         stmt = select(User.role).where(User.telegram_id == telegram_id)
         role = (await self._session.execute(stmt)).scalar_one_or_none()
-        return role in {UserRole.CHIEF_ADMIN, UserRole.ADMIN}
+        return role in {UserRole.CHIEF_ADMIN, UserRole.ADMIN,}
 
     async def can_use_sim_groups(self, telegram_id: int) -> bool:
         """Доступ к /sim и связанным групповым операциям очереди."""

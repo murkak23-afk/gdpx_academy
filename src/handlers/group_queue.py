@@ -81,7 +81,7 @@ AUTO_FIX_CHATS: dict[int, dict[int, str]] = {
     -1003129572986: {
          13947: "blocked",
          13949: "not_a_scan",
-     },
+    },
 
     # ── Чат 3: ──
     # -100YYYYYYYYYY: {
@@ -113,7 +113,7 @@ _ACTION_PRESETS: dict[str, AutoFixRule] = {
     "not_a_scan": AutoFixRule(
         status=SubmissionStatus.NOT_A_SCAN,
         reason=RejectionReason.QUALITY,
-        label="НЕ СКАН",
+        label="НЕ SCAN",
         audit_action="auto_mark_not_a_scan",
     ),
     "rejected": AutoFixRule(
@@ -494,26 +494,6 @@ def _qty_keyboard(category_id: int, available: int) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=kb)
 
 
-def _hold_keyboard(default_hold: str | None) -> InlineKeyboardMarkup:
-    rows: list[list[InlineKeyboardButton]] = []
-    if default_hold and default_hold.strip():
-        rows.append(
-            [
-                InlineKeyboardButton(
-                    text=f"По категории ({default_hold.strip()})",
-                    callback_data=f"{_CB_HOLD}:cat",
-                )
-            ]
-        )
-    rows.append(
-        [
-            InlineKeyboardButton(text="Без холда", callback_data=f"{_CB_HOLD}:no_hold"),
-            InlineKeyboardButton(text="15м", callback_data=f"{_CB_HOLD}:15m"),
-            InlineKeyboardButton(text="30м", callback_data=f"{_CB_HOLD}:30m"),
-            InlineKeyboardButton(text="60м", callback_data=f"{_CB_HOLD}:60m"),
-        ]
-    )
-    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 def _hold_label(hold_value: str | None) -> str:
@@ -840,19 +820,24 @@ async def cb_group_forward(callback: CallbackQuery, session: AsyncSession, bot: 
         await callback.answer("Категория не найдена", show_alert=True)
         return
 
-    key = _qty_input_key(callback.from_user.id, callback.message.chat.id, callback.message.message_thread_id)
-    _pending_hold_choice[key] = (category_id, qty)
-    await callback.answer()
-    await _send_to_thread(
-        source_message=callback.message,
-        text="Выбери hold для отправляемых сим.",
-        thread_id=callback.message.message_thread_id,
-        reply_markup=_hold_keyboard((cat.hold_condition or "").strip() or None),
+    # --- Спецлогика: если чат в списке instant-hold, выдаём симки сразу без выбора hold ---
+    await _forward_for_category(
+        actor_tg_id=callback.from_user.id,
+        target_message=callback.message,
+        session=session,
+        bot=bot,
+        category_id=category_id,
+        qty=qty,
+        selected_hold="no_hold",
+        callback=callback,
     )
+    return
 
+
+import asyncio
 
 @router.callback_query(F.data.startswith(f"{_CB_QTY_INPUT}:"), F.message.chat.type.in_(_GROUP_TYPES))
-async def cb_queue_qty_input(callback: CallbackQuery, session: AsyncSession) -> None:
+async def cb_queue_qty_input(callback: CallbackQuery, session: AsyncSession, bot: Bot) -> None:
     if callback.from_user is None or callback.data is None or callback.message is None:
         return
     if not await AdminService(session=session).can_use_sim_groups(callback.from_user.id):
@@ -868,6 +853,14 @@ async def cb_queue_qty_input(callback: CallbackQuery, session: AsyncSession) -> 
         text="Введи количество для отправки (от 1 до 999).",
         thread_id=callback.message.message_thread_id,
     )
+
+    # Таймаут 10 секунд на ввод
+    async def timeout_clear():
+        await asyncio.sleep(10)
+        # Если пользователь не ввёл число за 10 секунд, сбрасываем ожидание (без уведомления)
+        _pending_qty_input.pop(key, None)
+
+    asyncio.create_task(timeout_clear())
 
 
 @router.message(F.chat.type.in_(_GROUP_TYPES))
@@ -893,6 +886,12 @@ async def on_queue_qty_input_message(message: Message, session: AsyncSession, bo
             snapshots = await _in_review_phone_snapshots(session, phone_norm, is_partial=is_partial)
             if not snapshots:
                 reply_parts.append(f"⚠️ По номеру {display_phone} в разделе 'В работе' ничего не найдено.")
+                # Новое уведомление в топик, если номера нет в базе
+                await _send_to_thread(
+                    source_message=message,
+                    text="Номера нет в базе... Теперь напрягаем пальцы 🔎",
+                    thread_id=message.message_thread_id,
+                )
                 continue
 
             comment_prefix = f"Авто-{rule.label} из чата {message.chat.id}, топик {message.message_thread_id}"
@@ -954,24 +953,23 @@ async def on_queue_qty_input_message(message: Message, session: AsyncSession, bo
             text="\n".join(reply_parts),
             thread_id=message.message_thread_id,
         )
-        return
 
-    if message.text is None:
-        return
-    if not await AdminService(session=session).can_use_sim_groups(message.from_user.id):
-        return
-
-    key = _qty_input_key(message.from_user.id, message.chat.id, message.message_thread_id)
-    category_id = _pending_qty_input.get(key)
-    if category_id is None:
-        parsed = _parse_group_status_change_request(message.text)
-        if parsed is None:
+        if message.text is None:
+            return
+        if not await AdminService(session=session).can_use_sim_groups(message.from_user.id):
             return
 
-        to_status, reason, phone_norm, comment = parsed
-        admin_user = await UserService(session=session).get_by_telegram_id(message.from_user.id)
-        if admin_user is None:
-            return
+        key = _qty_input_key(message.from_user.id, message.chat.id, message.message_thread_id)
+        category_id = _pending_qty_input.get(key)
+        if category_id is None:
+            parsed = _parse_group_status_change_request(message.text)
+            if parsed is None:
+                return
+
+            to_status, reason, phone_norm, comment = parsed
+            admin_user = await UserService(session=session).get_by_telegram_id(message.from_user.id)
+            if admin_user is None:
+                return
 
         changed = await SubmissionService(session=session).final_reject_in_review_by_phone(
             phone=phone_norm,
@@ -1037,38 +1035,15 @@ async def on_queue_qty_input_message(message: Message, session: AsyncSession, bo
         await message.answer("Категория не найдена")
         return
 
-    _pending_hold_choice[key] = (category_id, qty)
-    await _send_to_thread(
-        source_message=message,
-        text="Выбери hold для отправляемых сим.",
-        thread_id=message.message_thread_id,
-        reply_markup=_hold_keyboard((cat.hold_condition or "").strip() or None),
-    )
-
-
-@router.callback_query(F.data.startswith(f"{_CB_HOLD}:"), F.message.chat.type.in_(_GROUP_TYPES))
-async def cb_queue_hold_pick(callback: CallbackQuery, session: AsyncSession, bot: Bot) -> None:
-    if callback.from_user is None or callback.data is None or callback.message is None:
-        return
-    if not await AdminService(session=session).can_use_sim_groups(callback.from_user.id):
-        await callback.answer("Недостаточно прав", show_alert=True)
-        return
-
-    hold_value = callback.data.split(":", 1)[1]
-    key = _qty_input_key(callback.from_user.id, callback.message.chat.id, callback.message.message_thread_id)
-    pending = _pending_hold_choice.pop(key, None)
-    if pending is None:
-        await callback.answer("Сначала выбери количество", show_alert=True)
-        return
-
-    category_id, qty = pending
     await _forward_for_category(
-        actor_tg_id=callback.from_user.id,
-        target_message=callback.message,
+        actor_tg_id=message.from_user.id,
+        target_message=message,
         session=session,
         bot=bot,
         category_id=category_id,
         qty=qty,
-        selected_hold=hold_value,
-        callback=callback,
+        selected_hold="no_hold",
     )
+    return
+
+

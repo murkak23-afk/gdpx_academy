@@ -438,18 +438,33 @@ async def _batch_inc(state: FSMContext, key: str, delta: int = 1) -> None:
 
 
 def _normalize_phone_batch(raw: str | None) -> str | None:
-    strict = normalize_phone_strict(raw or "")
-    if strict is not None:
-        return strict
-    digits = re.sub(r"\D+", "", raw or "")
-    if not digits:
+    print("\n--- СТАРТ ПРОВЕРКИ НОМЕРА ---")
+    print(f"1. Бот увидел текст: '{raw}'")
+
+    if not raw:
+        print("ИТОГ: Текст пустой, отмена.")
         return None
+
+    digits = "".join(c for c in raw if c.isdigit())
+    print(f"2. Оставили только цифры: '{digits}' (Длина: {len(digits)})")
+
+    # Если цифр больше 11 — берём только первые 11 как номер
+    if len(digits) > 11:
+        digits = digits[:11]
+        print(f"3. Обрезали до первых 11: '{digits}'")
+
     if len(digits) == 11 and digits.startswith("8"):
         digits = "7" + digits[1:]
     elif len(digits) == 10:
         digits = "7" + digits
+
+    print(f"4. После подстановки семерки: '{digits}'")
+
     if len(digits) == 11 and digits.startswith("7"):
-        return f"+{digits}"
+        print(f"5. ИТОГ: УСПЕХ! Возвращаем чистый номер: {digits}\n")
+        return digits
+
+    print("6. ИТОГ: ПРОВАЛ! Длина не равна 11 или начинается не на 7.\n")
     return None
 
 
@@ -499,9 +514,10 @@ async def _batch_mark_seen_or_duplicate(state: FSMContext, *, phone: str, file_u
         batch_seen_file_uids=sorted(seen_files),
     )
     return False
+    return False
 
 
-def _batch_report_text(accepted: int, rejected: int, reasons: dict[str, int] | None = None) -> str:
+#def _batch_report_text(accepted: int, rejected: int, reasons: dict[str, int] | None = None) -> str:
     total = accepted + rejected
     lines = [
         "📦 Загрузка завершена.\n\n"
@@ -1944,7 +1960,6 @@ async def on_photo_received(
         await _refresh_batch_status_message(message, state)
         _schedule_batch_idle_menu(message, state, message.from_user.id)
         return
-
     if await _batch_mark_seen_or_duplicate(state, phone=caption, file_unique_id=best_photo.file_unique_id):
         await _batch_reject(state, reason_code=REJECT_DUPLICATE_BATCH, phone=caption)
         await _refresh_batch_status_message(message, state)
