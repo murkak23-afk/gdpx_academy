@@ -1013,27 +1013,28 @@ async def on_queue_qty_input_message(message: Message, session: AsyncSession, bo
         return
 
     text = message.text.strip()
-    if not text.isdigit():
-        await _send_to_thread(
-            source_message=message,
-            text="Нужно число от 1 до 999.",
-            thread_id=message.message_thread_id,
-        )
-        return
-    qty = int(text)
-    if qty < 1 or qty > 999:
-        await _send_to_thread(
-            source_message=message,
-            text="Количество должно быть от 1 до 999.",
-            thread_id=message.message_thread_id,
-        )
-        return
+    if category_id is not None:
+        if not text.isdigit():
+            await _send_to_thread(
+                source_message=message,
+                text="Нужно число от 1 до 999.",
+                thread_id=message.message_thread_id,
+            )
+            return
+        qty = int(text)
+        if qty < 1 or qty > 999:
+            await _send_to_thread(
+                source_message=message,
+                text="Количество должно быть от 1 до 999.",
+                thread_id=message.message_thread_id,
+            )
+            return
 
-    _pending_qty_input.pop(key, None)
-    cat = await session.get(Category, category_id)
-    if cat is None:
-        await message.answer("Категория не найдена")
-        return
+        _pending_qty_input.pop(key, None)
+        cat = await session.get(Category, category_id)
+        if cat is None:
+            await message.answer("Категория не найдена")
+            return
 
     await _forward_for_category(
         actor_tg_id=message.from_user.id,

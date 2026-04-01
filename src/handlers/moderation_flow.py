@@ -497,6 +497,7 @@ async def on_batch_pick_ids_received(
         inline_keyboard=[
             [InlineKeyboardButton(text="Взять в работу", callback_data=f"{CB_MOD_BATCH_ACTION}:take_work")],
             [InlineKeyboardButton(text="Переслать в чат / ЛС", callback_data=f"{CB_MOD_BATCH_ACTION}:forward")],
+            [InlineKeyboardButton(text="❌ Удалить", callback_data=f"{CB_MOD_BATCH_ACTION}:delete")],
             [InlineKeyboardButton(text="⬅️ Назад", callback_data=CB_MOD_PICK_CANCEL)],
         ]
     )
@@ -540,6 +541,22 @@ async def on_batch_action_selected(
             await callback.message.edit_reply_markup(reply_markup=None)
         return
 
+    if action == "delete":
+        confirm_kb = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [InlineKeyboardButton(text="✅ Подтвердить удаление", callback_data=f"{CB_MOD_BATCH_CONFIRM}:delete")],
+                [InlineKeyboardButton(text="❌ Отмена", callback_data=CB_MOD_BATCH_CANCEL)],
+            ]
+        )
+        await callback.answer()
+        if callback.message is not None:
+            await callback.message.answer(
+                f"Подтвердить удаление {len(picked_ids)} карточек? Это действие необратимо!",
+                reply_markup=confirm_kb,
+            )
+            await callback.message.edit_reply_markup(reply_markup=None)
+        return
+
     if action != "take_work":
         await callback.answer("Неизвестное действие", show_alert=True)
         return
@@ -575,6 +592,27 @@ async def on_batch_action_confirm(
         return
 
     action = callback.data.split(":")[2]
+    if action == "delete":
+        data = await state.get_data()
+        picked_ids = [int(x) for x in data.get("picked_submission_ids", [])]
+        if not picked_ids:
+            await state.clear()
+            await callback.answer("Пачка устарела, открой «Очередь» заново.", show_alert=True)
+            return
+        svc = SubmissionService(session=session)
+        deleted = 0
+        for sid in picked_ids:
+            sub = await svc.get_by_id(sid)
+            if sub:
+                await session.delete(sub)
+                deleted += 1
+        await session.commit()
+        await state.clear()
+        await callback.answer()
+        if callback.message is not None:
+            await callback.message.answer(f"Удалено {deleted} карточек из базы.")
+            await callback.message.edit_reply_markup(reply_markup=None)
+        return
     if action != "take_work":
         await callback.answer("Неизвестное действие", show_alert=True)
         return

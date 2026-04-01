@@ -331,7 +331,8 @@ def _render_profile_text(user, dashboard: dict) -> str:
             "approved_count": int(dashboard.get("accepted", 0)),
             "pending_count": int(dashboard.get("pending", 0)),
             "rejected_count": int(dashboard.get("rejected", 0)),
-        }
+        },
+        user.telegram_id
     )
 
 
@@ -1553,7 +1554,8 @@ async def on_seller_cancel_fsm(callback: CallbackQuery, state: FSMContext, sessi
             "approved_count": int(dashboard.get("accepted", 0)),
             "pending_count": int(dashboard.get("pending", 0)),
             "rejected_count": int(dashboard.get("rejected", 0)),
-        }
+        },
+        user.telegram_id
     )
     await callback.answer("Операция отменена")
     if callback.message is not None:
@@ -1646,7 +1648,8 @@ async def on_seller_batch_csv_yes(callback: CallbackQuery, state: FSMContext, se
             "approved_count": int(dashboard.get("accepted", 0)),
             "pending_count": int(dashboard.get("pending", 0)),
             "rejected_count": int(dashboard.get("rejected", 0)),
-        }
+        },
+        user.telegram_id
     )
 
     await callback.answer("CSV отправлен")
@@ -1681,7 +1684,8 @@ async def on_seller_batch_csv_no(callback: CallbackQuery, state: FSMContext, ses
             "approved_count": int(dashboard.get("accepted", 0)),
             "pending_count": int(dashboard.get("pending", 0)),
             "rejected_count": int(dashboard.get("rejected", 0)),
-        }
+        },
+        user.telegram_id
     )
 
     await callback.answer("Без CSV")
@@ -1863,7 +1867,8 @@ async def _finalize_submission_after_upload(
                     "approved_count": int(dashboard.get("accepted", 0)),
                     "pending_count": int(dashboard.get("pending", 0)),
                     "rejected_count": int(dashboard.get("rejected", 0)),
-                }
+                },
+                user.telegram_id
             ),
             reply_markup=seller_main_inline_keyboard(),
             parse_mode="HTML",

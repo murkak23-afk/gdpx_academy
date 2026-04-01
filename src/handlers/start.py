@@ -26,15 +26,18 @@ async def _send_welcome_banner(
     dashboard: dict[str, object],
     total_earned: object,
 ) -> None:
+    username = user.username
+    if not username:
+        username = str(user.id)
     render_text = GDPXRenderer().render_dashboard(
         {
-            "username": user.username or "resident",
+            "username": username,
             "pending_count": int(dashboard.get("pending", 0)),
             "in_review_count": 0,
             "approved_count": int(dashboard.get("accepted", 0)),
             "rejected_count": int(dashboard.get("rejected", 0)),
             "total_payout_amount": total_earned,
-            "payout_label": "Общий заработок",
+            "payout_label": "Капитал:",
         },
     )
     # Hide legacy reply keyboard before opening the inline profile hub.
