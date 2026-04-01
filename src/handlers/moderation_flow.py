@@ -10,9 +10,10 @@ from io import StringIO
 from aiogram import Bot, F, Router
 from aiogram.enums import ContentType
 from aiogram.exceptions import TelegramAPIError
-from aiogram.filters import Command, or_f
+from aiogram.filters import Command, StateFilter, or_f
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.config import get_settings
@@ -33,6 +34,19 @@ from src.keyboards import (
 from src.keyboards.admin_hints import HINT_IN_REVIEW, HINT_QUEUE
 from src.keyboards.callbacks import (
     CB_MOD_ACCEPT,
+    CB_MOD_BUFFER_ACT,
+    CB_MOD_BUFFER_CARD_PAGE,
+    CB_MOD_BUFFER_CFG_BACK,
+    CB_MOD_BUFFER_CFG_CAT,
+    CB_MOD_BUFFER_CFG_CAT_PAGE,
+    CB_MOD_BUFFER_CFG_CAT_PICK,
+    CB_MOD_BUFFER_PICK_N,
+    CB_MOD_BUFFER_PICK_QTY,
+    CB_MOD_BUFFER_PAGE,
+    CB_MOD_BUFFER_SEARCH,
+    CB_MOD_BUFFER_SEL_ALL,
+    CB_MOD_BUFFER_SELLER,
+    CB_MOD_BUFFER_TOGGLE,
     CB_MOD_BATCH_ACTION,
     CB_MOD_BATCH_CANCEL,
     CB_MOD_BATCH_CONFIRM,
@@ -50,6 +64,7 @@ from src.keyboards.callbacks import (
     CB_MOD_REJTPL_BACK,
     CB_MOD_TAKE,
     CB_MOD_TAKE_PICK,
+    CB_NOOP,
 )
 from src.keyboards.constants import CALLBACK_INLINE_BACK, REPLY_BTN_BACK
 from src.services import (
@@ -59,7 +74,7 @@ from src.services import (
     SubmissionService,
     UserService,
 )
-from src.states.moderation_state import AdminBatchPickState, AdminModerationForwardState
+from src.states.moderation_state import AdminBatchPickState, AdminCardFilterState, AdminModerationForwardState
 from src.utils.admin_keyboard import send_admin_dashboard
 from src.utils.clean_screen import send_clean_text_screen
 from src.utils.forward_target import target_chat_id_from_forward_pick
@@ -70,13 +85,57 @@ from src.utils.submission_format import (
     submission_status_emoji_line,
 )
 from src.utils.submission_media import bot_send_submission, message_answer_submission
-from src.utils.text_format import edit_message_text_safe
+from src.utils.text_format import edit_message_text_or_caption_safe, edit_message_text_safe
 from src.utils.ui_builder import GDPXRenderer
 
 router = Router(name="moderation-router")
 PAGE_SIZE = 5
+BUFFER_SELLERS_PAGE_SIZE = 8
+BUFFER_CARDS_PAGE_SIZE = 10
 _renderer = GDPXRenderer()
 logger = logging.getLogger(__name__)
+_BUFFER_FILTERS_KEY = "buffer_card_queries"
+
+
+def _norm_query(text: str | None) -> str:
+    return (text or "").strip()
+
+
+def _buffer_query_from_data(data: dict, seller_id: int) -> str:
+    raw = data.get(_BUFFER_FILTERS_KEY, {})
+    if not isinstance(raw, dict):
+        return ""
+    return _norm_query(raw.get(str(seller_id)))
+
+
+async def _buffer_set_query(state: FSMContext, seller_id: int, query: str) -> None:
+    data = await state.get_data()
+    raw = data.get(_BUFFER_FILTERS_KEY, {})
+    filters = dict(raw) if isinstance(raw, dict) else {}
+    q = _norm_query(query)
+    if q:
+        filters[str(seller_id)] = q
+    else:
+        filters.pop(str(seller_id), None)
+    await state.update_data(**{_BUFFER_FILTERS_KEY: filters})
+
+
+def _buffer_apply_query(items: list[Submission], query: str) -> list[Submission]:
+    q = _norm_query(query)
+    if not q:
+        return items
+    q_low = q.lower()
+    q_digits = re.sub(r"\D", "", q)
+    out: list[Submission] = []
+    for s in items:
+        phone = (s.description_text or "").strip()
+        cat = s.category.title if s.category and s.category.title else ""
+        if q_low in phone.lower() or q_low in cat.lower():
+            out.append(s)
+            continue
+        if q_digits and q_digits in re.sub(r"\D", "", phone):
+            out.append(s)
+    return out
 
 
 async def _notify_sellers_in_review(bot: Bot, session: AsyncSession, submissions: list[Submission]) -> None:
@@ -278,61 +337,65 @@ async def _show_queue_for_admin(
     category_id: int | None = None,
     date_from: datetime | None = None,
 ) -> None:
-    """Показывает первую страницу очереди для админа в текущем чате."""
+    """Показывает Level 1 «Буфер остатка»: список продавцов и счетчики."""
 
-    filters_query = _encode_queue_filters(seller_id=seller_id, category_id=category_id, date_from=date_from)
     groups, total = await SubmissionService(session=session).list_pending_groups_by_user_paginated(
         page=0,
-        page_size=PAGE_SIZE,
+        page_size=BUFFER_SELLERS_PAGE_SIZE,
         seller_id=seller_id,
         category_id=category_id,
         date_from=date_from,
     )
-    if not groups:
-        if target_message.from_user is None:
-            await target_message.answer("Очередь пустая.")
-            return
-        await target_message.answer("Очередь пустая.")
-        return
+    total_cards = int(
+        (
+            await session.execute(
+                select(func.count(Submission.id)).where(Submission.status == SubmissionStatus.PENDING)
+            )
+        ).scalar_one()
+    )
 
-    first_card = True
+    lines = [
+        "❖ <b>GDPX // ACADEMY</b> ─ Буфер остатка",
+        "━━━━━━━━━━━━━━━━━━━━",
+        f"<b>Продавцов:</b> <code>{total}</code>  ·  <b>SIM в остатке:</b> <code>{total_cards}</code>",
+    ]
+    if not groups:
+        lines.extend(["", " ▫️ <i>Буфер пуст</i>", "━━━━━━━━━━━━━━━━━━━━"])
+        await target_message.answer("\n".join(lines), parse_mode="HTML")
+        return
+    lines.extend(["", "Выберите продавца:"])
+    text = "\n".join(lines)
+    kb_rows: list[list[InlineKeyboardButton]] = []
     for seller_user_id, items_count in groups:
         sample_items = await SubmissionService(session=session).list_pending_submissions_by_user(user_id=seller_user_id)
-        if not sample_items:
-            continue
-        sample = sample_items[0]
-        cap = await _render_moderation_card_caption(
-            sample,
-            session=session,
-            hint_block=HINT_QUEUE if first_card else "",
-        )
-        if first_card:
-            first_card = False
-        await message_answer_submission(
-            target_message,
-            sample,
-            caption=cap,
-            reply_markup=moderation_seller_group_keyboard(user_id=seller_user_id),
-            parse_mode="HTML",
-        )
-    if total > PAGE_SIZE:
-        await target_message.answer(
-            "Навигация по очереди:",
-            reply_markup=pagination_keyboard(
-                CB_MOD_QUEUE_PAGE,
-                page=0,
-                total=total,
-                page_size=PAGE_SIZE,
-                query=filters_query,
-            ),
-        )
+        label = f"ID:{seller_user_id}"
+        if sample_items and sample_items[0].seller is not None:
+            s = sample_items[0].seller
+            if s.username:
+                label = f"@{s.username}"
+            else:
+                label = str(s.telegram_id)
+        btn = f"{label} ({items_count})"
+        if len(btn) > 40:
+            btn = btn[:39] + "…"
+        kb_rows.append([
+            InlineKeyboardButton(text=btn, callback_data=f"{CB_MOD_BUFFER_SELLER}:{seller_user_id}")
+        ])
+
+    if total > BUFFER_SELLERS_PAGE_SIZE:
+        kb_rows.append([
+            InlineKeyboardButton(text="1/…", callback_data=CB_NOOP),
+            InlineKeyboardButton(text="▶", callback_data=f"{CB_MOD_BUFFER_PAGE}:1"),
+        ])
+    kb_rows.append([InlineKeyboardButton(text=REPLY_BTN_BACK, callback_data=CALLBACK_INLINE_BACK)])
+    await target_message.answer(text, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(inline_keyboard=kb_rows))
 
 
 @router.message(Command("moderation"))
 async def on_moderation_queue(
     message: Message, session: AsyncSession, *, _caller_id: int | None = None
 ) -> None:
-    """Показывает очередь pending, сгруппированную по продавцам."""
+    """Показывает Level 1 «Буфер остатка»: продавцы и количество SIM."""
 
     tid = _caller_id or (message.from_user.id if message.from_user else None)
     if tid is None:
@@ -343,69 +406,795 @@ async def on_moderation_queue(
         await message.answer("Недостаточно прав.")
         return
 
-    seller_id, category_id, date_from = _parse_filters(message.text)
-    await _show_queue_for_admin(
-        target_message=message,
-        session=session,
-        seller_id=seller_id,
-        category_id=category_id,
-        date_from=date_from,
+    await _show_queue_for_admin(target_message=message, session=session)
+
+
+async def _render_buffer_sellers_page(
+    callback: CallbackQuery,
+    session: AsyncSession,
+    *,
+    page: int,
+) -> None:
+    groups, total = await SubmissionService(session=session).list_pending_groups_by_user_paginated(
+        page=page,
+        page_size=BUFFER_SELLERS_PAGE_SIZE,
     )
+    total_cards = int(
+        (
+            await session.execute(
+                select(func.count(Submission.id)).where(Submission.status == SubmissionStatus.PENDING)
+            )
+        ).scalar_one()
+    )
+    max_page = max((total - 1) // BUFFER_SELLERS_PAGE_SIZE, 0) if total > 0 else 0
+    page = min(max(page, 0), max_page)
+
+    lines = [
+        "❖ <b>GDPX // ACADEMY</b> ─ Буфер остатка",
+        "━━━━━━━━━━━━━━━━━━━━",
+        f"<b>Продавцов:</b> <code>{total}</code>  ·  <b>SIM в остатке:</b> <code>{total_cards}</code>",
+    ]
+    if not groups:
+        lines.extend(["", " ▫️ <i>Буфер пуст</i>", "━━━━━━━━━━━━━━━━━━━━"])
+    else:
+        lines.extend(["", "Выберите продавца:"])
+    kb_rows: list[list[InlineKeyboardButton]] = []
+    for seller_user_id, items_count in groups:
+        sample_items = await SubmissionService(session=session).list_pending_submissions_by_user(user_id=seller_user_id)
+        label = f"ID:{seller_user_id}"
+        if sample_items and sample_items[0].seller is not None:
+            s = sample_items[0].seller
+            if s.username:
+                label = f"@{s.username}"
+            else:
+                label = str(s.telegram_id)
+        btn = f"{label} ({items_count})"
+        if len(btn) > 40:
+            btn = btn[:39] + "…"
+        kb_rows.append([
+            InlineKeyboardButton(text=btn, callback_data=f"{CB_MOD_BUFFER_SELLER}:{seller_user_id}")
+        ])
+    if total > BUFFER_SELLERS_PAGE_SIZE:
+        nav: list[InlineKeyboardButton] = []
+        if page > 0:
+            nav.append(InlineKeyboardButton(text="◀", callback_data=f"{CB_MOD_BUFFER_PAGE}:{page - 1}"))
+        nav.append(InlineKeyboardButton(text=f"{page + 1}/{max_page + 1}", callback_data=CB_NOOP))
+        if page < max_page:
+            nav.append(InlineKeyboardButton(text="▶", callback_data=f"{CB_MOD_BUFFER_PAGE}:{page + 1}"))
+        kb_rows.append(nav)
+    kb_rows.append([InlineKeyboardButton(text=REPLY_BTN_BACK, callback_data=CALLBACK_INLINE_BACK)])
+    await callback.answer()
+    if callback.message is not None:
+        await edit_message_text_safe(
+            callback.message,
+            "\n".join(lines),
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=kb_rows),
+            parse_mode="HTML",
+        )
 
 
-@router.callback_query(F.data.startswith(f"{CB_MOD_QUEUE_PAGE}:"))
-async def on_queue_page(callback: CallbackQuery, session: AsyncSession) -> None:
+@router.callback_query(F.data.startswith(f"{CB_MOD_BUFFER_PAGE}:"))
+async def on_buffer_page(callback: CallbackQuery, session: AsyncSession) -> None:
     if callback.from_user is None or callback.data is None:
         return
     if not await AdminService(session=session).is_admin(callback.from_user.id):
         await callback.answer("Недостаточно прав", show_alert=True)
         return
-    _, _, page_raw, query_raw = callback.data.split(":", 3)
-    page = max(int(page_raw), 0)
-    seller_id, category_id, date_from = _decode_queue_filters(query_raw)
-    groups, total = await SubmissionService(session=session).list_pending_groups_by_user_paginated(
-        page=page,
-        page_size=PAGE_SIZE,
-        seller_id=seller_id,
-        category_id=category_id,
-        date_from=date_from,
+    page = max(int(callback.data.rsplit(":", 1)[-1]), 0)
+    await _render_buffer_sellers_page(callback, session, page=page)
+
+
+@router.callback_query(F.data.startswith(f"{CB_MOD_QUEUE_PAGE}:"))
+async def on_queue_page_legacy(callback: CallbackQuery, session: AsyncSession) -> None:
+    """Совместимость со старыми кнопками пагинации очереди."""
+    await on_buffer_page(callback, session)
+
+
+def _sorted_pending_for_seller(items: list[Submission]) -> list[Submission]:
+    return sorted(
+        items,
+        key=lambda s: (
+            (s.category.title.lower() if s.category and s.category.title else "~"),
+            s.created_at,
+            s.id,
+        ),
     )
+
+
+def _pending_short_tail(phone: str | None) -> str:
+    raw = (phone or "").strip()
+    digits = re.sub(r"\D", "", raw)
+    if digits:
+        return digits[-4:] if len(digits) >= 4 else digits
+    return raw[-4:] if raw else "—"
+
+
+def _buffer_cards_keyboard(
+    *,
+    items: list[Submission],
+    seller_id: int,
+    page: int,
+    total: int,
+    selected_ids: set[int],
+) -> InlineKeyboardMarkup:
+    rows: list[list[InlineKeyboardButton]] = []
+    pair: list[InlineKeyboardButton] = []
+    for s in items:
+        checked = "✅" if s.id in selected_ids else "⬜"
+        tail = _pending_short_tail(s.description_text)
+        pair.append(
+            InlineKeyboardButton(
+                text=f"{checked} SIM: ..{tail}",
+                callback_data=f"{CB_MOD_BUFFER_TOGGLE}:{seller_id}:{page}:{s.id}",
+            )
+        )
+        if len(pair) == 2:
+            rows.append(pair)
+            pair = []
+    if pair:
+        rows.append(pair)
+
+    max_page = max((total - 1) // BUFFER_CARDS_PAGE_SIZE, 0) if total > 0 else 0
+    if total > BUFFER_CARDS_PAGE_SIZE:
+        nav: list[InlineKeyboardButton] = []
+        if page > 0:
+            nav.append(InlineKeyboardButton(text="◀", callback_data=f"{CB_MOD_BUFFER_CARD_PAGE}:{seller_id}:{page - 1}"))
+        nav.append(InlineKeyboardButton(text=f"{page + 1}/{max_page + 1}", callback_data=CB_NOOP))
+        if page < max_page:
+            nav.append(InlineKeyboardButton(text="▶", callback_data=f"{CB_MOD_BUFFER_CARD_PAGE}:{seller_id}:{page + 1}"))
+        rows.append(nav)
+
+    act_row: list[InlineKeyboardButton] = [
+        InlineKeyboardButton(text="☑ Все", callback_data=f"{CB_MOD_BUFFER_SEL_ALL}:{seller_id}:{page}"),
+        InlineKeyboardButton(text="✖ Снять", callback_data=f"{CB_MOD_BUFFER_TOGGLE}:{seller_id}:{page}:0"),
+    ]
+    if selected_ids:
+        act_row.append(
+            InlineKeyboardButton(
+                text=f"▶ Действие ({len(selected_ids)})",
+                callback_data=f"{CB_MOD_BUFFER_ACT}:{seller_id}:{page}",
+            )
+        )
+    rows.append(act_row)
+    rows.append([
+        InlineKeyboardButton(text="🔍 Поиск", callback_data=f"{CB_MOD_BUFFER_SEARCH}:{seller_id}"),
+        InlineKeyboardButton(text="🔢 Кол-во", callback_data=f"{CB_MOD_BUFFER_PICK_QTY}:{seller_id}"),
+    ])
+    rows.append([InlineKeyboardButton(text="← К продавцам", callback_data=f"{CB_MOD_BUFFER_PAGE}:0")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+async def _render_buffer_seller_cards(
+    callback: CallbackQuery,
+    session: AsyncSession,
+    state: FSMContext,
+    *,
+    seller_id: int,
+    page: int,
+    selected_ids: set[int],
+) -> None:
+    pending_full = await SubmissionService(session=session).list_pending_submissions_by_user(user_id=seller_id)
+    pending_full = _sorted_pending_for_seller(pending_full)
+    total_full = len(pending_full)
+    if total_full == 0:
+        await callback.answer("У продавца нет SIM в остатке", show_alert=True)
+        await _render_buffer_sellers_page(callback, session, page=0)
+        return
+
+    data = await state.get_data()
+    query = _buffer_query_from_data(data, seller_id)
+    pending = _buffer_apply_query(pending_full, query)
+    total = len(pending)
+    if total == 0:
+        await callback.answer("По текущему поиску карточек нет.", show_alert=True)
+        return
+
+    allowed_ids = {s.id for s in pending_full}
+    selected_ids &= allowed_ids
+    max_page = max((total - 1) // BUFFER_CARDS_PAGE_SIZE, 0)
+    page = min(max(page, 0), max_page)
+    chunk = pending[page * BUFFER_CARDS_PAGE_SIZE : (page + 1) * BUFFER_CARDS_PAGE_SIZE]
+
+    seller_label = f"ID:{seller_id}"
+    if chunk and chunk[0].seller is not None:
+        u = chunk[0].seller
+        if u.username:
+            seller_label = f"@{u.username}"
+        else:
+            seller_label = str(u.telegram_id)
+
+    lines = [
+        "❖ <b>GDPX // ACADEMY</b> ─ Буфер остатка",
+        "━━━━━━━━━━━━━━━━━━━━",
+        f"<b>Продавец:</b> {escape(seller_label)}",
+        f"<b>SIM в остатке:</b> <code>{total}</code>",
+        "",
+    ]
+    for idx, s in enumerate(chunk, start=page * BUFFER_CARDS_PAGE_SIZE + 1):
+        tail = _pending_short_tail(s.description_text)
+        cat = s.category.title if s.category and s.category.title else "—"
+        lines.append(f" {idx}. <code>..{escape(tail)}</code> · {escape(cat[:16])}")
+    lines.append("━━━━━━━━━━━━━━━━━━━━")
+
+    await callback.answer()
     if callback.message is not None:
-        # Обновляем существующее сообщение пагинации
-        await edit_message_text_safe(
+        await edit_message_text_or_caption_safe(
             callback.message,
-            "Навигация по очереди:",
-            reply_markup=pagination_keyboard(
-                CB_MOD_QUEUE_PAGE,
+            "\n".join(lines),
+            reply_markup=_buffer_cards_keyboard(
+                items=chunk,
+                seller_id=seller_id,
                 page=page,
                 total=total,
-                page_size=PAGE_SIZE,
-                query=_encode_queue_filters(seller_id=seller_id, category_id=category_id, date_from=date_from),
+                selected_ids=selected_ids,
             ),
+            parse_mode="HTML",
         )
-        first_card = True
-        for seller_user_id, items_count in groups:
-            sample_items = await SubmissionService(session=session).list_pending_submissions_by_user(
-                user_id=seller_user_id
-            )
-            if not sample_items:
-                continue
-            sample = sample_items[0]
-            cap = await _render_moderation_card_caption(
-                sample,
-                session=session,
-                hint_block=HINT_QUEUE if page == 0 and first_card else "",
-            )
-            if page == 0 and first_card:
-                first_card = False
-            await message_answer_submission(
-                callback.message,
-                sample,
-                caption=cap,
-                reply_markup=moderation_seller_group_keyboard(user_id=seller_user_id),
-                parse_mode="HTML",
-            )
+
+
+@router.callback_query(F.data.startswith(f"{CB_MOD_BUFFER_SELLER}:"))
+async def on_buffer_seller_open(callback: CallbackQuery, session: AsyncSession, state: FSMContext) -> None:
+    if callback.from_user is None or callback.data is None:
+        return
+    if not await AdminService(session=session).is_admin(callback.from_user.id):
+        await callback.answer("Недостаточно прав", show_alert=True)
+        return
+    seller_id = int(callback.data.rsplit(":", 1)[-1])
+    await state.update_data(buffer_seller_id=seller_id, buffer_selected_ids=[])
+    await _render_buffer_seller_cards(callback, session, state, seller_id=seller_id, page=0, selected_ids=set())
+
+
+@router.callback_query(F.data.startswith(f"{CB_MOD_BUFFER_CARD_PAGE}:"))
+async def on_buffer_seller_page(callback: CallbackQuery, session: AsyncSession, state: FSMContext) -> None:
+    if callback.from_user is None or callback.data is None:
+        return
+    if not await AdminService(session=session).is_admin(callback.from_user.id):
+        await callback.answer("Недостаточно прав", show_alert=True)
+        return
+    parts = callback.data.split(":")
+    if len(parts) < 4:
+        await callback.answer("Некорректные данные", show_alert=True)
+        return
+    seller_id = int(parts[2])
+    page = max(int(parts[3]), 0)
+    data = await state.get_data()
+    selected = set(int(x) for x in data.get("buffer_selected_ids", []))
+    if int(data.get("buffer_seller_id", 0)) != seller_id:
+        selected = set()
+    await _render_buffer_seller_cards(callback, session, state, seller_id=seller_id, page=page, selected_ids=selected)
+
+
+@router.callback_query(F.data.startswith(f"{CB_MOD_BUFFER_TOGGLE}:"))
+async def on_buffer_toggle(callback: CallbackQuery, session: AsyncSession, state: FSMContext) -> None:
+    if callback.from_user is None or callback.data is None:
+        return
+    if not await AdminService(session=session).is_admin(callback.from_user.id):
+        await callback.answer("Недостаточно прав", show_alert=True)
+        return
+    parts = callback.data.split(":")
+    if len(parts) < 5:
+        await callback.answer("Некорректные данные", show_alert=True)
+        return
+    seller_id = int(parts[2])
+    page = max(int(parts[3]), 0)
+    sid = int(parts[4])
+    data = await state.get_data()
+    selected = set(int(x) for x in data.get("buffer_selected_ids", []))
+    if int(data.get("buffer_seller_id", 0)) != seller_id:
+        selected = set()
+    if sid == 0:
+        selected.clear()
+    elif sid in selected:
+        selected.remove(sid)
+    else:
+        selected.add(sid)
+    await state.update_data(buffer_seller_id=seller_id, buffer_selected_ids=list(selected))
+    await _render_buffer_seller_cards(callback, session, state, seller_id=seller_id, page=page, selected_ids=selected)
+
+
+@router.callback_query(F.data.startswith(f"{CB_MOD_BUFFER_SEL_ALL}:"))
+async def on_buffer_select_all(callback: CallbackQuery, session: AsyncSession, state: FSMContext) -> None:
+    if callback.from_user is None or callback.data is None:
+        return
+    if not await AdminService(session=session).is_admin(callback.from_user.id):
+        await callback.answer("Недостаточно прав", show_alert=True)
+        return
+    parts = callback.data.split(":")
+    if len(parts) < 4:
+        await callback.answer("Некорректные данные", show_alert=True)
+        return
+    seller_id = int(parts[2])
+    page = max(int(parts[3]), 0)
+    pending = await SubmissionService(session=session).list_pending_submissions_by_user(user_id=seller_id)
+    pending = _sorted_pending_for_seller(pending)
+    data = await state.get_data()
+    query = _buffer_query_from_data(data, seller_id)
+    pending = _buffer_apply_query(pending, query)
+    all_ids = {s.id for s in pending}
+    selected = set(int(x) for x in data.get("buffer_selected_ids", []))
+    if selected >= all_ids:
+        selected = set()
+    else:
+        selected = all_ids
+    await state.update_data(buffer_seller_id=seller_id, buffer_selected_ids=list(selected))
+    await _render_buffer_seller_cards(callback, session, state, seller_id=seller_id, page=page, selected_ids=selected)
+
+
+@router.callback_query(F.data.startswith(f"{CB_MOD_BUFFER_SEARCH}:"))
+async def on_buffer_search_start(callback: CallbackQuery, session: AsyncSession, state: FSMContext) -> None:
+    if callback.from_user is None or callback.data is None:
+        return
+    if not await AdminService(session=session).is_admin(callback.from_user.id):
+        await callback.answer("Недостаточно прав", show_alert=True)
+        return
+    seller_id = int(callback.data.rsplit(":", 1)[-1])
+    await state.update_data(buffer_filter_seller_id=seller_id)
+    await state.set_state(AdminCardFilterState.waiting_for_buffer_query)
     await callback.answer()
+    if callback.message is not None:
+        await edit_message_text_or_caption_safe(
+            callback.message,
+            "🔍 Введите поиск по карточкам продавца.\n"
+            "Можно номер (часть/полный) или категорию.\n\n"
+            "Чтобы сбросить фильтр, отправьте: 0",
+            reply_markup=InlineKeyboardMarkup(
+                inline_keyboard=[
+                    [InlineKeyboardButton(text="← Назад", callback_data=f"{CB_MOD_BUFFER_SELLER}:{seller_id}")],
+                ]
+            ),
+            parse_mode="HTML",
+        )
+
+
+@router.message(AdminCardFilterState.waiting_for_buffer_query, F.text)
+async def on_buffer_search_query(message: Message, session: AsyncSession, state: FSMContext) -> None:
+    if message.from_user is None or message.text is None:
+        return
+    if not await AdminService(session=session).is_admin(message.from_user.id):
+        await state.clear()
+        return
+
+    data = await state.get_data()
+    seller_id = int(data.get("buffer_filter_seller_id") or 0)
+    if seller_id <= 0:
+        await state.clear()
+        await message.answer("Контекст поиска утерян. Откройте продавца заново.")
+        return
+
+    query = "" if message.text.strip() == "0" else message.text.strip()
+    await _buffer_set_query(state, seller_id, query)
+    data_after = await state.get_data()
+    keep_filters = data_after.get(_BUFFER_FILTERS_KEY)
+    keep_selected = data_after.get("buffer_selected_ids", [])
+    await state.clear()
+    if isinstance(keep_filters, dict):
+        await state.update_data(**{_BUFFER_FILTERS_KEY: keep_filters})
+    if isinstance(keep_selected, list):
+        await state.update_data(buffer_seller_id=seller_id, buffer_selected_ids=keep_selected)
+    await on_moderation_queue(message, session)
+
+
+@router.callback_query(F.data.startswith(f"{CB_MOD_BUFFER_PICK_QTY}:"))
+async def on_buffer_pick_qty_menu(callback: CallbackQuery, session: AsyncSession) -> None:
+    if callback.from_user is None or callback.data is None:
+        return
+    if not await AdminService(session=session).is_admin(callback.from_user.id):
+        await callback.answer("Недостаточно прав", show_alert=True)
+        return
+    seller_id = int(callback.data.rsplit(":", 1)[-1])
+    await callback.answer()
+    if callback.message is not None:
+        kb = InlineKeyboardMarkup(inline_keyboard=[
+            [
+                InlineKeyboardButton(text="5", callback_data=f"{CB_MOD_BUFFER_PICK_N}:{seller_id}:5"),
+                InlineKeyboardButton(text="10", callback_data=f"{CB_MOD_BUFFER_PICK_N}:{seller_id}:10"),
+                InlineKeyboardButton(text="20", callback_data=f"{CB_MOD_BUFFER_PICK_N}:{seller_id}:20"),
+            ],
+            [
+                InlineKeyboardButton(text="50", callback_data=f"{CB_MOD_BUFFER_PICK_N}:{seller_id}:50"),
+                InlineKeyboardButton(text="Все", callback_data=f"{CB_MOD_BUFFER_PICK_N}:{seller_id}:all"),
+            ],
+            [InlineKeyboardButton(text="← Назад", callback_data=f"{CB_MOD_BUFFER_SELLER}:{seller_id}")],
+        ])
+        await edit_message_text_or_caption_safe(
+            callback.message,
+            "🔢 Выберите, сколько SIM выделить.\n"
+            "Количество берется из полного списка карточек продавца (с учетом текущего поиска).",
+            reply_markup=kb,
+            parse_mode="HTML",
+        )
+
+
+@router.callback_query(F.data.startswith(f"{CB_MOD_BUFFER_PICK_N}:"))
+async def on_buffer_pick_n(callback: CallbackQuery, session: AsyncSession, state: FSMContext) -> None:
+    if callback.from_user is None or callback.data is None:
+        return
+    if not await AdminService(session=session).is_admin(callback.from_user.id):
+        await callback.answer("Недостаточно прав", show_alert=True)
+        return
+    parts = callback.data.split(":")
+    if len(parts) < 4:
+        await callback.answer("Некорректные данные", show_alert=True)
+        return
+    seller_id = int(parts[2])
+    n_raw = parts[3]
+
+    pending = await SubmissionService(session=session).list_pending_submissions_by_user(user_id=seller_id)
+    pending = _sorted_pending_for_seller(pending)
+    data = await state.get_data()
+    query = _buffer_query_from_data(data, seller_id)
+    pending = _buffer_apply_query(pending, query)
+    if not pending:
+        await callback.answer("Нет SIM для выделения.", show_alert=True)
+        return
+
+    if n_raw == "all":
+        n = len(pending)
+    else:
+        try:
+            n = max(int(n_raw), 0)
+        except (TypeError, ValueError):
+            await callback.answer("Некорректное количество", show_alert=True)
+            return
+
+    selected = {s.id for s in pending[:n]}
+    await state.update_data(buffer_seller_id=seller_id, buffer_selected_ids=list(selected))
+    await _render_buffer_seller_cards(callback, session, state, seller_id=seller_id, page=0, selected_ids=selected)
+
+
+@router.callback_query(F.data.regexp(r"^mod:buf_act:\d+:\d+$"))
+async def on_buffer_action_menu(callback: CallbackQuery, state: FSMContext, session: AsyncSession) -> None:
+    if callback.from_user is None or callback.data is None:
+        return
+    if not await AdminService(session=session).is_admin(callback.from_user.id):
+        await callback.answer("Недостаточно прав", show_alert=True)
+        return
+    parts = callback.data.split(":")
+    seller_id = int(parts[2])
+    page = max(int(parts[3]), 0)
+    data = await state.get_data()
+    selected = set(int(x) for x in data.get("buffer_selected_ids", []))
+    if not selected:
+        await callback.answer("Сначала выберите SIM", show_alert=True)
+        return
+    text = (
+        "❖ <b>GDPX // ACADEMY</b> ─ Буфер остатка\n"
+        "━━━━━━━━━━━━━━━━━━━━\n"
+        "<b>Пакетное действие</b>\n\n"
+        f"Выбрано SIM: <code>{len(selected)}</code>"
+    )
+    kb = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="❌ Удалить", callback_data=f"{CB_MOD_BUFFER_ACT}:{seller_id}:{page}:delete")],
+            [InlineKeyboardButton(text="▫️ Не скан", callback_data=f"{CB_MOD_BUFFER_ACT}:{seller_id}:{page}:not_scan")],
+            [InlineKeyboardButton(text="📨 Переслать в чат / ЛС", callback_data=f"{CB_MOD_BUFFER_ACT}:{seller_id}:{page}:forward")],
+            [InlineKeyboardButton(text="⚙ Настройка", callback_data=f"{CB_MOD_BUFFER_ACT}:{seller_id}:{page}:setup")],
+            [InlineKeyboardButton(text="← Назад к SIM", callback_data=f"{CB_MOD_BUFFER_CARD_PAGE}:{seller_id}:{page}")],
+        ]
+    )
+    await callback.answer()
+    if callback.message is not None:
+        await edit_message_text_safe(callback.message, text, reply_markup=kb, parse_mode="HTML")
+
+
+@router.callback_query(F.data.regexp(r"^mod:buf_act:\d+:\d+:(delete|not_scan|forward|setup)$"))
+async def on_buffer_action_execute(
+    callback: CallbackQuery,
+    state: FSMContext,
+    session: AsyncSession,
+) -> None:
+    if callback.from_user is None or callback.data is None:
+        return
+    if not await AdminService(session=session).is_admin(callback.from_user.id):
+        await callback.answer("Недостаточно прав", show_alert=True)
+        return
+    parts = callback.data.split(":")
+    seller_id = int(parts[2])
+    page = max(int(parts[3]), 0)
+    action = parts[4]
+
+    data = await state.get_data()
+    selected = set(int(x) for x in data.get("buffer_selected_ids", []))
+    if not selected:
+        await callback.answer("Нет выбранных SIM", show_alert=True)
+        return
+
+    admin_user = await UserService(session=session).get_by_telegram_id(callback.from_user.id)
+    if admin_user is None:
+        await callback.answer("Админ не найден", show_alert=True)
+        return
+
+    pending = await SubmissionService(session=session).list_pending_submissions_by_user(user_id=seller_id)
+    pending_by_id = {s.id: s for s in pending}
+    submissions = [pending_by_id[sid] for sid in selected if sid in pending_by_id]
+    if not submissions:
+        await callback.answer("Выбранные SIM уже не в буфере", show_alert=True)
+        await state.update_data(buffer_selected_ids=[])
+        await _render_buffer_seller_cards(callback, session, state, seller_id=seller_id, page=page, selected_ids=set())
+        return
+
+    svc = SubmissionService(session=session)
+    done = 0
+    if action == "setup":
+        text = (
+            "❖ <b>GDPX // ACADEMY</b> ─ Буфер остатка\n"
+            "━━━━━━━━━━━━━━━━━━━━\n"
+            "<b>⚙ Настройка выбранных SIM</b>\n\n"
+            f"Выбрано: <code>{len(submissions)}</code>\n"
+            "Выберите, что исправить:"
+        )
+        kb = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [
+                    InlineKeyboardButton(
+                        text="🗂 Исправить категорию",
+                        callback_data=f"{CB_MOD_BUFFER_CFG_CAT}:{seller_id}:{page}",
+                    )
+                ],
+                [InlineKeyboardButton(text="← Назад к действиям", callback_data=f"{CB_MOD_BUFFER_ACT}:{seller_id}:{page}")],
+                [InlineKeyboardButton(text=f"↩ К SIM", callback_data=f"{CB_MOD_BUFFER_CARD_PAGE}:{seller_id}:{page}")],
+            ]
+        )
+        await callback.answer()
+        if callback.message is not None:
+            await edit_message_text_or_caption_safe(callback.message, text, reply_markup=kb, parse_mode="HTML")
+        return
+    if action == "forward":
+        await state.update_data(
+            seller_user_id=seller_id,
+            picked_submission_ids=[s.id for s in submissions],
+        )
+        await state.set_state(AdminModerationForwardState.waiting_for_target)
+        await callback.answer()
+        if callback.message is not None:
+            await edit_message_text_safe(
+                callback.message,
+                "Выбери группу, канал или пользователя для ЛС:",
+            )
+            await callback.message.answer(
+                "Выбери группу, канал или пользователя для ЛС:",
+                reply_markup=forward_target_reply_keyboard(),
+            )
+        return
+    if action == "delete":
+        for s in submissions:
+            await session.delete(s)
+            done += 1
+        await session.commit()
+        await AdminAuditService(session=session).log(
+            admin_id=admin_user.id,
+            action="buffer_delete_batch",
+            target_type="user",
+            target_id=seller_id,
+            details=f"submission_ids={[s.id for s in submissions]}",
+        )
+        await callback.answer(f"Удалено: {done}", show_alert=True)
+    elif action == "not_scan":
+        changed = await svc.mark_pending_submissions_not_scan(submissions, admin_user.id)
+        done = len(changed)
+        for s in changed:
+            seller = await session.get(User, s.user_id)
+            if seller is not None:
+                try:
+                    await callback.bot.send_message(
+                        chat_id=seller.telegram_id,
+                        text=f"❌ SIM #{s.id} отклонена: не скан / неподходящий формат.",
+                    )
+                except TelegramAPIError:
+                    pass
+        await AdminAuditService(session=session).log(
+            admin_id=admin_user.id,
+            action="buffer_not_scan_batch",
+            target_type="user",
+            target_id=seller_id,
+            details=f"submission_ids={[s.id for s in changed]}",
+        )
+        await callback.answer(f"NOT_SCAN: {done}", show_alert=True)
+    else:
+        await callback.answer("Неизвестное действие", show_alert=True)
+        return
+
+    await state.update_data(buffer_selected_ids=[])
+    await _render_buffer_seller_cards(callback, session, state, seller_id=seller_id, page=page, selected_ids=set())
+
+
+@router.callback_query(F.data.startswith(f"{CB_MOD_BUFFER_CFG_CAT}:"))
+async def on_buffer_setup_category_start(callback: CallbackQuery, session: AsyncSession, state: FSMContext) -> None:
+    if callback.from_user is None or callback.data is None:
+        return
+    if not await AdminService(session=session).is_admin(callback.from_user.id):
+        await callback.answer("Недостаточно прав", show_alert=True)
+        return
+
+    parts = callback.data.split(":")
+    if len(parts) < 4:
+        await callback.answer("Некорректные данные", show_alert=True)
+        return
+    seller_id = int(parts[2])
+    page = max(int(parts[3]), 0)
+
+    data = await state.get_data()
+    selected = [int(x) for x in data.get("buffer_selected_ids", [])]
+    if not selected:
+        await callback.answer("Сначала выберите SIM", show_alert=True)
+        return
+
+    cats = list((await session.execute(select(Category).order_by(Category.id.asc()))).scalars().all())
+    page_size = 12
+    cat_page = 0
+    max_page = max((len(cats) - 1) // page_size, 0) if cats else 0
+    chunk = cats[:page_size]
+    lines = [
+        "❖ <b>GDPX // ACADEMY</b> ─ Настройка",
+        "━━━━━━━━━━━━━━━━━━━━",
+        "<b>Исправление категории</b>",
+        "",
+        "Выберите категорию кнопкой ниже.",
+        "",
+        "Доступные категории:",
+    ]
+    for c in chunk:
+        title = (c.title or "—").strip()
+        lines.append(f"▫️ <code>{c.id}</code> — {escape(title[:40])}")
+    lines.append("━━━━━━━━━━━━━━━━━━━━")
+
+    kb_rows: list[list[InlineKeyboardButton]] = []
+    for c in chunk:
+        title = (c.title or "—").strip()
+        kb_rows.append([
+            InlineKeyboardButton(
+                text=f"#{c.id} {title[:28]}",
+                callback_data=f"{CB_MOD_BUFFER_CFG_CAT_PICK}:{seller_id}:{page}:{c.id}",
+            )
+        ])
+    nav: list[InlineKeyboardButton] = []
+    nav.append(InlineKeyboardButton(text=f"{cat_page + 1}/{max_page + 1}", callback_data=CB_NOOP))
+    if max_page > 0:
+        nav.append(
+            InlineKeyboardButton(
+                text="▶",
+                callback_data=f"{CB_MOD_BUFFER_CFG_CAT_PAGE}:{seller_id}:{page}:{cat_page + 1}",
+            )
+        )
+    kb_rows.append(nav)
+    kb_rows.append([InlineKeyboardButton(text="← Назад", callback_data=f"{CB_MOD_BUFFER_ACT}:{seller_id}:{page}:setup")])
+    kb_rows.append([InlineKeyboardButton(text="↩ К SIM", callback_data=f"{CB_MOD_BUFFER_CARD_PAGE}:{seller_id}:{page}")])
+
+    await callback.answer()
+    if callback.message is not None:
+        await edit_message_text_or_caption_safe(
+            callback.message,
+            "\n".join(lines),
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=kb_rows),
+            parse_mode="HTML",
+        )
+
+
+@router.callback_query(F.data.startswith(f"{CB_MOD_BUFFER_CFG_CAT_PAGE}:"))
+async def on_buffer_setup_category_page(callback: CallbackQuery, session: AsyncSession) -> None:
+    if callback.from_user is None or callback.data is None:
+        return
+    if not await AdminService(session=session).is_admin(callback.from_user.id):
+        await callback.answer("Недостаточно прав", show_alert=True)
+        return
+
+    parts = callback.data.split(":")
+    if len(parts) < 5:
+        await callback.answer("Некорректные данные", show_alert=True)
+        return
+    seller_id = int(parts[2])
+    page = max(int(parts[3]), 0)
+    cat_page = max(int(parts[4]), 0)
+
+    cats = list((await session.execute(select(Category).order_by(Category.id.asc()))).scalars().all())
+    if not cats:
+        await callback.answer("Категории не найдены", show_alert=True)
+        return
+    page_size = 12
+    max_page = max((len(cats) - 1) // page_size, 0)
+    cat_page = min(cat_page, max_page)
+    chunk = cats[cat_page * page_size : (cat_page + 1) * page_size]
+
+    lines = [
+        "❖ <b>GDPX // ACADEMY</b> ─ Настройка",
+        "━━━━━━━━━━━━━━━━━━━━",
+        "<b>Исправление категории</b>",
+        "",
+        "Выберите категорию кнопкой ниже.",
+        "",
+        "Доступные категории:",
+    ]
+    for c in chunk:
+        title = (c.title or "—").strip()
+        lines.append(f"▫️ <code>{c.id}</code> — {escape(title[:40])}")
+    lines.append("━━━━━━━━━━━━━━━━━━━━")
+
+    kb_rows: list[list[InlineKeyboardButton]] = []
+    for c in chunk:
+        title = (c.title or "—").strip()
+        kb_rows.append([
+            InlineKeyboardButton(
+                text=f"#{c.id} {title[:28]}",
+                callback_data=f"{CB_MOD_BUFFER_CFG_CAT_PICK}:{seller_id}:{page}:{c.id}",
+            )
+        ])
+    nav: list[InlineKeyboardButton] = []
+    if cat_page > 0:
+        nav.append(
+            InlineKeyboardButton(
+                text="◀",
+                callback_data=f"{CB_MOD_BUFFER_CFG_CAT_PAGE}:{seller_id}:{page}:{cat_page - 1}",
+            )
+        )
+    nav.append(InlineKeyboardButton(text=f"{cat_page + 1}/{max_page + 1}", callback_data=CB_NOOP))
+    if cat_page < max_page:
+        nav.append(
+            InlineKeyboardButton(
+                text="▶",
+                callback_data=f"{CB_MOD_BUFFER_CFG_CAT_PAGE}:{seller_id}:{page}:{cat_page + 1}",
+            )
+        )
+    kb_rows.append(nav)
+    kb_rows.append([InlineKeyboardButton(text="← Назад", callback_data=f"{CB_MOD_BUFFER_ACT}:{seller_id}:{page}:setup")])
+    kb_rows.append([InlineKeyboardButton(text="↩ К SIM", callback_data=f"{CB_MOD_BUFFER_CARD_PAGE}:{seller_id}:{page}")])
+
+    await callback.answer()
+    if callback.message is not None:
+        await edit_message_text_or_caption_safe(
+            callback.message,
+            "\n".join(lines),
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=kb_rows),
+            parse_mode="HTML",
+        )
+
+
+@router.callback_query(F.data.startswith(f"{CB_MOD_BUFFER_CFG_CAT_PICK}:"))
+async def on_buffer_setup_category_apply(callback: CallbackQuery, session: AsyncSession, state: FSMContext) -> None:
+    if callback.from_user is None or callback.data is None:
+        return
+    if not await AdminService(session=session).is_admin(callback.from_user.id):
+        await callback.answer("Недостаточно прав", show_alert=True)
+        return
+
+    parts = callback.data.split(":")
+    if len(parts) < 5:
+        await callback.answer("Некорректные данные", show_alert=True)
+        return
+    seller_id = int(parts[2])
+    cards_page = max(int(parts[3]), 0)
+    category_id = int(parts[4])
+
+    category = await session.get(Category, category_id)
+    if category is None:
+        await callback.answer("Категория не найдена.", show_alert=True)
+        return
+
+    data = await state.get_data()
+    selected = {int(x) for x in data.get("buffer_selected_ids", [])}
+    if not selected:
+        await callback.answer("Сначала выберите SIM", show_alert=True)
+        return
+
+    pending = await SubmissionService(session=session).list_pending_submissions_by_user(user_id=seller_id)
+    updated = 0
+    for s in pending:
+        if s.id in selected:
+            s.category_id = category_id
+            updated += 1
+    await session.commit()
+
+    await callback.answer(f"✅ Обновлено: {updated}", show_alert=True)
+    if callback.message is not None:
+        await edit_message_text_or_caption_safe(
+            callback.message,
+            f"✅ Обновлено SIM: <code>{updated}</code>\nНовая категория: <b>{escape(category.title or '—')}</b>",
+            reply_markup=InlineKeyboardMarkup(
+                inline_keyboard=[
+                    [InlineKeyboardButton(text="↩ К SIM", callback_data=f"{CB_MOD_BUFFER_CARD_PAGE}:{seller_id}:{cards_page}")],
+                ]
+            ),
+            parse_mode="HTML",
+        )
 
 
 @router.callback_query(F.data.startswith(f"{CB_MOD_TAKE_PICK}:"))
@@ -1050,54 +1839,40 @@ async def on_moderation_hold_skip(
 
 
 async def send_in_review_queue(message: Message, session: AsyncSession, admin_telegram_id: int) -> None:
-    """Показывает раздел 'В работе' для указанного админа. Используется после оценки симки."""
+    """Хаб «В работе» после оценки — Level 1: список поставщиков."""
 
     admin_user = await UserService(session=session).get_by_telegram_id(admin_telegram_id)
     if admin_user is None:
         return
 
-    items, total = await SubmissionService(session=session).list_in_review_submissions_paginated(
-        admin_id=admin_user.id,
-        page=0,
-        page_size=PAGE_SIZE,
+    from src.handlers.admin_menu import (
+        SELLERS_PAGE_SIZE,
+        _group_submissions_by_seller,
+        _inwork_sellers_keyboard,
     )
 
-    is_chief = admin_user.role == "chief_admin"
+    all_subs = await SubmissionService(session=session).get_admin_active_submissions(admin_id=admin_user.id)
+    groups = _group_submissions_by_seller(all_subs)
+    total_sellers = len(groups)
+    total_cards = len(all_subs)
 
-    if not items:
-        empty_msg = "У тебя нет карточек в работе." if not is_chief else "Всего нет карточек в работе."
-        await send_clean_text_screen(
-            trigger_message=message,
-            text=empty_msg,
-            key="admin:moderation:in_review",
-        )
+    chunk = groups[:SELLERS_PAGE_SIZE]
+    text = GDPXRenderer().render_inwork_sellers(chunk, total_sellers=total_sellers, total_cards=total_cards)
+
+    if not all_subs:
+        await message.answer(text, parse_mode="HTML")
         return
 
-    first_card = True
-    for item in items:
-        cap = await _render_moderation_card_caption(
-            item,
-            session=session,
-            hint_block=HINT_IN_REVIEW if first_card else "",
-        )
-        first_card = False
-        await message_answer_submission(
-            message,
-            item,
-            caption=cap,
-            reply_markup=moderation_review_keyboard(submission_id=item.id),
-            parse_mode="HTML",
-        )
-    if total > PAGE_SIZE:
-        await message.answer(
-            "Навигация по разделу 'В работе':",
-            reply_markup=pagination_keyboard(CB_MOD_IN_REVIEW_PAGE, page=0, total=total, page_size=PAGE_SIZE),
-        )
+    await message.answer(
+        text,
+        reply_markup=_inwork_sellers_keyboard(seller_groups=chunk, page=0, total_sellers=total_sellers),
+        parse_mode="HTML",
+    )
 
 
 @router.message(Command("in_review"))
 async def on_in_review_queue(message: Message, session: AsyncSession) -> None:
-    """Показывает симки, взятые админом в работу."""
+    """Показывает симки в работе — компактный хаб."""
 
     if message.from_user is None:
         return
@@ -1107,91 +1882,17 @@ async def on_in_review_queue(message: Message, session: AsyncSession) -> None:
         await message.answer("Недостаточно прав.")
         return
 
-    admin_user = await UserService(session=session).get_by_telegram_id(message.from_user.id)
-    if admin_user is None:
-        await message.answer("Пользователь не найден в БД.")
-        return
-
-    seller_id, category_id, date_from = _parse_filters(message.text)
-    items, total = await SubmissionService(session=session).list_in_review_submissions_paginated(
-        admin_id=admin_user.id,
-        page=0,
-        page_size=PAGE_SIZE,
-        seller_id=seller_id,
-        category_id=category_id,
-        date_from=date_from,
-    )
-    
-    is_chief = admin_user.role == "chief_admin"
-    
-    if not items:
-        empty_msg = "У тебя нет карточек в работе." if not is_chief else "Всего нет карточек в работе."
-        await send_clean_text_screen(
-            trigger_message=message,
-            text=empty_msg,
-            key="admin:moderation:in_review",
-        )
-        return
-
-    first_card = True
-    for item in items:
-        cap = await _render_moderation_card_caption(
-            item,
-            session=session,
-            hint_block=HINT_IN_REVIEW if first_card else "",
-        )
-        first_card = False
-        await message_answer_submission(
-            message,
-            item,
-            caption=cap,
-            reply_markup=moderation_review_keyboard(submission_id=item.id),
-            parse_mode="HTML",
-        )
-    if total > PAGE_SIZE:
-        await message.answer(
-            "Навигация по разделу 'В работе':",
-            reply_markup=pagination_keyboard(CB_MOD_IN_REVIEW_PAGE, page=0, total=total, page_size=PAGE_SIZE),
-        )
+    await send_in_review_queue(message, session, message.from_user.id)
 
 
 @router.callback_query(F.data.startswith(f"{CB_MOD_IN_REVIEW_PAGE}:"))
 async def on_in_review_page(callback: CallbackQuery, session: AsyncSession) -> None:
+    """Пагинация in_review — перенаправляем на компактный хаб в admin_menu."""
     if callback.from_user is None or callback.data is None:
         return
-    admin = await UserService(session=session).get_by_telegram_id(callback.from_user.id)
-    if admin is None:
-        await callback.answer("Админ не найден", show_alert=True)
-        return
-    _, _, page_raw, _ = callback.data.split(":", 3)
-    page = max(int(page_raw), 0)
-    items, total = await SubmissionService(session=session).list_in_review_submissions_paginated(
-        admin_id=admin.id,
-        page=page,
-        page_size=PAGE_SIZE,
-    )
-    if callback.message is not None:
-        first_card = True
-        for item in items:
-            cap = await _render_moderation_card_caption(
-                item,
-                session=session,
-                hint_block=HINT_IN_REVIEW if page == 0 and first_card else "",
-            )
-            first_card = False
-            await message_answer_submission(
-                callback.message,
-                item,
-                caption=cap,
-                reply_markup=moderation_review_keyboard(submission_id=item.id),
-                parse_mode="HTML",
-            )
-        if total > PAGE_SIZE:
-            await callback.message.answer(
-                "Навигация:",
-                reply_markup=pagination_keyboard(CB_MOD_IN_REVIEW_PAGE, page=page, total=total, page_size=PAGE_SIZE),
-            )
     await callback.answer()
+    if callback.message is not None:
+        await send_in_review_queue(callback.message, session, callback.from_user.id)
 
 
 @router.callback_query(F.data.startswith(CB_MOD_FORWARD_CANCEL))

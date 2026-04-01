@@ -25,9 +25,9 @@ class UserService:
         return result.scalar_one_or_none()
 
     async def get_all_admins(self) -> list[User]:
-        """Возвращает список всех пользователей с ролью chief_admin."""
+        """Возвращает список всех пользователей с ролью admin."""
 
-        stmt = select(User).where(User.role == UserRole.CHIEF_ADMIN, User.is_active.is_(True))
+        stmt = select(User).where(User.role == UserRole.ADMIN, User.is_active.is_(True))
         result = await self._session.execute(stmt)
         return list(result.scalars().all())
 
@@ -39,13 +39,13 @@ class UserService:
         return list(result.scalars().all())
 
     async def list_active_sellers(self) -> list[User]:
-        """Активные продавцы и chief admin (у кого может быть выгрузка) для «Запросов»."""
+        """Активные продавцы и админы (у кого может быть выгрузка) для «Запросов»."""
 
         stmt = (
             select(User)
             .where(
                 User.is_active.is_(True),
-                User.role.in_((UserRole.SELLER, UserRole.CHIEF_ADMIN)),
+                User.role.in_((UserRole.SELLER, UserRole.ADMIN)),
             )
             .order_by(User.id.asc())
         )

@@ -83,25 +83,19 @@ def _inline_back_row() -> list[InlineKeyboardButton]:
     return [InlineKeyboardButton(text=REPLY_BTN_BACK, callback_data=CALLBACK_INLINE_BACK)]
 
 
-def admin_main_inline_keyboard(*, show_payout_finance: bool = False) -> InlineKeyboardMarkup:
+def admin_main_inline_keyboard() -> InlineKeyboardMarkup:
     rows: list[list[InlineKeyboardButton]] = [
         [InlineKeyboardButton(text=BTN_ADMIN_QUEUE, callback_data=CB_ADMIN_QUEUE)],
         [InlineKeyboardButton(text=BTN_ADMIN_INWORK, callback_data=CB_ADMIN_INWORK_HUB)],
+        [
+            InlineKeyboardButton(text=BTN_ADMIN_PAYOUTS, callback_data=CB_ADMIN_PAYOUTS),
+            InlineKeyboardButton(text=BTN_ADMIN_STATS_SIM, callback_data=CB_ADMIN_STATS_MONTH),
+        ],
         [
             InlineKeyboardButton(text=BTN_ADMIN_BROADCAST, callback_data=CB_ADMIN_BROADCAST),
             InlineKeyboardButton(text=BTN_ADMIN_SEARCH_SIM, callback_data=CB_ADMIN_SEARCH_SIM),
         ],
     ]
-    if show_payout_finance:
-        rows.insert(
-            2,
-            [
-                InlineKeyboardButton(text=BTN_ADMIN_PAYOUTS, callback_data=CB_ADMIN_PAYOUTS),
-                InlineKeyboardButton(text=BTN_ADMIN_STATS_SIM, callback_data=CB_ADMIN_STATS_MONTH),
-            ],
-        )
-    else:
-        rows.insert(2, [InlineKeyboardButton(text=BTN_ADMIN_PAYOUTS, callback_data=CB_ADMIN_PAYOUTS)])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
@@ -184,7 +178,11 @@ def moderation_seller_group_keyboard(user_id: int) -> InlineKeyboardMarkup:
     )
 
 
-def moderation_review_keyboard(submission_id: int) -> InlineKeyboardMarkup:
+def moderation_review_keyboard(
+    submission_id: int,
+    *,
+    back_callback_data: str = CALLBACK_INLINE_BACK,
+) -> InlineKeyboardMarkup:
     """Кнопки финального решения для симки в работе."""
 
     return InlineKeyboardMarkup(
@@ -205,7 +203,7 @@ def moderation_review_keyboard(submission_id: int) -> InlineKeyboardMarkup:
                     callback_data=f"{CB_MOD_DEBIT}:{submission_id}",
                 ),
             ],
-            _inline_back_row(),
+            [InlineKeyboardButton(text=REPLY_BTN_BACK, callback_data=back_callback_data)],
         ]
     )
 

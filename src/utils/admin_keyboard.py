@@ -9,13 +9,11 @@ from src.database.models.enums import SubmissionStatus
 from src.database.models.submission import Submission
 from src.keyboards.callbacks import CB_ADMIN_DASHBOARD_RESET
 from src.keyboards.inline import admin_main_inline_keyboard
-from src.services.admin_service import AdminService
 from src.utils.ui_builder import GDPXRenderer
 
 
 async def build_admin_main_inline_keyboard(session: AsyncSession, telegram_id: int) -> InlineKeyboardMarkup:
-    show = await AdminService(session=session).can_access_payout_finance(telegram_id)
-    kb = admin_main_inline_keyboard(show_payout_finance=show)
+    kb = admin_main_inline_keyboard()
     # Добавляем кнопку сброса личных счётчиков
     reset_row = [InlineKeyboardButton(text="▫️ Обнулить показатели", callback_data=CB_ADMIN_DASHBOARD_RESET)]
     return InlineKeyboardMarkup(inline_keyboard=list(kb.inline_keyboard) + [reset_row])

@@ -1,6 +1,6 @@
 """Команды очереди для групп: /sim в супергруппе/группе.
 
-Любой пользователь, являющийся ботовым администратором (роль admin/chief_admin),
+Любой пользователь, являющийся ботовым администратором (роль admin),
 может выполнить команду прямо в группе/супергруппе, где боту выданы права.
 Бот показывает список pending-карточек по категориям и позволяет переслать
 нужное количество прямо в текущий чат.
@@ -218,6 +218,7 @@ async def _notify_autofix_sides(
     status_label: str,
 ) -> None:
     """Уведомляет продавцов и контролёров об авто-фиксации статуса."""
+    notified_chat_ids: set[int] = set()
     seller_ids = {int(s["user_id"]) for s in snapshots if s.get("user_id") is not None}
     controller_ids = {
         int(s["admin_id"])
@@ -229,6 +230,8 @@ async def _notify_autofix_sides(
         seller = await session.get(User, seller_id)
         if seller is None:
             continue
+        if int(seller.telegram_id) in notified_chat_ids:
+            continue
         try:
             await bot.send_message(
                 chat_id=seller.telegram_id,
@@ -238,12 +241,15 @@ async def _notify_autofix_sides(
                 ),
                 parse_mode="HTML",
             )
+            notified_chat_ids.add(int(seller.telegram_id))
         except TelegramAPIError:
             pass
 
     for controller_id in controller_ids:
         controller = await session.get(User, controller_id)
         if controller is None:
+            continue
+        if int(controller.telegram_id) in notified_chat_ids:
             continue
         try:
             await bot.send_message(
@@ -254,6 +260,7 @@ async def _notify_autofix_sides(
                 ),
                 parse_mode="HTML",
             )
+            notified_chat_ids.add(int(controller.telegram_id))
         except TelegramAPIError:
             pass
 

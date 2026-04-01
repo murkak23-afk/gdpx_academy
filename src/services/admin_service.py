@@ -17,33 +17,39 @@ class AdminService:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
 
+    @staticmethod
+    def _role_value(role: object | None) -> str:
+        return str(getattr(role, "value", role or "")).strip().lower()
+
+    @classmethod
+    def _is_admin_role(cls, role: object | None) -> bool:
+        # Временная совместимость: в части БД еще может жить legacy-роль chief_admin.
+        return cls._role_value(role) in {"admin", "chief_admin"}
+
     async def is_admin(self, telegram_id: int) -> bool:
-        """Проверяет, что пользователь имеет любую админскую роль."""
+        """Проверяет, что пользователь имеет админскую роль."""
 
         stmt = select(User.role).where(User.telegram_id == telegram_id)
         role = (await self._session.execute(stmt)).scalar_one_or_none()
-        return role in {UserRole.CHIEF_ADMIN, UserRole.ADMIN,}
+        return self._is_admin_role(role)
 
     async def can_use_sim_groups(self, telegram_id: int) -> bool:
         """Доступ к /sim и связанным групповым операциям очереди."""
 
         stmt = select(User.role).where(User.telegram_id == telegram_id)
         role = (await self._session.execute(stmt)).scalar_one_or_none()
-        return role in {UserRole.CHIEF_ADMIN, UserRole.ADMIN, UserRole.SIM_ROOT}
+        role_value = self._role_value(role)
+        return role_value in {"admin", "chief_admin", UserRole.SIM_ROOT.value}
 
     async def can_manage_payouts(self, telegram_id: int) -> bool:
-        """Проверяет доступ к финансовой консоли (только chief_admin)."""
+        """Проверяет доступ к финансовой консоли (любой админ)."""
 
-        stmt = select(User.role).where(User.telegram_id == telegram_id)
-        role = (await self._session.execute(stmt)).scalar_one_or_none()
-        return role == UserRole.CHIEF_ADMIN
+        return await self.is_admin(telegram_id)
 
     async def can_access_payout_finance(self, telegram_id: int) -> bool:
-        """Доступ к разделу «Статистика», /withdraw и связанным финансовым экранам (chief_admin)."""
+        """Доступ к разделу «Статистика», /withdraw и связанным финансовым экранам."""
 
-        stmt = select(User.role).where(User.telegram_id == telegram_id)
-        role = (await self._session.execute(stmt)).scalar_one_or_none()
-        return role == UserRole.CHIEF_ADMIN
+        return await self.is_admin(telegram_id)
 
     async def create_category(
         self,

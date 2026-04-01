@@ -83,7 +83,8 @@ def seller_main_menu_keyboard(
     rows.append([KeyboardButton(text="Статистика"), KeyboardButton(text="Справка")])
     rows.append([KeyboardButton(text="Материал"), KeyboardButton(text="История выплат")])
     rows.append([KeyboardButton(text="Поддержка")])
-    if role in (UserRole.CHIEF_ADMIN, UserRole.ADMIN):
+    role_value = str(getattr(role, "value", role or "")).strip().lower()
+    if role_value in {UserRole.ADMIN.value, "chief_admin"}:
         rows.append([KeyboardButton(text="/admin"), KeyboardButton(text=BUTTON_ENTER_ADMIN_PANEL)])
 
     return ReplyKeyboardMarkup(

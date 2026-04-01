@@ -11,16 +11,16 @@ router = Router(name="admin-delete-all-submissions")
 
 CONFIRM_CB = "delete_all_submissions_confirm"
 
-# Команда для запуска удаления (только для chief_admin)
+# Команда для запуска удаления (только для админа)
 @router.message(Command("delete_asim"))
 async def cmd_delete_asim(message: Message, session: AsyncSession):
     if not await AdminService(session).can_manage_payouts(message.from_user.id):
-        await message.answer("❌ Нет прав. Только для главного администратора.")
+        await message.answer("❌ Нет прав. Только для администратора.")
         return
 
     count = (await session.execute(select(func.count(Submission.id)))).scalar_one()
     if count == 0:
-        await message.answer("✅ В базе нихуя нет 👀")
+        await message.answer("✅ В базе нет записей.")
         return
 
     kb = InlineKeyboardMarkup(
@@ -31,7 +31,7 @@ async def cmd_delete_asim(message: Message, session: AsyncSession):
     await message.answer(
         f"⚠️ <b>ВНИМАНИЕ!</b>\nВ базе {count} сим-карт.\n\n"
         "Нажми кнопку ниже для подтверждения.\n\n"
-        "Жги их нахуй, <b>МУРА!🔥</b>!\n\n",
+        "Удаление необратимо. Проверь действие перед подтверждением.\n\n",
         parse_mode="HTML",
         reply_markup=kb,
     )
@@ -45,7 +45,7 @@ async def cb_confirm_delete_all_submissions(callback: CallbackQuery, session: As
 
     count = (await session.execute(select(func.count(Submission.id)))).scalar_one()
     if count == 0:
-        await callback.message.edit_text("✅ В базе нихуя нет 👀")
+        await callback.message.edit_text("✅ В базе нет записей.")
         return
 
     await session.execute(delete(Submission))

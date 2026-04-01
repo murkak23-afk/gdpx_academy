@@ -8,7 +8,6 @@ class UserRole(StrEnum):
 
     SELLER = "seller"
     ADMIN = "admin"
-    CHIEF_ADMIN = "chief_admin"
     SIM_ROOT = "sim_root"
 
 

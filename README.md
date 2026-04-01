@@ -84,9 +84,7 @@ docker compose logs -f bot
 ```bash
 export ENV_FILE=.env.local
 python -m scripts.make_admin --telegram-id 123456789
-# или роль админа выплат:
-python -m scripts.make_admin --telegram-id 123456789 --role chief_admin
-# или тех. админ:
+# или явно указать роль:
 python -m scripts.make_admin --telegram-id 123456789 --role admin
 ```
 

@@ -30,8 +30,16 @@ class UserThrottlingMiddleware(BaseMiddleware):
 
     def __init__(self, interval_sec: float = 1.0) -> None:
         self._interval = max(interval_sec, 0.05)
-        self._last_ts: dict[int, float] = {}
+        self._last_ts: dict[tuple[int, str], float] = {}
         self._lock = asyncio.Lock()
+
+    @staticmethod
+    def _callback_key(event: Update) -> str | None:
+        cb = event.callback_query
+        if cb is None:
+            return None
+        # Для callback throttling применяем только к повторам одной и той же кнопки.
+        return cb.data or "<empty>"
 
     async def __call__(
         self,
@@ -50,17 +58,25 @@ class UserThrottlingMiddleware(BaseMiddleware):
         if _is_bulk_upload_message(event):
             return await handler(event, data)
 
+        callback_key = self._callback_key(event)
+        if callback_key is not None:
+            key = (uid, f"cb:{callback_key}")
+            interval = min(self._interval, 0.35)
+        else:
+            key = (uid, "generic")
+            interval = self._interval
+
         now = time.monotonic()
         async with self._lock:
-            prev = self._last_ts.get(uid, 0.0)
-            if now - prev < self._interval:
+            prev = self._last_ts.get(key, 0.0)
+            if now - prev < interval:
                 logger.warning(
                     "throttle: пропуск update_id=%s user_id=%s (min interval %ss)",
                     event.update_id,
                     uid,
-                    self._interval,
+                    interval,
                 )
                 return None
-            self._last_ts[uid] = now
+            self._last_ts[key] = now
 
         return await handler(event, data)

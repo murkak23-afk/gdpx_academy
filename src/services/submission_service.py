@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
 from src.database.models.category import Category
-from src.database.models.enums import PayoutStatus, RejectionReason, SubmissionStatus, UserRole
+from src.database.models.enums import PayoutStatus, RejectionReason, SubmissionStatus
 from src.database.models.publication import Payout, PublicationArchive
 from src.database.models.submission import ReviewAction, Submission
 from src.database.models.user import User
@@ -30,13 +30,6 @@ class SubmissionService:
         """Возвращает карточку по ID или None."""
 
         return await self._session.get(Submission, submission_id)
-
-    async def _is_chief_admin(self, admin_id: int) -> bool:
-        """Проверяет, является ли админ chief_admin."""
-
-        stmt = select(User.role).where(User.id == admin_id)
-        role = (await self._session.execute(stmt)).scalar_one_or_none()
-        return role == UserRole.CHIEF_ADMIN
 
     async def get_daily_count(self, user_id: int) -> int:
         """Считает количество материалов пользователя за текущие сутки UTC."""
@@ -313,6 +306,44 @@ class SubmissionService:
         await self._session.commit()
         return affected
 
+    async def mark_pending_submissions_not_scan(
+        self,
+        submissions: list[Submission],
+        admin_id: int,
+        *,
+        comment: str = "Массовый перевод из буфера остатка в NOT_A_SCAN",
+    ) -> list[Submission]:
+        """Массово переводит pending-материалы в NOT_A_SCAN."""
+
+        if not submissions:
+            return []
+
+        affected: list[Submission] = []
+        now = datetime.now(timezone.utc)
+        for submission in submissions:
+            if submission.status != SubmissionStatus.PENDING:
+                continue
+            old_status = submission.status
+            submission.status = SubmissionStatus.NOT_A_SCAN
+            submission.admin_id = admin_id
+            submission.reviewed_at = now
+            submission.rejection_reason = RejectionReason.QUALITY
+            submission.rejection_comment = comment
+            submission.last_status_change = now
+            self._session.add(
+                ReviewAction(
+                    submission_id=submission.id,
+                    admin_id=admin_id,
+                    from_status=old_status,
+                    to_status=SubmissionStatus.NOT_A_SCAN,
+                    comment=comment,
+                )
+            )
+            affected.append(submission)
+
+        await self._session.commit()
+        return affected
+
     async def take_to_work(self, submission_id: int, admin_id: int) -> Submission | None:
         """Берет карточку в работу админом."""
 
@@ -338,6 +369,26 @@ class SubmissionService:
         await self._session.commit()
         await self._session.refresh(submission)
         return submission
+
+    async def delete_submission_for_seller(self, submission_id: int, user_id: int) -> bool:
+        """Удаляет карточку продавца, если статус позволяет удаление из раздела «Материал»."""
+
+        submission = await self._session.get(Submission, submission_id)
+        if submission is None or submission.user_id != user_id:
+            return False
+
+        allowed_statuses = {
+            SubmissionStatus.PENDING,
+            SubmissionStatus.REJECTED,
+            SubmissionStatus.BLOCKED,
+            SubmissionStatus.NOT_A_SCAN,
+        }
+        if submission.status not in allowed_statuses:
+            return False
+
+        await self._session.delete(submission)
+        await self._session.commit()
+        return True
 
     async def reject_submission(
         self,
@@ -390,15 +441,9 @@ class SubmissionService:
         return list((await self._session.execute(stmt)).scalars().all())
 
     async def list_in_review_submissions(self, admin_id: int, limit: int = 10) -> list[Submission]:
-        """Возвращает карточки админа в статусе in_review.
-        Chief admin видит все карточки в статусе in_review, другие админы видят только свои.
-        """
-
-        is_chief = await self._is_chief_admin(admin_id)
+        """Возвращает карточки в статусе in_review (все карточки для любого админа)."""
 
         conditions = [Submission.status == SubmissionStatus.IN_REVIEW]
-        if not is_chief:
-            conditions.append(Submission.admin_id == admin_id)
 
         stmt = (
             select(Submission)
@@ -423,14 +468,10 @@ class SubmissionService:
         date_from: datetime | None = None,
     ) -> tuple[list[Submission], int]:
         """Возвращает page карточек in_review и общее число карточек.
-        Chief admin видит все карточки в статусе in_review, другие админы видят только свои.
+        Все админы видят все карточки.
         """
 
-        is_chief = await self._is_chief_admin(admin_id)
-
         conditions = [Submission.status == SubmissionStatus.IN_REVIEW]
-        if not is_chief:
-            conditions.append(Submission.admin_id == admin_id)
         if seller_id is not None:
             conditions.append(Submission.user_id == seller_id)
         if category_id is not None:
@@ -683,6 +724,61 @@ class SubmissionService:
         await self._session.commit()
         await self._session.refresh(submission)
         return submission
+
+    async def final_reject_submissions_batch(
+        self,
+        *,
+        submission_ids: list[int],
+        admin_id: int,
+        to_status: SubmissionStatus,
+        reason: RejectionReason,
+        comment: str,
+    ) -> list[Submission]:
+        """Финально отклоняет список IN_REVIEW карточек одним commit."""
+
+        if to_status not in self._FINAL_REJECT_STATUSES:
+            return []
+        if not submission_ids:
+            return []
+
+        uniq_ids = sorted({int(x) for x in submission_ids if int(x) > 0})
+        if not uniq_ids:
+            return []
+
+        stmt = (
+            select(Submission)
+            .where(
+                Submission.id.in_(uniq_ids),
+                Submission.status == SubmissionStatus.IN_REVIEW,
+            )
+            .order_by(Submission.id.asc())
+        )
+        submissions = list((await self._session.execute(stmt)).scalars().all())
+        if not submissions:
+            return []
+
+        now = datetime.now(timezone.utc)
+        for submission in submissions:
+            old_status = submission.status
+            submission.status = to_status
+            submission.admin_id = admin_id
+            submission.reviewed_at = now
+            submission.rejection_reason = reason
+            submission.rejection_comment = comment
+            submission.last_status_change = now
+
+            self._session.add(
+                ReviewAction(
+                    submission_id=submission.id,
+                    admin_id=admin_id,
+                    from_status=old_status,
+                    to_status=to_status,
+                    comment=comment,
+                )
+            )
+
+        await self._session.commit()
+        return submissions
 
     async def final_reject_in_review_by_phone(
         self,
@@ -950,18 +1046,13 @@ class SubmissionService:
         admin_id: int,
     ) -> Submission | None:
         """Одна карточка «в работе» у админа: без блокировки, только для показа.
-        Chief admin может видеть любую карточку в IN_REVIEW статусе.
-        Обычный админ видит только свои карточки (по admin_id).
+        Любой админ может видеть любую карточку в IN_REVIEW статусе.
         """
-
-        is_chief = await self._is_chief_admin(admin_id)
 
         conditions = [
             Submission.id == submission_id,
             Submission.status == SubmissionStatus.IN_REVIEW,
         ]
-        if not is_chief:
-            conditions.append(Submission.admin_id == admin_id)
 
         stmt = (
             select(Submission)
@@ -974,24 +1065,16 @@ class SubmissionService:
         return (await self._session.execute(stmt)).scalar_one_or_none()
 
     async def get_admin_active_submissions(self, admin_id: int) -> list[Submission]:
-        """Возвращает карточки в работе.
-        Chief admin видит все карточки в работе.
-        Обычный админ видит только свои карточки (по admin_id).
-        """
-
-        is_chief = await self._is_chief_admin(admin_id)
-
-        conditions = [Submission.status == SubmissionStatus.IN_REVIEW]
-        if not is_chief:
-            conditions.append(Submission.admin_id == admin_id)
+        """Возвращает все карточки в работе (все админы видят все карточки)."""
 
         stmt = (
             select(Submission)
             .options(
                 joinedload(Submission.category),
                 joinedload(Submission.seller),
+                joinedload(Submission.admin),
             )
-            .where(*conditions)
+            .where(Submission.status == SubmissionStatus.IN_REVIEW)
             .order_by(Submission.assigned_at.asc(), Submission.id.asc())
         )
         return list((await self._session.execute(stmt)).scalars().all())

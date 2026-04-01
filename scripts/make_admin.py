@@ -49,11 +49,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--role",
         type=str,
-        default=UserRole.CHIEF_ADMIN.value,
+        default=UserRole.ADMIN.value,
         choices=[
             UserRole.SELLER.value,
-            UserRole.CHIEF_ADMIN.value,
-
             UserRole.ADMIN.value,
             UserRole.SIM_ROOT.value,
         ],

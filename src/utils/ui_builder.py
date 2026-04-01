@@ -235,7 +235,8 @@ class GDPXRenderer:
             DIVIDER,
             "<b>Управление инфраструктурой Синдиката.</b>",
             "",
-            f"{greeting}, <b>{safe_actor}</b>. Система функционирует в штатном режиме.",
+            f"{greeting}, <b>{safe_actor}</b>.",
+            "Система функционирует в штатном режиме.",
             "",
             "<b>Состояние узлов:</b>",
             f" ⏳ Ожидают аудита: <code>{pending}</code>",
@@ -245,36 +246,110 @@ class GDPXRenderer:
             DIVIDER,
         ])
 
-    def render_inwork_hub(self, items: Sequence[Any], *, is_chief: bool = False, index_offset: int = 0) -> str:
-        """Список активных сессий в работе (Операционная зона)."""
-        lines: list[str] = [HEADER_INWORK, DIVIDER]
-        
+    def render_inwork_hub(self, items: Sequence[Any], *, index_offset: int = 0, total: int | None = None) -> str:
+        """Компактный список сессий в работе (Операционная зона)."""
+        count = total if total is not None else len(items)
+        lines: list[str] = [
+            HEADER_INWORK,
+            DIVIDER,
+            f"<b>В работе:</b> <code>{count}</code>",
+        ]
+
         if not items:
-            label = "Сиимок в работе нет" if is_chief else "У вас нет открытых сессий"
-            lines.extend([f" ▫️ <i>{label}</i>", DIVIDER])
+            lines.append("")
+            lines.append(" ▫️ <i>Нет активных сессий</i>")
+            lines.append(DIVIDER)
             return "\n".join(lines)
 
-        pool_label = "Глобальный реестр анализа" if is_chief else "Ваш рабочий сектор"
-        lines.append(f"<b>{pool_label}</b>")
         lines.append("")
 
         for idx, item in enumerate(items, start=index_offset + 1):
             phone = self._pick(item, "description_text", "phone_normalized", default="—")
             phone_str = (str(phone) or "").strip() or "—"
-            seller = self._pick(item, "seller", default=None)
-            seller_label = self._username_label(seller)
-            
-            if is_chief:
-                admin_obj = self._pick(item, "admin", default=None)
-                admin_name = str(getattr(admin_obj, "first_name", "—")) if admin_obj else "—"
-                # Компактная премиум-верстка в одну строку
-                lines.append(f" {idx}. <code>{escape(phone_str[:20])}</code> │ {seller_label} │ <b>{escape(admin_name)}</b>")
-            else:
-                lines.append(f" {idx}. <code>{escape(phone_str[:20])}</code> │ {seller_label}")
 
-        lines.append("")
+            cat = self._pick(item, "category", default=None)
+            cat_title = str(getattr(cat, "title", "")) if cat else ""
+            cat_short = cat_title[:12] if cat_title else ""
+
+            tag = f" <i>{escape(cat_short)}</i>" if cat_short else ""
+            lines.append(f" {idx}. <code>{escape(phone_str[:20])}</code>{tag}")
+
         lines.append(DIVIDER)
         return "\n".join(lines)
+
+    def render_inwork_sellers(
+        self,
+        seller_groups: Sequence[Mapping[str, Any]],
+        *,
+        total_sellers: int,
+        total_cards: int,
+    ) -> str:
+        """Level 1: список поставщиков с количеством карточек."""
+        lines: list[str] = [
+            HEADER_INWORK,
+            DIVIDER,
+            f"<b>Поставщиков:</b> <code>{total_sellers}</code>  ·  "
+            f"<b>Карточек:</b> <code>{total_cards}</code>",
+        ]
+        if not seller_groups:
+            lines.extend(["", " ▫️ <i>Нет активных сессий</i>", DIVIDER])
+            return "\n".join(lines)
+        lines.append("")
+        for idx, g in enumerate(seller_groups, 1):
+            label = escape(str(g.get("label", "—")))
+            count = int(g.get("count", 0))
+            lines.append(f" {idx}. {label} — <code>{count}</code> шт.")
+        lines.append(DIVIDER)
+        return "\n".join(lines)
+
+    def render_inwork_seller_cards(
+        self,
+        seller_label: str,
+        items: Sequence[Any],
+        *,
+        total: int,
+    ) -> str:
+        """Level 2: карточки конкретного поставщика."""
+        lines: list[str] = [
+            HEADER_INWORK,
+            DIVIDER,
+            f"<b>Поставщик:</b> {escape(seller_label)}",
+            f"<b>Карточек:</b> <code>{total}</code>",
+        ]
+        if not items:
+            lines.extend(["", " ▫️ <i>Нет карточек</i>", DIVIDER])
+            return "\n".join(lines)
+        lines.append("")
+        for idx, item in enumerate(items, 1):
+            phone = self._pick(item, "description_text", "phone_normalized", default="—")
+            phone_str = (str(phone) or "").strip() or "—"
+            short = phone_str[-5:] if len(phone_str) > 5 else phone_str
+
+            cat = self._pick(item, "category", default=None)
+            cat_title = str(getattr(cat, "title", "")) if cat else ""
+            cat_short = cat_title[:12] if cat_title else "—"
+
+            hold_raw = getattr(item, "hold_assigned", None) or ""
+            hold = "" if hold_raw.lower() == "no_hold" else hold_raw
+
+            parts = [f"SIM: ..<code>{escape(short)}</code>", escape(cat_short)]
+            if hold:
+                parts.append(escape(str(hold)[:15]))
+
+            lines.append(f" {idx}. " + " · ".join(parts))
+        lines.append(DIVIDER)
+        return "\n".join(lines)
+
+    def render_inwork_search_prompt(self) -> str:
+        return "\n".join([
+            HEADER_INWORK,
+            DIVIDER,
+            "🔍 <b>Поиск по номеру</b>",
+            "",
+            "Введите минимум 3 цифры номера телефона",
+            "или полный номер в формате +7XXXXXXXXXX.",
+            DIVIDER,
+        ])
 
     def render_payout_history(
         self,

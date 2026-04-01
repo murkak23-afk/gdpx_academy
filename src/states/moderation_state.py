@@ -22,3 +22,21 @@ class AdminInReviewLookupState(StatesGroup):
     """Поиск симок в «В работе»: активные и архив."""
 
     waiting_for_query = State()
+
+class AdminInworkBatchState(StatesGroup):
+    """Пакетный выбор карточек в «В работe»."""
+
+    selecting = State()
+
+
+class AdminCardFilterState(StatesGroup):
+    """Поиск внутри карточек продавца для in_review и буфера."""
+
+    waiting_for_inwork_query = State()
+    waiting_for_buffer_query = State()
+
+
+class AdminBufferAdjustState(StatesGroup):
+    """Ручная корректировка карточек в буфере."""
+
+    waiting_for_category_id = State()

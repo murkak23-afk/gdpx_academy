@@ -62,7 +62,6 @@ from src.keyboards.callbacks import (
     CB_SELLER_PAYHIST_PAGE,
     CB_SELLER_STATS_VIEW,
 )
-from src.main_operators import MAIN_OPERATOR_GROUPS
 from src.services import (
     AdminService,
     BillingService,
@@ -145,75 +144,6 @@ REJECT_LABELS: dict[str, str] = {
 }
 
 
-def _format_seller_esim_stats(user, stats: dict) -> str:
-    """Текст раздела «Статистика» для продавца eSIM."""
-
-    nick = f"@{user.username}" if user.username else f"@{user.telegram_id}"
-    lines = [
-        "Статистика eSIM",
-        "",
-        f"Продавец: {nick} | user_id: {user.telegram_id}",
-        "",
-        f"Всего засчитано eSIM: {stats['accepted_total']}",
-        f"Общий заработок: {stats['balance']} USDT",
-        "",
-        f"Блоков: {stats['blocked']}",
-        f"Не скан / не подходит: {stats['not_a_scan']}",
-        f"Отклонено модерацией: {stats['rejected_moderation']}",
-        "",
-        "Засчитано eSIM по основным операторам:",
-    ]
-    by_op = stats["by_main_operator"]
-    for label, _ in MAIN_OPERATOR_GROUPS:
-        lines.append(f"  • {label}: {by_op[label]}")
-    lines.append(f"  • Прочие операторы: {by_op['Другое']}")
-    return "\n".join(lines)
-
-
-def _format_seller_profile(user, dashboard: dict, esim_stats: dict) -> str:
-    """Компактный современный экран профиля продавца."""
-
-    nickname = f"@{user.username}" if user.username else f"@{user.telegram_id}"
-    if user.is_restricted:
-        account_status = "ограничен"
-    elif user.duplicate_timeout_until is not None:
-        account_status = f"таймаут до {user.duplicate_timeout_until:%Y-%m-%d %H:%M UTC}"
-    else:
-        account_status = "активен"
-
-    by_operator = esim_stats.get("by_main_operator", {})
-    top_rows: list[tuple[str, int]] = sorted(
-        ((str(name), int(count)) for name, count in by_operator.items()),
-        key=lambda x: x[1],
-        reverse=True,
-    )
-    top_rows = [row for row in top_rows if row[1] > 0][:3]
-
-    lines = [
-        "Профиль продавца",
-        "",
-        "👤 Аккаунт",
-        f"• Ник: {nickname}",
-        f"• ID: {user.telegram_id}",
-        f"• Статус: {account_status}",
-        "",
-        "💰 Финансы",
-        f"• К выплате: {user.pending_balance} USDT",
-        f"• Засчитано: {dashboard['accepted']} симок",
-        f"• Всего заработано: {dashboard['balance']} USDT",
-        "",
-        "📊 Симки",
-        f"• В очереди / в работе: {dashboard['pending']}",
-        f"• Зачёт: {dashboard['accepted']}",
-        f"• Незачёт: {dashboard['rejected']}",
-    ]
-    if top_rows:
-        lines.extend(["", "🏷 Топ операторы по зачёту"])
-        for name, count in top_rows:
-            lines.append(f"• {name}: {count}")
-    return "\n".join(lines)
-
-
 def _stats_period_keyboard(active_period: str) -> InlineKeyboardMarkup:
     labels = [("today", "Сегодня"), ("week", "Отчёт за неделю")]
     row: list[InlineKeyboardButton] = []
@@ -256,7 +186,7 @@ def _info_root_keyboard(channel_url: str | None, chat_url: str | None) -> Inline
     rows: list[list[InlineKeyboardButton]] = []
     links_row: list[InlineKeyboardButton] = []
     if channel_url:
-        links_row.append(InlineKeyboardButton(text="Канал", url=channel_url))
+        links_row.append(InlineKeyboardButton(text="GDPX // ACADEMIC", url=channel_url))
     if chat_url:
         links_row.append(InlineKeyboardButton(text="GDPX Academic | Чат", url=chat_url))
     if links_row:
@@ -439,33 +369,22 @@ async def _batch_inc(state: FSMContext, key: str, delta: int = 1) -> None:
 
 
 def _normalize_phone_batch(raw: str | None) -> str | None:
-    print("\n--- СТАРТ ПРОВЕРКИ НОМЕРА ---")
-    print(f"1. Бот увидел текст: '{raw}'")
-
     if not raw:
-        print("ИТОГ: Текст пустой, отмена.")
         return None
 
     digits = "".join(c for c in raw if c.isdigit())
-    print(f"2. Оставили только цифры: '{digits}' (Длина: {len(digits)})")
 
     # Если цифр больше 11 — берём только первые 11 как номер
     if len(digits) > 11:
         digits = digits[:11]
-        print(f"3. Обрезали до первых 11: '{digits}'")
 
     if len(digits) == 11 and digits.startswith("8"):
         digits = "7" + digits[1:]
     elif len(digits) == 10:
         digits = "7" + digits
 
-    print(f"4. После подстановки семерки: '{digits}'")
-
     if len(digits) == 11 and digits.startswith("7"):
-        print(f"5. ИТОГ: УСПЕХ! Возвращаем чистый номер: {digits}\n")
         return digits
-
-    print("6. ИТОГ: ПРОВАЛ! Длина не равна 11 или начинается не на 7.\n")
     return None
 
 
@@ -515,10 +434,9 @@ async def _batch_mark_seen_or_duplicate(state: FSMContext, *, phone: str, file_u
         batch_seen_file_uids=sorted(seen_files),
     )
     return False
-    return False
 
 
-#def _batch_report_text(accepted: int, rejected: int, reasons: dict[str, int] | None = None) -> str:
+def _batch_report_text(accepted: int, rejected: int, reasons: dict[str, int] | None = None) -> str:
     total = accepted + rejected
     lines = [
         "📦 Загрузка завершена.\n\n"
@@ -1065,7 +983,13 @@ async def on_material_back_to_folders(callback: CallbackQuery, session: AsyncSes
         return
     folders = await SubmissionService(session=session).get_user_material_folders(user.id)
     if not folders:
-        await callback.answer("Материалов пока нет", show_alert=True)
+        await callback.answer()
+        if callback.message is not None:
+            await edit_message_text_safe(
+                callback.message,
+                "Материалов пока нет.",
+                reply_markup=seller_main_inline_keyboard(),
+            )
         return
     rows = []
     for f in folders:
@@ -1604,6 +1528,10 @@ async def on_seller_finish_batch(callback: CallbackQuery, state: FSMContext, ses
         await callback.answer("Сначала /start", show_alert=True)
         return
 
+    await callback.answer("Фиксирую последние загрузки...")
+    # Debounce: даём входящим последним сообщениям батча дообработаться.
+    await asyncio.sleep(3)
+
     data = await state.get_data()
     accepted = int(data.get("batch_accepted", 0))
     rejected = int(data.get("batch_rejected", 0))
@@ -1613,7 +1541,6 @@ async def on_seller_finish_batch(callback: CallbackQuery, state: FSMContext, ses
     await state.update_data(batch_final_accepted=accepted, batch_final_rejected=rejected, batch_final_reasons=reasons)
     await state.set_state(SubmissionState.waiting_for_batch_csv_choice)
 
-    await callback.answer("Загрузка завершена")
     if callback.message is not None:
         await edit_message_text_safe(
             callback.message,
@@ -2187,7 +2114,9 @@ async def on_support(message: Message, session: AsyncSession) -> None:
     support_link = "@GDPX1"
 
     text = (
-        "Support / Помощь\n\n"
+        f"❖ <b>GDPX // Academy</b> ─ Поддержка\n"
+        f"{DIVIDER}\n"
+        "ПРОТОКОЛЫ ИСПРАВЛЕНИЯ ОШИБОК\n\n"
         "FAQ:\n"
         "• Если дубликат/таймаут: проверь, что симка не отправлялась ранее.\n"
         "• Если не зачёт: смотри статус в разделе «Материал».\n"

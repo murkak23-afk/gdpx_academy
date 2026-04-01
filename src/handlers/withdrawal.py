@@ -29,7 +29,7 @@ async def withdraw_handler(message: Message, session: AsyncSession) -> None:
     if message.from_user is None or message.text is None:
         return
     if not await AdminService(session=session).can_access_payout_finance(message.from_user.id):
-        await message.answer("Команда доступна только администратору выплат (или главному администратору).")
+        await message.answer("Команда доступна только администратору.")
         return
     try:
         amount = _parse_amount(message.text)

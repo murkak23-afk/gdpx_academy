@@ -43,14 +43,14 @@ def _user_id_from_update(event: ErrorEvent) -> int | None:
     return None
 
 
-async def _maybe_notify_chief_admin_critical(
+async def _maybe_notify_admin_critical(
     *,
     bot: Bot | None,
     exc: BaseException,
     update_id: int | None,
     user_id: int | None,
 ) -> None:
-    """TODO: при появлении CHIEF_ADMIN_TELEGRAM_ID (или списка) в Settings — слать краткий алерт в личку."""
+    """Заглушка под future-интеграцию уведомлений админам о критических ошибках."""
 
     del bot, exc, update_id, user_id
 
@@ -84,7 +84,7 @@ def register_error_handlers(dispatcher: Dispatcher) -> None:
 
         if isinstance(exc, SQLAlchemyError):
             logger.error("Ошибка БД%s: %s", ctx_extra, exc, exc_info=True)
-            await _maybe_notify_chief_admin_critical(
+            await _maybe_notify_admin_critical(
                 bot=bot,
                 exc=exc,
                 update_id=update_id,
@@ -93,7 +93,7 @@ def register_error_handlers(dispatcher: Dispatcher) -> None:
             return
 
         logger.error("Необработанное исключение%s: %s", ctx_extra, exc, exc_info=True)
-        await _maybe_notify_chief_admin_critical(
+        await _maybe_notify_admin_critical(
             bot=bot,
             exc=exc,
             update_id=update_id,

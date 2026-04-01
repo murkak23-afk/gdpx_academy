@@ -8,7 +8,7 @@ from src.services import AdminService
 
 
 class IsChiefAdminFilter(BaseFilter):
-    """Пропускает апдейт только для chief admin (чтобы seller-FSM не перехватывал кнопки админ-меню)."""
+    """Пропускает апдейт только для админа (чтобы seller-FSM не перехватывал кнопки админ-меню)."""
 
     async def __call__(self, message: Message, session: AsyncSession) -> bool:
         if message.from_user is None:

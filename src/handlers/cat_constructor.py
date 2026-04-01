@@ -1,4 +1,4 @@
-"""Конструктор категорий (/adm_cat) — пошаговый SPA-инлайн для Chief Admin.
+"""Конструктор категорий (/adm_cat) — пошаговый SPA-инлайн для админа.
 
 Шаги создания: Оператор → Тип → Цена → Подтверждение.
 Результат: категория «Оператор | Тип» с ценой в USDT.
@@ -214,12 +214,12 @@ def _recompose_title(cat) -> str:
 
 @router.message(Command("adm_cat"))
 async def on_adm_cat(message: Message, state: FSMContext, session: AsyncSession) -> None:
-    """Главное меню конструктора категорий (только Chief Admin)."""
+    """Главное меню конструктора категорий."""
 
     if message.from_user is None:
         return
-    if not await AdminService(session=session).can_manage_payouts(message.from_user.id):
-        await message.answer("⛔ Недостаточно прав. Только для Chief Admin.")
+    if not await AdminService(session=session).is_admin(message.from_user.id):
+        await message.answer("⛔ Недостаточно прав.")
         return
 
     await state.clear()
