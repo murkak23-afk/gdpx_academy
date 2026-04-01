@@ -17,7 +17,7 @@ async def build_admin_main_inline_keyboard(session: AsyncSession, telegram_id: i
     show = await AdminService(session=session).can_access_payout_finance(telegram_id)
     kb = admin_main_inline_keyboard(show_payout_finance=show)
     # Добавляем кнопку сброса личных счётчиков
-    reset_row = [InlineKeyboardButton(text="🔄 Сбросить мои счётчики", callback_data=CB_ADMIN_DASHBOARD_RESET)]
+    reset_row = [InlineKeyboardButton(text="▫️ Обнулить показатели", callback_data=CB_ADMIN_DASHBOARD_RESET)]
     return InlineKeyboardMarkup(inline_keyboard=list(kb.inline_keyboard) + [reset_row])
 
 

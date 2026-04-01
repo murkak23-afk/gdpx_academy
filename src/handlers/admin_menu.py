@@ -263,11 +263,7 @@ async def _admin_store_panel_message(state: FSMContext, sent: Message | None) ->
 
 
 def _lock_line(submission: Submission) -> str:
-    if submission.locked_by_admin is None:
-        return ""
-    if submission.locked_by_admin.username:
-        return f"🔒 ЗАБЛОКИРОВАНО: @{escape(submission.locked_by_admin.username)}"
-    return f"🔒 ЗАБЛОКИРОВАНО: id:{submission.locked_by_admin.id}"
+    return ""
 
 
 def _short_phone(value: str | None) -> str:
@@ -878,7 +874,6 @@ async def on_in_work_search_query(message: Message, state: FSMContext, session: 
         .options(
             joinedload(Submission.category),
             joinedload(Submission.seller),
-            joinedload(Submission.locked_by_admin),
         )
         .where(
             Submission.status == SubmissionStatus.IN_REVIEW,
@@ -976,13 +971,12 @@ async def on_enter_admin_panel(message: Message, session: AsyncSession) -> None:
         await message.answer("Недостаточно прав.")
         return
     # Убираем reply-клавиатуру с экрана пользователя
-    await message.answer("⁠", reply_markup=ReplyKeyboardRemove())
     stats = await _fetch_admin_board_stats(session)
     stats["username"] = message.from_user.username or str(message.from_user.id)
     text = GDPXRenderer().render_admin_dashboard(stats)
     await message.answer(
         text,
-        reply_markup=await build_admin_main_inline_keyboard(session, message.from_user.id),
+        reply_markup=ReplyKeyboardRemove(),
         parse_mode="HTML",
     )
 
@@ -1020,13 +1014,12 @@ async def on_admin_panel(message: Message, session: AsyncSession) -> None:
         await message.answer("Недостаточно прав.")
         return
 
-    await message.answer("\u2060", reply_markup=ReplyKeyboardRemove())
     stats = await _fetch_admin_board_stats(session)
     stats["username"] = message.from_user.username or str(message.from_user.id)
     text = GDPXRenderer().render_admin_dashboard(stats)
     await message.answer(
         text,
-        reply_markup=await build_admin_main_inline_keyboard(session, message.from_user.id),
+        reply_markup=ReplyKeyboardRemove(),
         parse_mode="HTML",
     )
 
@@ -1837,15 +1830,17 @@ async def on_mark_paid(callback: CallbackQuery, session: AsyncSession, state: FS
     if callback.message is not None:
         username = f"@{user.username}" if user.username else f"@{user.telegram_id}"
         stats_text = (
-            f"💰 <b>ПОДТВЕРЖДЕНИЕ ВЫПЛАТЫ (Шаг 1)</b>\n\n"
-            f"<b>Продавец:</b> {username}\n"
-            f"<b>Период:</b> сегодня (UTC)\n\n"
-            f"<b>📊 СТАТИСТИКА:</b>\n"
-            f"✅ Зачёт (принято): {total_accepted_count} шт.\n"
-            f"❌ Не зачёт: {rejected_count} шт.\n\n"
-            f"<b>💵 СУММА К ВЫПЛАТЕ:</b> {total_amount} USDT\n\n"
-            f"<i>Внимание: За каждой карточкой закреплена своя цена.</i>\n\n"
-            f"<b>➡️ Нажмите «Подтвердить» для проверки данных...</b>"
+            f"❖ <b>GDPX // ACADEMY</b> ─ Аудит\n"
+            f"━━━━━━━━━━━━━━━━━━━━\n"
+            f"<b>ПОДТВЕРЖДЕНИЕ ВЫПЛАТЫ</b> (Этап 1)\n\n"
+            f"◾️ <b>Продавец:</b> {username}\n"
+            f"◾️ <b>Период:</b> текущая сессия (UTC)\n\n"
+            f"<b>СТАТИСТИКА:</b>\n"
+            f"◾️ Принято к расчету: {total_accepted_count} шт.\n"
+            f"▫️ Отклонено (брак): {rejected_count} шт.\n\n"
+            f"<b>ИТОГОВАЯ СУММА:</b> {total_amount} USDT\n\n"
+            f"<i>Внимание: Сумма сформирована согласно индивидуальным ставкам.</i>\n\n"
+            f"<b>Инициировать транзакцию?</b>"
         )
         await edit_message_text_safe(
             callback.message,
@@ -1895,25 +1890,27 @@ async def on_payout_confirmation(callback: CallbackQuery, session: AsyncSession,
     
     if callback.message is not None:
         if balance_error is not None:
-            balance_line = f"⚠️ <b>Баланс CryptoPay:</b> не удалось получить ({escape(balance_error)})"
-            warning_line = "⚠️ <i>Проверьте токен/доступность CryptoPay перед отправкой.</i>"
+            balance_line = f"▫️ <b>Баланс CryptoPay:</b> ✕ ошибка доступа({escape(balance_error)})"
+            warning_line = "✕ <i>Проверьте токен/доступность CryptoPay перед отправкой.</i>"
         else:
             assert available_usdt is not None
-            balance_line = f"💳 <b>Доступно в CryptoPay:</b> <code>{available_usdt} USDT</code>"
+            balance_line = f"◾️ <b>Доступный резерв:</b> <code>{available_usdt} USDT</code>"
             warning_line = (
-                "⚠️ <i>Недостаточно средств. Сначала пополните баланс через invoice.</i>"
+                "▫️ <i>Резерв исчерпан. Требуется пополнение.</i>"
                 if available_usdt < payout_amount
-                else "✅ <i>Средств достаточно для отправки чека.</i>"
+                else "◾️ <i>Средств достаточно для исполнения транзакции.</i>"
             )
 
         final_text = (
-            f"🔐 <b>ФИНАЛЬНОЕ ПОДТВЕРЖДЕНИЕ (Шаг 2)</b>\n\n"
-            f"<b>Вы действительно хотите отправить чек?</b>\n\n"
-            f"<b>Сумма:</b> <code>{total_amount} USDT</code>\n"
-            f"<b>Получатель:</b> {username}\n"
+            f"❖ <b>GDPX // ACADEMY</b> ─ Протокол\n"
+            f"━━━━━━━━━━━━━━━━━━━━\n"
+            f"<b>ФИНАЛЬНОЕ ПОДТВЕРЖДЕНИЕ</b> (Этап 2)\n\n"
+            f"<b>Вы подтверждаете эмиссию чека?</b>\n\n"
+            f"◾️ <b>К списанию:</b> <code>{total_amount} USDT</code>\n"
+            f"◾️ <b>Получатель:</b> {username}\n"
             f"{balance_line}\n\n"
             f"{warning_line}\n"
-            f"⚠️ <i>После отправки чека операцию нельзя будет отменить!</i>"
+            f"✕ <i>Внимание: После фиксации чека операция становится необратимой.</i>"
         )
         
         user_id = data.get("payout_user_id")
@@ -1964,20 +1961,22 @@ async def on_create_topup_invoice(callback: CallbackQuery, state: FSMContext) ->
         await callback.answer("Не удалось создать invoice", show_alert=True)
         await edit_message_text_safe(
             callback.message,
-            f"⚠️ Ошибка создания invoice:\n<code>{escape(str(exc))}</code>",
+            f"▫️ Ошибка пополнения резерва:\n<code>{escape(str(exc))}</code>",
             reply_markup=payout_final_confirm_keyboard(user_id=user_id, ledger_page=ledger_page),
             parse_mode="HTML",
         )
         return
 
-    await callback.answer("Invoice создан")
+    await callback.answer("Инвойс сформирован")
     await edit_message_text_safe(
         callback.message,
         (
-            "💳 <b>Invoice для пополнения создан</b>\n\n"
-            f"<b>Сумма:</b> <code>{invoice_amount} USDT</code>\n"
+            f"❖ <b>GDPX // ACADEMY</b> ─ Резерв\n"
+            f"━━━━━━━━━━━━━━━━━━━━\n"
+            f"<b>ПОПОЛНЕНИЕ ЛИКВИДНОСТИ</b>\n\n"
+            f"◾️ <b>Сумма:</b> <code>{invoice_amount} USDT</code>\n"
             "\n"
-            "После оплаты нажмите «Точно отправить чек»."
+            "После оплаты нажмите завершите эмиссию, нажав кнопку ниже."
         ),
         reply_markup=payout_final_confirm_keyboard(user_id=user_id, ledger_page=ledger_page),
         parse_mode="HTML",
@@ -2076,7 +2075,7 @@ async def on_mark_paid_final(callback: CallbackQuery, session: AsyncSession, bot
             await edit_message_text_safe(
                 callback.message,
                 (
-                    "⚠️ <b>Ошибка проверки баланса CryptoPay</b>\n\n"
+                    "▫️ <b>Ошибка проверки реального баланса CryptoPay</b>\n\n"
                     f"<code>{escape(str(exc))}</code>"
                 ),
                 reply_markup=payout_final_confirm_keyboard(user_id=user_id, ledger_page=ledger_page),
@@ -2090,7 +2089,7 @@ async def on_mark_paid_final(callback: CallbackQuery, session: AsyncSession, bot
             await edit_message_text_safe(
                 callback.message,
                 (
-                    "⚠️ <b>Недостаточно средств в CryptoPay</b>\n\n"
+                    "▫️ <b>Недостаточно средств в CryptoPay</b>\n\n"
                     f"<b>Нужно:</b> <code>{amount} USDT</code>\n"
                     f"<b>Доступно:</b> <code>{available_usdt} USDT</code>\n\n"
                     "Нажмите «Пополнить через invoice», оплатите счёт и повторите отправку."
@@ -2113,7 +2112,7 @@ async def on_mark_paid_final(callback: CallbackQuery, session: AsyncSession, bot
             if callback.message is not None:
                 await edit_message_text_safe(
                     callback.message,
-                    f"<b>⚠️ Ошибка CryptoBot:</b>\n{error_msg}\n\n"
+                    f"<b>▫️ Ошибка CryptoBot:</b>\n{error_msg}\n\n"
                     f"<b>Решение:</b> Пополните баланс CryptoBot и повторите попытку.",
                     reply_markup=payout_final_confirm_keyboard(user_id=user_id, ledger_page=ledger_page),
                     parse_mode="HTML",
@@ -2129,7 +2128,7 @@ async def on_mark_paid_final(callback: CallbackQuery, session: AsyncSession, bot
                         inline_keyboard=[
                             [
                                 InlineKeyboardButton(
-                                    text="💰 К ведомости",
+                                    text="◾️ К ведомости",
                                     callback_data=f"{CB_PAY_LEDGER_PAGE}:{int(ledger_page)}",
                                 )
                             ]
@@ -2147,13 +2146,13 @@ async def on_mark_paid_final(callback: CallbackQuery, session: AsyncSession, bot
         note="cryptobot_check",
     )
     if payout is None:
-        await callback.answer("Выплата уже зафиксирована или баланс нулевой", show_alert=True)
+        await callback.answer("◾️ Транзакция уже зафиксирована или баланс нулевой", show_alert=True)
         await state.clear()
         if callback.message is not None:
             await _edit_payout_ledger_message(callback.message, session, page=int(ledger_page))
         return
 
-    await callback.answer("✅ Выплата зафиксирована!")
+    await callback.answer("◾️ Транзакция исполнена!")
     await AdminAuditService(session=session).log(
         admin_id=admin_user.id,
         action="mark_paid",
@@ -2167,11 +2166,14 @@ async def on_mark_paid_final(callback: CallbackQuery, session: AsyncSession, bot
     
     if callback.message is not None:
         success_text = (
-            f"✅ <b>ВЫПЛАТА УСПЕШНО ОТПРАВЛЕНА</b>\n\n"
-            f"<b>Сумма:</b> {payout.amount} USDT\n"
-            f"<b>Получатель:</b> {username}\n"
-            f"<b>Чек:</b> <a href='{check.check_url}'>Открыть чек</a>\n\n"
-            f"<i>Возврат в ведомость...</i>"
+            f"❖ <b>GDPX // ACADEMY</b> ─ Статус\n"
+            f"━━━━━━━━━━━━━━━━━━━━\n"
+            f"<b>ВЫПЛАТА УСПЕШНО ОТПРАВЛЕНА</b>\n\n"
+            f"◾️ <b>Сумма:</b> {payout.amount} USDT\n"
+            f"◾️ <b>Получатель:</b> {username}\n"
+            f"◾️ <b>Активация:</b> <a href='{check.check_url}'>Открыть чек</a>\n\n"
+            f"━━━━━━━━━━━━━━━━━━━━\n"
+            f"<i>Синхронизация реестра...</i>"
         )
         await edit_message_text_safe(
             callback.message,
@@ -2183,17 +2185,24 @@ async def on_mark_paid_final(callback: CallbackQuery, session: AsyncSession, bot
         await _edit_payout_ledger_message(callback.message, session, page=ledger_page)
     
     try:
-        await bot.send_message(
-            user.telegram_id,
-            f"✅ Выплата сформирована.\n\nСумма: {payout.amount} USDT\nПолучить чек: {check.check_url}",
+        user_notification = (
+            f"❖ <b>GDPX // ACADEMY</b> ─ Финансы\n"
+            f"━━━━━━━━━━━━━━━━━━━━\n"
+            f"<b>ВАШ КАПИТАЛ ВЫПЛАЧЕН</b>\n\n"
+            f"Ваши активы успешно монетизированы. Благодарим за дисциплину поставок.\n\n"
+            f"◾️ <b>Сумма:</b> <code>{payout.amount:.2f}</code> USDT\n"
+            f"◾️ <b>Ваш чек:</b> <a href='{check.check_url}'>Получить выплату</a>\n"
+            f"━━━━━━━━━━━━━━━━━━━━\n"
+            f"<i>Реестр на текущую сессию закрыт.</i>"
         )
+        await bot.send_message(user.telegram_id, user_notification, parse_mode="HTML")
     except TelegramAPIError:
         pass
 
     try:
         await bot.send_message(
             callback.from_user.id,
-            f"Выплачено {payout.amount} USDT {username}",
+            f"Исполнено: <code>{payout.amount:.2f}</code> USDT {username}",
         )
     except TelegramAPIError:
         pass
@@ -2316,28 +2325,39 @@ async def on_submission_report(callback: CallbackQuery, session: AsyncSession) -
     history_text = "\n".join(history_lines) if history_lines else "- без изменений статуса"
 
     number_line = non_empty_plain((submission.description_text or "").strip(), placeholder="—")
-    report_text = (
-        f"Отчёт по товару #{submission.id}\n"
-        f"Продавец: {seller_nickname}\n"
-        f"Категория: {category_title}\n"
-        f"📱 `{number_line}` — {category_title}\n"
-        f"Текущий статус: {submission_status_emoji_line(submission.status)}\n"
-        f"Создано: {submission.created_at}\n"
-        f"Взято в работу: {submission.assigned_at}\n"
-        f"Проверено: {submission.reviewed_at}\n"
-        f"Начислено: {submission.accepted_amount}\n\n"
+    report_text = [
+        f"❖ <b>GDPX // ACADEMY</b> ─ Спецификация\n"
+        f"━━━━━━━━━━━━━━━━━━━━\n"
+        f"<b>АРХИВНЫЙ ОТЧЕТ #{submission.id}</b>",
+        "",
+        f"◾️ <b>Продавец:</b> {seller_nickname}\n"
+        f"◾️ <b>Категория:</b> {category_title}\n"
+        f"◾️ <b>SIM:</b> {number_line}` — {category_title}\n"
+        f"◾️ <b>Статус:</b> {submission_status_emoji_line(submission.status)}",
+        "",
+        f"<b>ВРЕМЕННЫЕ МЕТКИ:</b>",
+        f"▫️ Создано: <code>{submission.created_at}</code>\n"
+        f"▫️ Взято в работу: <code>{submission.assigned_at}</code>\n"
+        f"▫️ Проверено: <code>{submission.reviewed_at}</code>\n"
+        "",
+        f"◾️ <b>Начислено:</b> <code>{submission.accepted_amount}</code>\n\n"
         "История статусов:\n"
         f"{history_text}"
-    )
-    if getattr(submission, "is_duplicate", False):
-        report_text += "\n⚠️ ВНИМАНИЕ: ЭТОТ НОМЕР УЖЕ БЫЛ В БОТЕ РАНЕЕ!\n"
-    await callback.answer("Отчёт сформирован")
-    if callback.message is None:
-        return
+    ]
 
-    sent = await callback.message.answer(
-        non_empty_plain(report_text) + "\n\n(Сообщение удалится через 20 сек)",
-    )
+    if getattr(submission, "is_duplicate", False):
+        report_lines.insert(2, "✕ <b>ВНИМАНИЕ: ДУБЛИКАТ В РЕЕСТРЕ</b>")
+        report_lines.insert(3, "")
+
+    report_text = "\n".join(report_lines)
+
+    await callback.answer("Спецификация сформирована")
+    
+    if callback.message:
+        await callback.message.answer(
+            report_text + f"\n\n<i>Системное сообщение. Самоуничтожение через 20 сек.</i>",
+            parse_mode="HTML"
+        )
     if sent.chat is not None:
         asyncio.create_task(
             _delete_message_later(

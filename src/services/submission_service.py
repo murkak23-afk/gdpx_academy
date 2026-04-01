@@ -297,7 +297,6 @@ class SubmissionService:
             old_status = submission.status
             submission.status = SubmissionStatus.IN_REVIEW
             submission.admin_id = admin_id
-            submission.locked_by_admin_id = admin_id
             submission.assigned_at = datetime.now(timezone.utc)
             submission.last_status_change = datetime.now(timezone.utc)
             self._session.add(
@@ -324,7 +323,6 @@ class SubmissionService:
         old_status = submission.status
         submission.status = SubmissionStatus.IN_REVIEW
         submission.admin_id = admin_id
-        submission.locked_by_admin_id = admin_id
         submission.assigned_at = datetime.now(timezone.utc)
         submission.last_status_change = datetime.now(timezone.utc)
 
@@ -382,7 +380,6 @@ class SubmissionService:
         stmt = (
             select(Submission)
             .options(
-                joinedload(Submission.locked_by_admin),
                 joinedload(Submission.admin),
             )
             .where(
@@ -408,7 +405,6 @@ class SubmissionService:
             .options(
                 joinedload(Submission.category),
                 joinedload(Submission.seller),
-                joinedload(Submission.locked_by_admin),
             )
             .where(*conditions)
             .order_by(Submission.assigned_at.asc())
@@ -447,7 +443,6 @@ class SubmissionService:
             .options(
                 joinedload(Submission.category),
                 joinedload(Submission.seller),
-                joinedload(Submission.locked_by_admin),
             )
             .where(*conditions)
             .order_by(Submission.assigned_at.asc())
@@ -492,7 +487,6 @@ class SubmissionService:
             .options(
                 joinedload(Submission.category),
                 joinedload(Submission.seller),
-                joinedload(Submission.locked_by_admin),
             )
             .join(User, Submission.user_id == User.id)
             .where(*base_conditions)
@@ -557,7 +551,6 @@ class SubmissionService:
             .options(
                 joinedload(Submission.category),
                 joinedload(Submission.seller),
-                joinedload(Submission.locked_by_admin),
             )
             .where(Submission.phone_normalized.like(f"%{clean}"))
             .order_by(Submission.created_at.desc())
@@ -585,7 +578,6 @@ class SubmissionService:
 
         old_status = submission.status
         submission.status = SubmissionStatus.ACCEPTED
-        submission.locked_by_admin_id = None
         submission.reviewed_at = datetime.now(timezone.utc)
         submission.accepted_amount = category.payout_rate
         submission.last_status_change = datetime.now(timezone.utc)
@@ -674,7 +666,6 @@ class SubmissionService:
         old_status = submission.status
         submission.status = to_status
         submission.admin_id = admin_id
-        submission.locked_by_admin_id = None
         submission.reviewed_at = datetime.now(timezone.utc)
         submission.rejection_reason = reason
         submission.rejection_comment = comment
@@ -743,7 +734,6 @@ class SubmissionService:
             old_status = submission.status
             submission.status = to_status
             submission.admin_id = admin_id
-            submission.locked_by_admin_id = None
             submission.reviewed_at = now
             submission.rejection_reason = reason
             submission.rejection_comment = comment
@@ -795,7 +785,6 @@ class SubmissionService:
             old_status = submission.status
             submission.status = to_status
             submission.admin_id = admin_id
-            submission.locked_by_admin_id = None
             submission.reviewed_at = now
             submission.rejection_reason = reason
             submission.rejection_comment = comment
@@ -919,7 +908,6 @@ class SubmissionService:
             .options(
                 joinedload(Submission.category),
                 joinedload(Submission.seller),
-                joinedload(Submission.locked_by_admin),
             )
             .where(*conds)
             .order_by(Submission.reviewed_at.desc().nullslast(), Submission.id.desc())
@@ -950,34 +938,11 @@ class SubmissionService:
             .options(
                 joinedload(Submission.category),
                 joinedload(Submission.seller),
-                joinedload(Submission.locked_by_admin),
             )
             .where(*conds)
             .order_by(Submission.reviewed_at.desc().nullslast(), Submission.id.desc())
         )
         return list((await self._session.execute(stmt)).scalars().all())
-
-    async def lock_submission(self, submission_id: int, admin_id: int) -> Submission | None:
-        """Ставит lock на карточку в работе, если она не занята другим админом.
-
-        Не использует joinedload вместе с FOR UPDATE: в PostgreSQL это даёт
-        LEFT OUTER JOIN и ошибку «FOR UPDATE cannot be applied to the nullable side
-        of an outer join». Если заявка уже залочена текущим админом — повторный
-        lock и commit не выполняются.
-        """
-
-        stmt = select(Submission).where(Submission.id == submission_id).with_for_update()
-        submission = (await self._session.execute(stmt)).scalar_one_or_none()
-        if submission is None:
-            return None
-        if submission.locked_by_admin_id is not None and submission.locked_by_admin_id != admin_id:
-            return None
-        if submission.locked_by_admin_id == admin_id:
-            return submission
-        submission.locked_by_admin_id = admin_id
-        await self._session.commit()
-        await self._session.refresh(submission)
-        return submission
 
     async def get_submission_in_work_for_admin(
         self,
@@ -986,6 +951,7 @@ class SubmissionService:
     ) -> Submission | None:
         """Одна карточка «в работе» у админа: без блокировки, только для показа.
         Chief admin может видеть любую карточку в IN_REVIEW статусе.
+        Обычный админ видит только свои карточки (по admin_id).
         """
 
         is_chief = await self._is_chief_admin(admin_id)
@@ -995,49 +961,35 @@ class SubmissionService:
             Submission.status == SubmissionStatus.IN_REVIEW,
         ]
         if not is_chief:
-            conditions.append(Submission.locked_by_admin_id == admin_id)
+            conditions.append(Submission.admin_id == admin_id)
 
         stmt = (
             select(Submission)
             .options(
                 joinedload(Submission.category),
                 joinedload(Submission.seller),
-                joinedload(Submission.locked_by_admin),
             )
             .where(*conditions)
         )
         return (await self._session.execute(stmt)).scalar_one_or_none()
 
-    async def unlock_submission(self, submission_id: int) -> bool:
-        """Снимает lock с карточки."""
-
-        submission = await self._session.get(Submission, submission_id)
-        if submission is None:
-            return False
-        submission.locked_by_admin_id = None
-        await self._session.commit()
-        return True
-
     async def get_admin_active_submissions(self, admin_id: int) -> list[Submission]:
         """Возвращает карточки в работе.
-        Chief admin видит все карточки в работе (заблокированные любым админом).
-        Обычный админ видит только свои заблокированные карточки.
+        Chief admin видит все карточки в работе.
+        Обычный админ видит только свои карточки (по admin_id).
         """
 
         is_chief = await self._is_chief_admin(admin_id)
 
         conditions = [Submission.status == SubmissionStatus.IN_REVIEW]
         if not is_chief:
-            # Обычный админ видит только свои заблокированные карточки
-            conditions.append(Submission.locked_by_admin_id == admin_id)
-        # Chief admin видит все активные карточки (независимо от locked_by_admin_id)
+            conditions.append(Submission.admin_id == admin_id)
 
         stmt = (
             select(Submission)
             .options(
                 joinedload(Submission.category),
                 joinedload(Submission.seller),
-                joinedload(Submission.locked_by_admin),
             )
             .where(*conditions)
             .order_by(Submission.assigned_at.asc(), Submission.id.asc())

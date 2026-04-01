@@ -5,7 +5,7 @@ import logging
 from aiogram import F, Router
 from aiogram.filters import CommandStart
 from aiogram.fsm.context import FSMContext
-from aiogram.types import Message, ReplyKeyboardRemove
+from aiogram.types import Message
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -40,8 +40,7 @@ async def _send_welcome_banner(
             "payout_label": "Капитал:",
         },
     )
-    # Hide legacy reply keyboard before opening the inline profile hub.
-    await message.answer("\u2060", reply_markup=ReplyKeyboardRemove())
+    # Hide legacy reply keyboard and send the inline profile hub in one message.
     await message.answer(
         render_text,
         reply_markup=seller_main_inline_keyboard(),

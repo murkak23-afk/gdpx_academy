@@ -1362,10 +1362,6 @@ async def on_accept(callback: CallbackQuery, session: AsyncSession, bot: Bot) ->
         return
 
     submission_service = SubmissionService(session=session)
-    locked = await submission_service.lock_submission(submission_id=submission_id, admin_id=admin_user.id)
-    if locked is None:
-        await callback.answer("⏳ Эту заявку уже взял другой админ!", show_alert=True)
-        return
     settings = get_settings()
     await session.refresh(submission_obj, ["category"])
     if submission_obj.category is None and submission_obj.category_id is not None:
@@ -1530,11 +1526,6 @@ async def _handle_final_reject(
         return
     if submission_obj.status != SubmissionStatus.IN_REVIEW:
         await callback.answer("Симка уже обработана", show_alert=True)
-        return
-
-    locked = await submission_service.lock_submission(submission_id=submission_id, admin_id=admin_user.id)
-    if locked is None:
-        await callback.answer("⏳ Эту заявку уже взял другой админ!", show_alert=True)
         return
 
     submission = await submission_service.final_reject_submission(

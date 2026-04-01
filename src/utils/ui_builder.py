@@ -13,18 +13,18 @@ from html import escape
 from typing import Any
 
 # ─── Визуальные константы (Premium / Apple Style) ───────────────────
-HEADER_MAIN = "❖ <b>GDPX Academy</b>"
-HEADER_ADMIN_MAIN = "❖ <b>GDPX Academy</b> ⸻ Управление"
-HEADER_FINANCE = "❖ <b>GDPX Academy</b> ⸻ Финансы"
+HEADER_MAIN = "❖ <b>GDPX // ACADEMY</b>  ─ Терминал" 
+HEADER_ADMIN_MAIN = "❖ <b>GDPX // ACADEMY</b> ─ Управление"
+HEADER_FINANCE = "❖ <b>GDPX // ACADEMY</b> ─ Финансы"
 HEADER_PROFILE = "👤 <b>Кабинет Поставщика</b>"
-HEADER_QUEUE = "❖ <b>GDPX Academy</b> ⸻ Очередь оценки"
-HEADER_ASSET = "❖ <b>GDPX Academy</b> ⸻ Актив"
-HEADER_INWORK = "❖ <b>GDPX Academy</b> ⸻ Операционная зона"
-HEADER_SEARCH = "❖ <b>GDPX Academy</b> ⸻ Поиск по базе"
-HEADER_CATCON = "❖ <b>GDPX Academy</b> ⸻ Настройки"
+HEADER_QUEUE = "❖ <b>GDPX // ACADEMY</b> ─ Очередь оценки"
+HEADER_ASSET = "❖ <b>GDPX // ACADEMY</b> ─ Актив"
+HEADER_INWORK = "❖ <b>GDPX // ACADEMY</b> ─ Операционная зона"
+HEADER_SEARCH = "❖ <b>GDPX // ACADEMY</b> ─ Поиск по базе"
+HEADER_CATCON = "❖ <b>GDPX // ACADEMY</b> ─ Настройки"
 
 DIVIDER = "━━━━━━━━━━━━━━━━━━━━"
-DIVIDER_LIGHT = "┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈"
+DIVIDER_LIGHT = "┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈"
 PREFIX_ITEM = "◾️"
 
 # Статусы переводим в премиальный монохром
@@ -130,17 +130,21 @@ class GDPXRenderer:
         lines: list[str] = [
             HEADER_MAIN,
             DIVIDER,
-            "<b>Премиальный выкуп eSIM. Ничего лишнего.</b>",
+            "<b>Премиальный выкуп eSIM.</b>",
             "",
-            f"{greeting}, <b>{safe_actor}</b>. Добро пожаловать в рабочую среду GDPX.",
+            f"{greeting}, <b>{safe_actor}</b>.",
             "",
-            "▫️ <b>Специализация:</b> Ежедневный выкуп eSIM.",
-            "▫️ <b>Цикл сделки:</b> Приём 24/7 ⸻ Фиксация ⸻ Вечерний расчёт",
+            "Добро пожаловать в рабочую среду GDPX.",
             "",
-            "▫️ <b>Статус линии:</b> Прием разрешен",
+            "▫️ <b>Специализация:</b>",
+            "  ╰ Ежедневный выкуп eSIM.",
+            "▫️ <b>Цикл сделки:</b>",
+            "  ╰ Приём 24/7 ─ Отчёт ─ Расчёт",
+            "",
+            "▫️ <b>Статус линии:</b> active ✔️",
             DIVIDER,
-            "<i>Используйте меню ниже для управления активами.</i>",
-            DIVIDER,
+            "<i>⌵ Меню для управления активами.</i>",
+        
         ]
         return "\n".join(lines)
 
@@ -174,33 +178,27 @@ class GDPXRenderer:
         ])
 
     def render_moderation_card(self, submission: Any, *, is_duplicate: bool = False) -> str:
+        """Спецификация актива при аудите."""
         sid = self._pick(submission, "id", default="—")
         phone = self._pick(submission, "phone_normalized", "description_text", default="—")
         seller = self._pick(submission, "seller", default=None)
-        if seller is not None:
-            username = getattr(seller, "username", None)
-            if isinstance(username, str) and username.strip():
-                seller_label = f"@{username.strip()}"
-            else:
-                seller_id = getattr(seller, "id", None)
-                seller_label = f"id:{seller_id}" if seller_id is not None else "—"
-        else:
-            seller_label = "—"
+        seller_label = self._username_label(seller)
+        
         category_obj = self._pick(submission, "category", default=None)
-        category = "Без кластера"
-        if category_obj is not None:
-            title = getattr(category_obj, "title", None)
-            if isinstance(title, str) and title.strip():
-                category = escape(title.strip())
+        category = escape(str(getattr(category_obj, "title", "Без кластера")))
+
         lines: list[str] = [
-            f"{HEADER_ASSET} <b>{sid}</b>",
+            f"{HEADER_ASSET} #<code>{sid}</code>",
             DIVIDER,
-            f"▪️ <b>Линия связи:</b> {format_phone(str(phone))}",
-            f"▪️ <b>Источник:</b> {seller_label}",
-            f"▪️ <b>Кластер:</b> {category}",
+            f"◾️ <b>Линия связи:</b> {format_phone(str(phone))}",
+            f"◾️ <b>Источник:</b> {seller_label}",
+            f"◾️ <b>Категория:</b> {category}",
         ]
         if is_duplicate:
-            lines.append(" ╰ ❌ <i>Отказ: дублирование в реестре пула</i>")
+            lines.append("")
+            lines.append(" ✕ <b>Внимание:</b> обнаружено дублирование в реестре.")
+        
+        lines.append(DIVIDER)
         return "\n".join(lines)
 
     def render_in_work_list(self, submissions: Sequence[Any]) -> str:
@@ -241,66 +239,42 @@ class GDPXRenderer:
             "",
             "<b>Состояние узлов:</b>",
             f" ⏳ Ожидают аудита: <code>{pending}</code>",
-            f" 🔄 Активные сессии: <code>{in_review}</code>",
+            f" 🔄 В работе (без статуса): <code>{in_review}</code>",
             f" ◾️ Выкуплено: <code>{approved}</code>{cycle_note}",
             f" ▫️ Отклонено: <code>{rejected}</code>{cycle_note}",
             DIVIDER,
         ])
 
-    def render_inwork_hub(
-        self,
-        items: Sequence[Any],
-        *,
-        is_chief: bool = False,
-        index_offset: int = 0,
-    ) -> str:
+    def render_inwork_hub(self, items: Sequence[Any], *, is_chief: bool = False, index_offset: int = 0) -> str:
+        """Список активных сессий в работе (Операционная зона)."""
         lines: list[str] = [HEADER_INWORK, DIVIDER]
+        
         if not items:
-            label = "В системе нет активных сессий" if is_chief else "У вас нет открытых сессий"
-            lines.extend([f" 🔲 <i>{label}</i>", DIVIDER])
+            label = "Сиимок в работе нет" if is_chief else "У вас нет открытых сессий"
+            lines.extend([f" ▫️ <i>{label}</i>", DIVIDER])
             return "\n".join(lines)
-        label = "Глобальный пул анализа" if is_chief else "Ваш локальный пул"
-        lines.append(f"▪️ <b>{label}</b>")
+
+        pool_label = "Глобальный реестр анализа" if is_chief else "Ваш рабочий сектор"
+        lines.append(f"<b>{pool_label}</b>")
         lines.append("")
+
         for idx, item in enumerate(items, start=index_offset + 1):
             phone = self._pick(item, "description_text", "phone_normalized", default="—")
             phone_str = (str(phone) or "").strip() or "—"
             seller = self._pick(item, "seller", default=None)
             seller_label = self._username_label(seller)
-            if seller_label == "—":
-                uid = self._pick(item, "user_id", default="?")
-                seller_label = str(uid)
+            
             if is_chief:
-                locked_admin = self._pick(item, "locked_by_admin", default=None)
-                if locked_admin is not None:
-                    fn = getattr(locked_admin, "first_name", None)
-                    aid = getattr(locked_admin, "id", None)
-                    admin_name = str(fn or (f"id:{aid}" if aid else "—"))
-                else:
-                    admin_name = "—"
-                lines.append(
-                    f" {idx}. <code>{escape(phone_str[:22])}</code>"
-                    f"  │ {seller_label}"
-                    f"  │ <b>{escape(admin_name)}</b>"
-                )
+                admin_obj = self._pick(item, "admin", default=None)
+                admin_name = str(getattr(admin_obj, "first_name", "—")) if admin_obj else "—"
+                # Компактная премиум-верстка в одну строку
+                lines.append(f" {idx}. <code>{escape(phone_str[:20])}</code> │ {seller_label} │ <b>{escape(admin_name)}</b>")
             else:
-                lines.append(
-                    f" {idx}. <code>{escape(phone_str[:22])}</code>"
-                    f"  │ {seller_label}"
-                )
+                lines.append(f" {idx}. <code>{escape(phone_str[:20])}</code> │ {seller_label}")
+
+        lines.append("")
         lines.append(DIVIDER)
         return "\n".join(lines)
-
-    def render_inwork_search_prompt(self) -> str:
-        return "\n".join([
-            HEADER_SEARCH,
-            DIVIDER,
-            "",
-            "▪️ Введите маску для сканирования сети:",
-            f"  ▫️ Полный формат: <code>+7XXXXXXXXXX</code>",
-            f"  ▫️ Индекс: <code>1234</code>",
-            DIVIDER,
-        ])
 
     def render_payout_history(
         self,
@@ -338,13 +312,11 @@ class GDPXRenderer:
         return "\n".join(lines)
 
     def render_payouts(self, payouts: Sequence[Any], *, title: str = "Реестр распределения") -> str:
-        lines: list[str] = [
-            HEADER_FINANCE,
-            DIVIDER,
-            f"▪️ <b>{escape(title)}</b>",
-        ]
+        """Экран массовых выплат."""
+        lines: list[str] = [HEADER_FINANCE, DIVIDER, f"<b>{escape(title)}</b>", ""]
+        
         if not payouts:
-            lines.extend([f" 🔲 <i>Ордеры на распределение отсутствуют</i>", DIVIDER])
+            lines.extend([f" ▫️ <i>Ордеры на распределение отсутствуют</i>", DIVIDER])
             return "\n".join(lines)
 
         total_amount = 0.0
@@ -352,14 +324,15 @@ class GDPXRenderer:
         for payout in payouts:
             username = escape(str(self._pick(payout, "username", default="—")))
             accepted_count = int(self._pick(payout, "accepted_count", default=0) or 0)
-            amount_raw = self._pick(payout, "to_pay", "amount", "accepted_amount", default=0.0)
-            amount = float(amount_raw)
+            amount = float(self._pick(payout, "to_pay", "amount", default=0.0))
+            
             total_amount += amount
             total_items += accepted_count
-            lines.append(f" ▪️ {username} │ {accepted_count} шт. │ {format_currency(amount)}")
+            lines.append(f" ◾️ {username} │ {accepted_count} шт. │ {format_currency(amount)}")
 
         lines.append(DIVIDER_LIGHT)
-        lines.append(f" ⬛️ <b>Итоговая ликвидность:</b> {total_items} шт. │ {format_currency(total_amount)}")
+        lines.append(f" <b>Итоговая ликвидность:</b> {total_items} шт.")
+        lines.append(f" <b>Сумма к списанию:</b> {format_currency(total_amount)}")
         lines.append(DIVIDER)
         return "\n".join(lines)
 

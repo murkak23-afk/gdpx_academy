@@ -188,7 +188,6 @@ async def _in_review_phone_snapshots(
             Submission.id,
             Submission.user_id,
             Submission.admin_id,
-            Submission.locked_by_admin_id,
             Submission.description_text,
         )
         .where(
@@ -203,8 +202,7 @@ async def _in_review_phone_snapshots(
             "id": int(row[0]),
             "user_id": int(row[1]),
             "admin_id": int(row[2]) if row[2] is not None else None,
-            "locked_by_admin_id": int(row[3]) if row[3] is not None else None,
-            "description_text": str(row[4] or ""),
+            "description_text": str(row[3] or ""),
         }
         for row in rows
     ]
@@ -222,9 +220,9 @@ async def _notify_autofix_sides(
     """Уведомляет продавцов и контролёров об авто-фиксации статуса."""
     seller_ids = {int(s["user_id"]) for s in snapshots if s.get("user_id") is not None}
     controller_ids = {
-        int(s["locked_by_admin_id"] or s["admin_id"])
+        int(s["admin_id"])
         for s in snapshots
-        if (s.get("locked_by_admin_id") is not None or s.get("admin_id") is not None)
+        if s.get("admin_id") is not None
     }
 
     for seller_id in seller_ids:

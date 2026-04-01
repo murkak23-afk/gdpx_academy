@@ -86,13 +86,13 @@ async def on_grade_take(
     # Пробуем взять pending → in_review
     taken = await svc.take_to_work(submission_id=submission_id, admin_id=admin_user.id)
     if taken is None:
-        # Может быть уже in_review — тогда пробуем lock
-        locked = await svc.lock_submission(submission_id=submission_id, admin_id=admin_user.id)
-        if locked is None:
+        # Может быть уже in_review — проверяем доступ
+        existing = await svc.get_submission_in_work_for_admin(submission_id=submission_id, admin_id=admin_user.id)
+        if existing is None:
             await callback.answer("⏳ Эту симку уже взял другой админ!", show_alert=True)
             return
 
-    await callback.answer("🔒 Симка закреплена за вами")
+    await callback.answer("✅ Симка взята в работу")
 
     if callback.message is not None:
         try:
@@ -144,10 +144,6 @@ async def on_grade_accept(
         return
 
     svc = SubmissionService(session=session)
-    locked = await svc.lock_submission(submission_id=submission_id, admin_id=admin_user.id)
-    if locked is None:
-        await callback.answer("⏳ Эту симку уже взял другой админ!", show_alert=True)
-        return
 
     settings = get_settings()
     await session.refresh(submission_obj, ["category"])
@@ -296,11 +292,6 @@ async def on_grade_other_reason(message: Message, state: FSMContext, session: As
         return
 
     svc = SubmissionService(session=session)
-    locked = await svc.lock_submission(submission_id=submission_id, admin_id=admin_user.id)
-    if locked is None:
-        await message.answer("⏳ Эту симку уже взял другой админ!")
-        await _return_to_in_work_if_possible(message, state, session)
-        return
 
     custom_reason = message.text.strip()[:500]
     submission = await svc.final_reject_submission(
@@ -450,10 +441,6 @@ async def _grade_reject(
         return
 
     svc = SubmissionService(session=session)
-    locked = await svc.lock_submission(submission_id=submission_id, admin_id=admin_user.id)
-    if locked is None:
-        await callback.answer("⏳ Эту симку уже взял другой админ!", show_alert=True)
-        return
 
     submission = await svc.final_reject_submission(
         submission_id=submission_id,

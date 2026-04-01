@@ -38,7 +38,7 @@ async def run_in_review_stuck_monitor(bot: Bot, session_factory: async_sessionma
             for s in stuck:
                 if s.id in _stuck_alerted_once:
                     continue
-                admin = s.locked_by_admin or s.admin
+                admin = s.admin
                 uname = (admin.username if admin is not None else None) or "unknown"
                 text = f"⚠️ Внимание! Заявка #{s.id} зависла у админа @{uname}!"
                 try:

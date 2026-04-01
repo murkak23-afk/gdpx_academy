@@ -28,11 +28,6 @@ class Submission(Base, TimestampMixin):
         nullable=True,
         index=True,
     )
-    locked_by_admin_id: Mapped[int | None] = mapped_column(
-        ForeignKey("users.id", ondelete="SET NULL"),
-        nullable=True,
-        index=True,
-    )
     category_id: Mapped[int] = mapped_column(ForeignKey("categories.id"), index=True)
 
     telegram_file_id: Mapped[str] = mapped_column(String(255), nullable=False)
@@ -75,11 +70,6 @@ class Submission(Base, TimestampMixin):
         "User",
         foreign_keys=[admin_id],
         back_populates="assigned_submissions",
-    )
-    locked_by_admin = relationship(
-        "User",
-        foreign_keys=[locked_by_admin_id],
-        back_populates="locked_submissions",
     )
     category = relationship("Category", back_populates="submissions")
     review_actions = relationship(

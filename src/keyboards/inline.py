@@ -43,32 +43,40 @@ from src.keyboards.constants import CALLBACK_INLINE_BACK, REPLY_BTN_BACK
 
 
 # ─── Единый словарь меток кнопок ──────────────────────────────────────────
-BTN_ADMIN_QUEUE         = "📋 Очередь"
-BTN_ADMIN_INWORK        = "🛡 В работе"
-BTN_ADMIN_PAYOUTS       = "💰 Выплаты"
-BTN_ADMIN_STATS_SIM     = "📊 Статистика SIM"
-BTN_ADMIN_BROADCAST     = "📡 Рассылка"
-BTN_ADMIN_SEARCH_SIM    = "🔍 Поиск симки"
+BTN_ADMIN_QUEUE         = "🗂 Буфер остатка"
+BTN_ADMIN_INWORK        = "🛡 Операционная зона"
+BTN_ADMIN_PAYOUTS       = "💸 Реестр выплат"
+BTN_ADMIN_STATS_SIM     = "📊 Аналитика SIM"
+BTN_ADMIN_BROADCAST     = "📢 Оповещение в BOT"
+BTN_ADMIN_SEARCH_SIM    = "🔍 Поиск SIM"
+
+
 
 BTN_MOD_TAKE            = "🔒 Взять в работу"
-BTN_MOD_REPORT          = "📄 Отчёт по сим"
-BTN_MOD_ACCEPT          = "✅ ПРИНЯТЬ"
-BTN_MOD_REJECT          = "❌ БРАК"
+BTN_MOD_REPORT          = "🧾 Отчёт по SIM"
+BTN_MOD_ACCEPT          = "◾️ Одобрить"
+BTN_MOD_REJECT          = "▫️ Отклонить"
 
-BTN_GRADE_ACCEPT        = "✅ ЗАЧЁТ"
-BTN_GRADE_NOT_SCAN      = "❌ Не скан"
-BTN_GRADE_BLOCKED       = "❌ Блок на холде"
-BTN_GRADE_OTHER         = "❌ Другое"
 
-BTN_PAY_MARK            = "💳 Выплатить"
-BTN_PAY_TRASH           = "🗑 В корзину"
-BTN_PAY_CONFIRM         = "✅ Подтвердить оплату"
-BTN_PAY_CANCEL          = "❌ Отмена"
-BTN_PAY_FINAL_CONFIRM   = "✅ Точно отправить чек"
 
-BTN_SEARCH_REPORT       = "📄 Отчёт по симке"
-BTN_RESTRICT            = "⛔ Ограничить"
-BTN_UNRESTRICT          = "✅ Снять ограничение"
+BTN_GRADE_ACCEPT        = "◾️ ЗАЧЕТ"
+BTN_GRADE_NOT_SCAN      = "▫️ Отказ: Не скан"
+BTN_GRADE_BLOCKED       = "▫️ Отказ: Блокировка"
+BTN_GRADE_OTHER         = "▫️ Отказ: Иное"
+
+
+
+BTN_PAY_MARK            = "💸 Исполнить транзакцию"
+BTN_PAY_TRASH           = "✕ Аннулировать"
+BTN_PAY_CONFIRM         = "◾️ Подтвердить перевод"
+BTN_PAY_CANCEL          = "▫️ Отмена"
+BTN_PAY_FINAL_CONFIRM   = "◾️ Отправить чек (CryptoBot)"
+
+
+
+BTN_SEARCH_REPORT       = "🧾 Детали SIM"
+BTN_RESTRICT            = "✕ Блокировать доступ"
+BTN_UNRESTRICT          = "◾️ Восстановить доступ"
 
 
 def _inline_back_row() -> list[InlineKeyboardButton]:
@@ -98,16 +106,17 @@ def admin_main_inline_keyboard(*, show_payout_finance: bool = False) -> InlineKe
 
 
 def seller_main_inline_keyboard() -> InlineKeyboardMarkup:
+    """Главное меню поставщика (Apple Style)"""
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="👤 Профиль", callback_data=CB_SELLER_MENU_PROFILE)],
-            [InlineKeyboardButton(text="📥 Сдать материал", callback_data=CB_SELLER_MENU_SELL)],
-            [InlineKeyboardButton(text="📄 Мои номера", callback_data=CB_SELLER_MENU_MATERIAL)],
+            [InlineKeyboardButton(text="⌲ Залить eSIM", callback_data=CB_SELLER_MENU_SELL)],
+            [InlineKeyboardButton(text="🧑‍💻 Личный кабинет", callback_data=CB_SELLER_MENU_PROFILE)],
+            [InlineKeyboardButton(text="🗂 Мои активы", callback_data=CB_SELLER_MENU_MATERIAL)],
             [
-                InlineKeyboardButton(text="💸 История выплат", callback_data=CB_SELLER_MENU_PAYHIST),
-                InlineKeyboardButton(text="ℹ️ Помощь", callback_data=CB_SELLER_MENU_INFO),
+                InlineKeyboardButton(text="🧾 История выплат", callback_data=CB_SELLER_MENU_PAYHIST),
+                InlineKeyboardButton(text="📜 Регламент", callback_data=CB_SELLER_MENU_INFO),
             ],
-            [InlineKeyboardButton(text="🆘 Поддержка", callback_data=CB_SELLER_MENU_SUPPORT)],
+            [InlineKeyboardButton(text="🛎 Поддержка", callback_data=CB_SELLER_MENU_SUPPORT)],
         ]
     )
 
@@ -282,7 +291,7 @@ def moderation_reject_template_keyboard(submission_id: int) -> InlineKeyboardMar
 
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="Дубликат", callback_data=f"{CB_MOD_REJTPL}:{submission_id}:duplicate")],
+            [InlineKeyboardButton(text="Дублированние в системе", callback_data=f"{CB_MOD_REJTPL}:{submission_id}:duplicate")],
             [InlineKeyboardButton(text="Низкое качество", callback_data=f"{CB_MOD_REJTPL}:{submission_id}:quality")],
             [InlineKeyboardButton(text="Нарушение правил", callback_data=f"{CB_MOD_REJTPL}:{submission_id}:rules")],
             [InlineKeyboardButton(text="Другое", callback_data=f"{CB_MOD_REJTPL}:{submission_id}:other")],
@@ -317,7 +326,7 @@ def hold_condition_keyboard(submission_id: int) -> InlineKeyboardMarkup:
 
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="Безхолд", callback_data=f"{CB_MOD_HOLD_SELECT}:{submission_id}:no_hold")],
+            [InlineKeyboardButton(text="Моментально(БХ)", callback_data=f"{CB_MOD_HOLD_SELECT}:{submission_id}:no_hold")],
             [InlineKeyboardButton(text="15 минут", callback_data=f"{CB_MOD_HOLD_SELECT}:{submission_id}:15m")],
             [InlineKeyboardButton(text="30 минут", callback_data=f"{CB_MOD_HOLD_SELECT}:{submission_id}:30m")],
             [InlineKeyboardButton(text="Пропустить", callback_data=f"{CB_MOD_HOLD_SKIP}:{submission_id}")],
