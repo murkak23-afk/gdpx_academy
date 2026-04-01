@@ -428,10 +428,14 @@ async def _render_queue_menu(
     rows = await _pending_by_category(session)
     total = sum(cnt for _, cnt in rows)
     if not rows:
+        refresh_kb = InlineKeyboardMarkup(
+            inline_keyboard=[[InlineKeyboardButton(text="🔄 Обновить", callback_data=_CB_QUEUE)]]
+        )
         sent = await _send_to_thread(
             source_message=target_message,
             text="📭 Очередь пустая.",
             thread_id=thread_id,
+            reply_markup=refresh_kb,
         )
         _remember_active_menu(sent)
         return sent

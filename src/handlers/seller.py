@@ -1170,7 +1170,12 @@ async def on_material_item_edit_start(callback: CallbackQuery, state: FSMContext
     )
     await callback.answer()
     if callback.message is not None:
-        await callback.message.answer("Отправь новый номер в формате +79999999999")
+        await callback.message.answer(
+            "Отправь новый номер в формате +79999999999",
+            reply_markup=InlineKeyboardMarkup(
+                inline_keyboard=[[InlineKeyboardButton(text="❌ Отменить операцию", callback_data=CB_SELLER_CANCEL_FSM)]]
+            ),
+        )
 
 
 @router.callback_query(F.data.startswith(f"{CB_SELLER_MAT_EDIT_MEDIA}:"))
@@ -1190,7 +1195,12 @@ async def on_material_item_edit_media_start(callback: CallbackQuery, state: FSMC
     await state.update_data(material_edit_submission_id=int(submission_id_raw))
     await callback.answer()
     if callback.message is not None:
-        await callback.message.answer("Отправь новое фото или архив-файл для симки.")
+        await callback.message.answer(
+            "Отправь новое фото или архив-файл для симки.",
+            reply_markup=InlineKeyboardMarkup(
+                inline_keyboard=[[InlineKeyboardButton(text="❌ Отменить операцию", callback_data=CB_SELLER_CANCEL_FSM)]]
+            ),
+        )
 
 
 @router.message(SubmissionState.waiting_for_material_edit_description, F.text)
@@ -1214,9 +1224,15 @@ async def on_material_item_edit_submit(message: Message, state: FSMContext, sess
     )
     await state.clear()
     if updated is None:
-        await message.answer("Не удалось обновить симку (только pending).")
+        await message.answer(
+            "Не удалось обновить симку (только pending).",
+            reply_markup=seller_main_inline_keyboard(),
+        )
         return
-    await message.answer(f"Симка #{updated.id} обновлена.")
+    await message.answer(
+        f"Симка #{updated.id} обновлена.",
+        reply_markup=seller_main_inline_keyboard(),
+    )
 
 
 @router.message(SubmissionState.waiting_for_material_edit_media, F.photo)
@@ -1244,7 +1260,10 @@ async def on_material_item_edit_media_photo(
         attachment_type=ATTACHMENT_PHOTO,
     )
     await state.clear()
-    await message.answer("Медиа обновлено." if updated else "Не удалось обновить (только pending).")
+    await message.answer(
+        "Медиа обновлено." if updated else "Не удалось обновить (только pending).",
+        reply_markup=seller_main_inline_keyboard(),
+    )
 
 
 @router.message(SubmissionState.waiting_for_material_edit_media, F.document)
@@ -1275,7 +1294,10 @@ async def on_material_item_edit_media_document(
         attachment_type=ATTACHMENT_DOCUMENT,
     )
     await state.clear()
-    await message.answer("Медиа обновлено." if updated else "Не удалось обновить (только pending).")
+    await message.answer(
+        "Медиа обновлено." if updated else "Не удалось обновить (только pending).",
+        reply_markup=seller_main_inline_keyboard(),
+    )
 
 
 @router.callback_query(F.data.startswith(f"{CB_SELLER_MAT_DELETE}:"))

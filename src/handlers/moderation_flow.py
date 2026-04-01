@@ -51,6 +51,7 @@ from src.keyboards.callbacks import (
     CB_MOD_TAKE,
     CB_MOD_TAKE_PICK,
 )
+from src.keyboards.constants import CALLBACK_INLINE_BACK, REPLY_BTN_BACK
 from src.services import (
     AdminAuditService,
     AdminChatForwardStatsService,
@@ -699,7 +700,12 @@ async def on_moderation_forward_target_shared(
     picked_ids_for_audit = list(data.get("picked_submission_ids", []))
     if not picked_ids_for_audit:
         await state.clear()
-        await message.answer("Не выбраны симки. Начни с очереди.")
+        await message.answer(
+            "Не выбраны симки. Начни с очереди.",
+            reply_markup=InlineKeyboardMarkup(
+                inline_keyboard=[[InlineKeyboardButton(text=REPLY_BTN_BACK, callback_data=CALLBACK_INLINE_BACK)]]
+            ),
+        )
         return
 
     await state.update_data(target_chat_id=target_chat_id)

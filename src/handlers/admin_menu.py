@@ -971,12 +971,13 @@ async def on_enter_admin_panel(message: Message, session: AsyncSession) -> None:
         await message.answer("Недостаточно прав.")
         return
     # Убираем reply-клавиатуру с экрана пользователя
+    await message.answer("\u2060", reply_markup=ReplyKeyboardRemove())
     stats = await _fetch_admin_board_stats(session)
     stats["username"] = message.from_user.username or str(message.from_user.id)
     text = GDPXRenderer().render_admin_dashboard(stats)
     await message.answer(
         text,
-        reply_markup=ReplyKeyboardRemove(),
+        reply_markup=await build_admin_main_inline_keyboard(session, message.from_user.id),
         parse_mode="HTML",
     )
 
@@ -1014,12 +1015,13 @@ async def on_admin_panel(message: Message, session: AsyncSession) -> None:
         await message.answer("Недостаточно прав.")
         return
 
+    await message.answer("\u2060", reply_markup=ReplyKeyboardRemove())
     stats = await _fetch_admin_board_stats(session)
     stats["username"] = message.from_user.username or str(message.from_user.id)
     text = GDPXRenderer().render_admin_dashboard(stats)
     await message.answer(
         text,
-        reply_markup=ReplyKeyboardRemove(),
+        reply_markup=await build_admin_main_inline_keyboard(session, message.from_user.id),
         parse_mode="HTML",
     )
 
@@ -1342,7 +1344,12 @@ async def on_broadcast_start(message: Message, state: FSMContext, session: Async
         await message.answer("Недостаточно прав.")
         return
     await state.set_state(AdminBroadcastState.waiting_for_text)
-    await message.answer(f"Отправь текст рассылки одним сообщением.\n\n{HINT_BROADCAST}")
+    await message.answer(
+        f"Отправь текст рассылки одним сообщением.\n\n{HINT_BROADCAST}",
+        reply_markup=InlineKeyboardMarkup(
+            inline_keyboard=[[InlineKeyboardButton(text=REPLY_BTN_BACK, callback_data=CALLBACK_INLINE_BACK)]]
+        ),
+    )
 
 
 @router.message(AdminBroadcastState.waiting_for_text)
@@ -1380,6 +1387,9 @@ async def on_broadcast_send(
     await state.clear()
     await message.answer(
         f"Рассылка завершена.\nУспешно: {delivered}\nОшибок: {failed}",
+        reply_markup=InlineKeyboardMarkup(
+            inline_keyboard=[[InlineKeyboardButton(text=REPLY_BTN_BACK, callback_data=CALLBACK_INLINE_BACK)]]
+        ),
     )
     if admin_user is not None:
         await AdminAuditService(session=session).log(
