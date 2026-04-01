@@ -2335,14 +2335,14 @@ async def on_submission_report(callback: CallbackQuery, session: AsyncSession) -
     history_text = "\n".join(history_lines) if history_lines else "- без изменений статуса"
 
     number_line = non_empty_plain((submission.description_text or "").strip(), placeholder="—")
-    report_text = [
+    report_lines = [
         f"❖ <b>GDPX // ACADEMY</b> ─ Спецификация\n"
         f"━━━━━━━━━━━━━━━━━━━━\n"
         f"<b>АРХИВНЫЙ ОТЧЕТ #{submission.id}</b>",
         "",
         f"◾️ <b>Продавец:</b> {seller_nickname}\n"
         f"◾️ <b>Категория:</b> {category_title}\n"
-        f"◾️ <b>SIM:</b> {number_line}` — {category_title}\n"
+        f"◾️ <b>SIM:</b> <code>{number_line}</code> — {category_title}\n"
         f"◾️ <b>Статус:</b> {submission_status_emoji_line(submission.status)}",
         "",
         f"<b>ВРЕМЕННЫЕ МЕТКИ:</b>",
@@ -2362,13 +2362,14 @@ async def on_submission_report(callback: CallbackQuery, session: AsyncSession) -
     report_text = "\n".join(report_lines)
 
     await callback.answer("Спецификация сформирована")
-    
+
+    sent = None
     if callback.message:
-        await callback.message.answer(
-            report_text + f"\n\n<i>Системное сообщение. Самоуничтожение через 20 сек.</i>",
+        sent = await callback.message.answer(
+            report_text + "\n\n<i>Системное сообщение. Самоуничтожение через 20 сек.</i>",
             parse_mode="HTML"
         )
-    if sent.chat is not None:
+    if sent is not None and sent.chat is not None:
         asyncio.create_task(
             _delete_message_later(
                 callback.bot,
