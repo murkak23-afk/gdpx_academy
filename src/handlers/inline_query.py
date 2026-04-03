@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from aiogram import Bot, F, Router
+from aiogram import Bot, Router
 from aiogram.types import InlineQuery, InlineQueryResultArticle, InputTextMessageContent
 from sqlalchemy.ext.asyncio import AsyncSession
 

@@ -3,13 +3,14 @@ from __future__ import annotations
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 from src.keyboards.callbacks import (
+    CB_ADMIN_BROADCAST,
     CB_ADMIN_INWORK_HUB,
     CB_ADMIN_PAYOUTS,
     CB_ADMIN_QUEUE,
     CB_ADMIN_REPORT_SUBMISSION,
     CB_ADMIN_RESTRICT,
-    CB_ADMIN_STATS_MONTH,
     CB_ADMIN_SEARCH_SIM,
+    CB_ADMIN_STATS_MONTH,
     CB_ADMIN_UNRESTRICT,
     CB_GRADE_ACCEPT,
     CB_GRADE_BLOCKED,
@@ -20,12 +21,9 @@ from src.keyboards.callbacks import (
     CB_MOD_DEBIT,
     CB_MOD_HOLD_SELECT,
     CB_MOD_HOLD_SKIP,
-    CB_MOD_REJECT,
     CB_MOD_REJTPL,
     CB_MOD_REJTPL_BACK,
-    CB_MOD_TAKE,
     CB_MOD_TAKE_PICK,
-    CB_ADMIN_BROADCAST,
     CB_NOOP,
     CB_PAY_CANCEL,
     CB_PAY_CONFIRM,
@@ -40,7 +38,6 @@ from src.keyboards.callbacks import (
     CB_SELLER_MENU_SUPPORT,
 )
 from src.keyboards.constants import CALLBACK_INLINE_BACK, REPLY_BTN_BACK
-
 
 # ─── Единый словарь меток кнопок ──────────────────────────────────────────
 BTN_ADMIN_QUEUE         = "🗂 Буфер остатка"
@@ -103,14 +100,14 @@ def seller_main_inline_keyboard() -> InlineKeyboardMarkup:
     """Главное меню поставщика (Apple Style)"""
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="⌲ Залить eSIM", callback_data=CB_SELLER_MENU_SELL)],
-            [InlineKeyboardButton(text="🧑‍💻 Личный кабинет", callback_data=CB_SELLER_MENU_PROFILE)],
-            [InlineKeyboardButton(text="🗂 Мои активы", callback_data=CB_SELLER_MENU_MATERIAL)],
+            [InlineKeyboardButton(text="❖ Залить eSIM", callback_data=CB_SELLER_MENU_SELL)],
+            [InlineKeyboardButton(text="🀄️ ПРОФИЛЬ", callback_data=CB_SELLER_MENU_PROFILE)],
+            [InlineKeyboardButton(text="🗂 МОИ АКТИВЫ", callback_data=CB_SELLER_MENU_MATERIAL)],
             [
-                InlineKeyboardButton(text="🧾 История выплат", callback_data=CB_SELLER_MENU_PAYHIST),
-                InlineKeyboardButton(text="📜 Регламент", callback_data=CB_SELLER_MENU_INFO),
+                InlineKeyboardButton(text="🧾 ВЫПЛАТЫ", callback_data=CB_SELLER_MENU_PAYHIST),
+                InlineKeyboardButton(text="📜 КОДЕКС", callback_data=CB_SELLER_MENU_INFO),
             ],
-            [InlineKeyboardButton(text="🛎 Поддержка", callback_data=CB_SELLER_MENU_SUPPORT)],
+            [InlineKeyboardButton(text="🛡 SUPPORT CENTER", callback_data=CB_SELLER_MENU_SUPPORT)],
         ]
     )
 

@@ -72,7 +72,6 @@ class AdminService:
             is_active=True,
         )
         self._session.add(category)
-        await self._session.commit()
         await self._session.refresh(category)
         return category
 

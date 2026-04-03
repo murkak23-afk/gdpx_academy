@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.services import AdminService
 
 
-class IsChiefAdminFilter(BaseFilter):
+class IsAdminFilter(BaseFilter):
     """Пропускает апдейт только для админа (чтобы seller-FSM не перехватывал кнопки админ-меню)."""
 
     async def __call__(self, message: Message, session: AsyncSession) -> bool:

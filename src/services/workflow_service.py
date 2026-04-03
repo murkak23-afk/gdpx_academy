@@ -83,6 +83,5 @@ class WorkflowService:
                 comment=comment,
             )
         )
-        await self._session.commit()
         await self._session.refresh(submission)
         return submission

@@ -1,3 +1,3 @@
-from src.filters.chief_admin import IsChiefAdminFilter
+from src.filters.admin import IsAdminFilter
 
-__all__ = ["IsChiefAdminFilter"]
+__all__ = ["IsAdminFilter"]

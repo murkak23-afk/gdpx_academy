@@ -8,7 +8,7 @@ from aiogram.types import (
 )
 
 from src.database.models.enums import UserLanguage, UserRole
-from src.keyboards.constants import BUTTON_ENTER_ADMIN_PANEL, BUTTON_EXIT_ADMIN_PANEL, REPLY_BTN_BACK
+from src.keyboards.constants import BUTTON_ENTER_ADMIN_PANEL, REPLY_BTN_BACK
 
 # Совпадают с обработчиками chat_shared / user_shared при пересылке.
 FORWARD_REQ_CHAT_GROUP = 1

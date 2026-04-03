@@ -26,7 +26,6 @@ class ArchiveService:
         cutoff = datetime.now(timezone.utc) - timedelta(days=self.RETENTION_DAYS)
         stmt = delete(PublicationArchive).where(PublicationArchive.created_at < cutoff)
         result = await self._session.execute(stmt)
-        await self._session.commit()
         return int(result.rowcount or 0)
 
     async def search_archive_by_phone(self, query: str, limit: int = 30) -> list[tuple[Submission, User]]:

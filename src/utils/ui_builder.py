@@ -13,15 +13,15 @@ from html import escape
 from typing import Any
 
 # ─── Визуальные константы (Premium / Apple Style) ───────────────────
-HEADER_MAIN = "❖ <b>GDPX // ACADEMY</b>  ─ Терминал" 
-HEADER_ADMIN_MAIN = "❖ <b>GDPX // ACADEMY</b> ─ Управление"
-HEADER_FINANCE = "❖ <b>GDPX // ACADEMY</b> ─ Финансы"
-HEADER_PROFILE = "👤 <b>Кабинет Поставщика</b>"
-HEADER_QUEUE = "❖ <b>GDPX // ACADEMY</b> ─ Очередь оценки"
-HEADER_ASSET = "❖ <b>GDPX // ACADEMY</b> ─ Актив"
-HEADER_INWORK = "❖ <b>GDPX // ACADEMY</b> ─ Операционная зона"
-HEADER_SEARCH = "❖ <b>GDPX // ACADEMY</b> ─ Поиск по базе"
-HEADER_CATCON = "❖ <b>GDPX // ACADEMY</b> ─ Настройки"
+HEADER_MAIN = "❖ <b>GDPX // ACADEMY</b>  ─ Terminal v2.3" 
+HEADER_ADMIN_MAIN = "❖ <b>GDPX // ACADEMY</b> ─ COMMAND NODE"
+HEADER_FINANCE = "❖ <b>GDPX // ACADEMY</b> ─ FINANCE"
+HEADER_PROFILE = "🀄️ <b>ПРОФИЛЬ АГЕНТА</b>"
+HEADER_QUEUE = "❖ <b>GDPX // ACADEMY</b> ─ DEFECTATION BUFFER"
+HEADER_INWORK = "❖ <b>GDPX // ACADEMY</b> ─ OPERATION ZONE"
+HEADER_SEARCH = "❖ <b>GDPX // ACADEMY</b> ─ GLOBAL SEARCH"
+HEADER_CATCON = "❖ <b>GDPX // ACADEMY</b> ─ CONFIGURATION"
+HEADER_ASSET = "❖ <b>GDPX // ACADEMY</b> ─ ASSET"
 
 DIVIDER = "━━━━━━━━━━━━━━━━━━━━"
 DIVIDER_LIGHT = "┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈"
@@ -62,16 +62,16 @@ def format_currency(amount: float) -> str:
 
 
 def get_time_greeting(now: datetime | None = None) -> str:
-    """Лаконичные приветствия в стиле Apple."""
+    """Лаконичные приветствия в стиле терминала."""
     current = now or datetime.now()
     hour = current.hour
     if 6 <= hour < 12:
-        return "Доброе утро"
+        return "Утренняя сессия"
     if 12 <= hour < 18:
-        return "Добрый день"
+        return "Дневная сессия"
     if 18 <= hour < 23:
-        return "Добрый вечер"
-    return "Доброй ночи"
+        return "Вечерняя сессия"
+    return "Ночная сессия"
 
 
 def _status_emoji(status: Any) -> str:
@@ -84,8 +84,6 @@ class GDPXRenderer:
 
     def render_user_profile(self, user_stats: Mapping[str, Any], user_id: int) -> str:
         """Отрисовка личного кабинета (Касса и Статус)."""
-        actor = str(user_stats.get("username") or user_stats.get("telegram_id") or user_stats.get("user_id") or "—")
-        safe_actor = "Скрытый профиль" if actor.lower() in ("resident", "резидент", "—") else (escape(actor) if actor.isdigit() else f"@{escape(actor)}")
 
         approved = int(user_stats.get("approved_count") or 0)
         pending = int(user_stats.get("pending_count") or 0)
@@ -98,17 +96,17 @@ class GDPXRenderer:
         return "\n".join([
             HEADER_PROFILE,
             DIVIDER,
-            f"ID: <code>{user_id}</code>",
-            f"Уровень доступа: <b>{rank_label}</b>",
+            f"🪪 ИДЕНТИФИКАТОР: <code>{user_id}</code>",
+            f"🏆 УРОВЕНЬ ДОСТУПА: <b>{rank_label}</b>",
             "",
-            "<b>Статистика ваших продаж:</b>",
+            "📊 <b>ОПЕРАЦИОННАЯ СВОДКА:</b>",
             f" ◾️ Успешно выкуплено: <code>{approved}</code>",
-            f" ◾️ На оценке: <code>{pending}</code>",
-            f" ◾️ Отклонено (Брак): <code>{rejected}</code>",
+            f" 🔄 В процессе оценки: <code>{pending}</code>",
+            f" ▫️ Отклонено(брак): <code>{rejected}</code>",
             "",
-            f"<b>План сдачи:</b> {progress}",
+            f"<b>ВЕКТОР РАЗВИТИЯ:</b> {progress}",
             (
-                f" ╰ <i>Осталось до повышения: <code>{remaining}</code> шт.</i>"
+                f" ╰ <i>Цель следующего ранга: <code>{remaining}</code> шт.</i>"
                 if next_target is not None
                 else " ╰ ▫️ <i>Максимальный статус достигнут.</i>"
             ),
@@ -124,27 +122,33 @@ class GDPXRenderer:
         payout = stats.get("total_payout_amount")
         
         actor = str(stats.get("username") or stats.get("telegram_id") or stats.get("user_id") or "—")
-        safe_actor = "Скрытый профиль" if actor.lower() in ("resident", "резидент", "—") else (escape(actor) if actor.isdigit() else f"@{escape(actor)}")
+        safe_actor = "INCOGNITO" if actor.lower() in ("resident", "резидент", "—") else (escape(actor) if actor.isdigit() else f"@{escape(actor)}")
         
         greeting = get_time_greeting()
         lines: list[str] = [
             HEADER_MAIN,
             DIVIDER,
-            "<b>Премиальный выкуп eSIM.</b>",
+            f"🃏 <b>CEЛЛЕР:</b> <code>{safe_actor}</code>",
+            "▫️ <b>СТАТУС:</b> <code>АКТИВЕН</code>",
             "",
-            f"{greeting}, <b>{safe_actor}</b>.",
+            f"{greeting}, cоединение установлено.",
             "",
-            "Добро пожаловать в рабочую среду GDPX.",
+            "Добро пожаловать в закрытый контур Академии.",
             "",
-            "▫️ <b>Специализация:</b>",
-            "  ╰ Ежедневный выкуп eSIM.",
-            "▫️ <b>Цикл сделки:</b>",
-            "  ╰ Приём 24/7 ─ Отчёт ─ Расчёт",
+            "❂ <b>ЭКОСИСТЕМА GDPX:</b>",
+            "╰ Мы даём знания - вы производите актив - мы забираем весь объём.",
             "",
-            "▫️ <b>Статус линии:</b> active ✔️",
+            "❂ <b>ЦИКЛ СДЕЛКИ:</b>",
+            "╰ Сдача eSIM [24/7] ─ Отчёт ─ Расчет",
+            "",
+            "📊 <b>ВАШИ ПОКАЗАТЕЛИ:</b>",
+            f"  ╰ ПРИНЯТО: <code>{approved}</code>",
+            f"  ╰ В ОБРАБОТКЕ: <code>{pending + in_review}</code>",
+            f"  ╰ ОТКЛОНЕНО (БРАК): <code>{rejected}</code>",
+            "  │",
+            f"  ╰ ВЫПЛАЧЕНО: {format_currency(float(payout) if payout is not None else 0)}",
             DIVIDER,
-            "<i>⌵ Меню для управления активами.</i>",
-        
+            "<i>Навигация по меню системы</i> ↴",
         ]
         return "\n".join(lines)
 
@@ -152,7 +156,7 @@ class GDPXRenderer:
     def render_queue(self, submissions: Sequence[Any], *, title: str = "Буфер материала") -> str:
         lines: list[str] = [HEADER_QUEUE, DIVIDER, f"▪️ <b>{escape(title)}</b>"]
         if not submissions:
-            lines.extend([f" 🔲 <i>Буфер пуст</i>", DIVIDER])
+            lines.extend([" 🔲 <i>Буфер пуст</i>", DIVIDER])
             return "\n".join(lines)
 
         for sub in submissions:
@@ -204,7 +208,7 @@ class GDPXRenderer:
     def render_in_work_list(self, submissions: Sequence[Any]) -> str:
         lines: list[str] = [HEADER_INWORK, DIVIDER]
         if not submissions:
-            lines.extend([f" 🔲 <i>Активных сессий нет</i>", DIVIDER])
+            lines.extend([" 🔲 <i>Активных сессий нет</i>", DIVIDER])
             return "\n".join(lines)
 
         for sub in submissions:
@@ -367,7 +371,7 @@ class GDPXRenderer:
             "",
         ]
         if not items:
-            lines.extend([f" 🔲 <i>Транзакции отсутствуют</i>", DIVIDER])
+            lines.extend([" 🔲 <i>Транзакции отсутствуют</i>", DIVIDER])
             return "\n".join(lines)
 
         for p in items:
@@ -391,7 +395,7 @@ class GDPXRenderer:
         lines: list[str] = [HEADER_FINANCE, DIVIDER, f"<b>{escape(title)}</b>", ""]
         
         if not payouts:
-            lines.extend([f" ▫️ <i>Ордеры на распределение отсутствуют</i>", DIVIDER])
+            lines.extend([" ▫️ <i>Ордеры на распределение отсутствуют</i>", DIVIDER])
             return "\n".join(lines)
 
         total_amount = 0.0
@@ -525,7 +529,7 @@ class GDPXRenderer:
             "",
         ]
         if not categories:
-            lines.append(f" 🔲 <i>Кластеры не сконфигурированы</i>")
+            lines.append(" 🔲 <i>Кластеры не сконфигурированы</i>")
         else:
             for c in categories[:30]:
                 state = "⬛️" if getattr(c, "is_active", False) else "❌"

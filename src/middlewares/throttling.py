@@ -10,6 +10,7 @@ from typing import Any, Awaitable, Callable, Dict
 from aiogram import BaseMiddleware
 from aiogram.dispatcher.middlewares.user_context import EVENT_CONTEXT_KEY, EventContext
 from aiogram.types import TelegramObject, Update
+from cachetools import TTLCache
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +31,7 @@ class UserThrottlingMiddleware(BaseMiddleware):
 
     def __init__(self, interval_sec: float = 1.0) -> None:
         self._interval = max(interval_sec, 0.05)
-        self._last_ts: dict[tuple[int, str], float] = {}
+        self._last_ts: TTLCache[tuple[int, str], float] = TTLCache(maxsize=10000, ttl=600)
         self._lock = asyncio.Lock()
 
     @staticmethod

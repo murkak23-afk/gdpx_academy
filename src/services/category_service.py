@@ -58,7 +58,6 @@ class CategoryService:
         if category is None:
             return None
         category.total_upload_limit = total_limit
-        await self._session.commit()
         await self._session.refresh(category)
         return category
 
@@ -69,7 +68,6 @@ class CategoryService:
         if category is None:
             return None
         category.is_active = is_active
-        await self._session.commit()
         await self._session.refresh(category)
         return category
 
@@ -80,7 +78,6 @@ class CategoryService:
         if category is None:
             return None
         category.payout_rate = payout_rate
-        await self._session.commit()
         await self._session.refresh(category)
         return category
 
@@ -91,7 +88,6 @@ class CategoryService:
         if category is None:
             return None
         category.description = description
-        await self._session.commit()
         await self._session.refresh(category)
         return category
 
@@ -114,12 +110,10 @@ class CategoryService:
         linked_count = int((await self._session.execute(linked_stmt)).scalar_one())
         if linked_count > 0:
             category.is_active = False
-            await self._session.commit()
             await self._session.refresh(category)
             return "deactivated"
 
         await self._session.delete(category)
-        await self._session.commit()
         return "deleted"
 
     async def force_delete_category(self, category_id: int) -> Literal["deleted", "not_found"]:
@@ -137,5 +131,4 @@ class CategoryService:
             .execution_options(synchronize_session=False)
         )
         await self._session.delete(category)
-        await self._session.commit()
         return "deleted"

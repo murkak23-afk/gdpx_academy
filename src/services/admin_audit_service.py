@@ -27,4 +27,3 @@ class AdminAuditService:
             details=details,
         )
         self._session.add(record)
-        await self._session.commit()

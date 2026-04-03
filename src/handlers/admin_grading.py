@@ -25,6 +25,7 @@ from src.database.models.category import Category
 from src.database.models.enums import RejectionReason, SubmissionStatus
 from src.database.models.submission import Submission
 from src.database.models.user import User
+from src.handlers.moderation_flow import send_in_review_queue
 from src.keyboards import grading_matrix_keyboard, moderation_item_keyboard, search_report_keyboard
 from src.keyboards.callbacks import (
     CB_ADMIN_SEARCH_SIM,
@@ -37,7 +38,6 @@ from src.keyboards.callbacks import (
 from src.keyboards.constants import CALLBACK_INLINE_BACK, REPLY_BTN_BACK
 from src.services import AdminAuditService, AdminService, SubmissionService, UserService
 from src.states.admin_state import AdminGradeOtherState, AdminSearchSimState
-from src.handlers.moderation_flow import send_in_review_queue
 from src.utils.submission_format import format_submission_chat_forward_title
 from src.utils.submission_media import bot_send_submission
 from src.utils.text_format import edit_message_text_safe

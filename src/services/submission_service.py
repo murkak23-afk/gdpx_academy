@@ -76,6 +76,7 @@ class SubmissionService:
 
         now = datetime.now(timezone.utc)
         import re
+
         from src.utils.phone_norm import normalize_phone_strict
         
         # 1. Просто ищем первую последовательность цифр (10-11 штук) в тексте
@@ -104,7 +105,6 @@ class SubmissionService:
             last_status_change=now,
         )
         self._session.add(submission)
-        await self._session.commit()
         await self._session.refresh(submission)
         return submission
 
@@ -303,7 +303,6 @@ class SubmissionService:
             )
             affected.append(submission)
 
-        await self._session.commit()
         return affected
 
     async def mark_pending_submissions_not_scan(
@@ -341,7 +340,6 @@ class SubmissionService:
             )
             affected.append(submission)
 
-        await self._session.commit()
         return affected
 
     async def take_to_work(self, submission_id: int, admin_id: int) -> Submission | None:
@@ -366,7 +364,6 @@ class SubmissionService:
                 comment="Взято в работу",
             )
         )
-        await self._session.commit()
         await self._session.refresh(submission)
         return submission
 
@@ -387,7 +384,6 @@ class SubmissionService:
             return False
 
         await self._session.delete(submission)
-        await self._session.commit()
         return True
 
     async def reject_submission(
@@ -420,7 +416,6 @@ class SubmissionService:
                 comment=comment or "Отклонено админом",
             )
         )
-        await self._session.commit()
         await self._session.refresh(submission)
         return submission
 
@@ -675,7 +670,6 @@ class SubmissionService:
             )
             self._session.add(payout)
 
-        await self._session.commit()
         await self._session.refresh(submission)
         return submission
 
@@ -721,7 +715,6 @@ class SubmissionService:
                 comment=comment,
             )
         )
-        await self._session.commit()
         await self._session.refresh(submission)
         return submission
 
@@ -777,7 +770,6 @@ class SubmissionService:
                 )
             )
 
-        await self._session.commit()
         return submissions
 
     async def final_reject_in_review_by_phone(
@@ -845,7 +837,6 @@ class SubmissionService:
                 )
             )
 
-        await self._session.commit()
         return submissions
 
     async def final_reject_in_review_by_phone_suffix(
@@ -896,7 +887,6 @@ class SubmissionService:
                 )
             )
 
-        await self._session.commit()
         return submissions
 
     _DEBIT_WORKED_STATUSES = (
@@ -1117,7 +1107,6 @@ class SubmissionService:
                 )
             )
         )
-        await self._session.commit()
         return total
 
     async def get_user_material_folders(self, user_id: int) -> list[dict[str, Any]]:

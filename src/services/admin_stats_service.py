@@ -6,12 +6,12 @@ from decimal import Decimal
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.core.stats_epoch import get_stats_epoch
 from src.database.models.category import Category
 from src.database.models.enums import SubmissionStatus
 from src.database.models.publication import Payout
 from src.database.models.submission import Submission
 from src.database.models.user import User
-from src.core.stats_epoch import get_stats_epoch
 
 
 class AdminStatsService:

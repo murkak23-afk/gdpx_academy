@@ -115,7 +115,6 @@ class BillingService:
             user.total_paid = Decimal(user.total_paid) + amount
 
             self._session.add(payout)
-            await self._session.commit()
             await self._session.refresh(payout)
             return payout
         
@@ -138,7 +137,6 @@ class BillingService:
         user.total_paid = Decimal(user.total_paid) + total_amount
         self._session.add(user)
         
-        await self._session.commit()
         
         # Возвращаем первую выплату (для обратной совместимости)
         if pending_payouts:
@@ -161,7 +159,6 @@ class BillingService:
         payout.crypto_check_id = crypto_check_id
         payout.crypto_check_url = crypto_check_url
         payout.note = note or payout.note
-        await self._session.commit()
         await self._session.refresh(payout)
         return payout
 
@@ -205,7 +202,6 @@ class BillingService:
         )
         user.pending_balance = Decimal("0.00")
         self._session.add(payout)
-        await self._session.commit()
         await self._session.refresh(payout)
         return payout
 
@@ -232,7 +228,6 @@ class BillingService:
         }
 
         await self._session.delete(payout)
-        await self._session.commit()
         return snapshot
 
     async def get_payouts_paginated(

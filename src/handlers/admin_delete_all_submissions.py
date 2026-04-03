@@ -1,11 +1,11 @@
-from aiogram import Router, F
-from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram import F, Router
 from aiogram.filters import Command
-from sqlalchemy.ext.asyncio import AsyncSession
-from src.services.admin_service import AdminService
-from src.database.session import SessionFactory
-from src.database.models.submission import Submission
+from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 from sqlalchemy import delete, func, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from src.database.models.submission import Submission
+from src.services.admin_service import AdminService
 
 router = Router(name="admin-delete-all-submissions")
 
@@ -49,6 +49,5 @@ async def cb_confirm_delete_all_submissions(callback: CallbackQuery, session: As
         return
 
     await session.execute(delete(Submission))
-    await session.commit()
     await callback.message.edit_text(f"✅ Удалено {count} сим-карт. База пуста 🚀")
     await callback.answer("Готово!", show_alert=True)

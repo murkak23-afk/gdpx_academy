@@ -3,7 +3,6 @@ from __future__ import annotations
 import asyncio
 import csv
 import hashlib
-import re
 from datetime import datetime, timezone
 from io import StringIO
 
@@ -24,6 +23,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.core.config import get_settings
 from src.database.models.enums import SubmissionStatus
 from src.database.models.submission import Submission
+from src.faq import FAQ_CARDS, get_faq_by_id
 from src.keyboards import (
     is_sell_esim_button,
     seller_main_inline_keyboard,
@@ -32,16 +32,18 @@ from src.keyboards.callbacks import (
     CB_CAPTCHA_CANCEL,
     CB_CAPTCHA_START,
     CB_NOOP,
-    CB_SELLER_CANCEL_FSM,
     CB_SELLER_BATCH_CSV_NO,
     CB_SELLER_BATCH_CSV_YES,
     CB_SELLER_BATCH_REJECT,
     CB_SELLER_BATCH_SEND,
+    CB_SELLER_CANCEL_FSM,
+    CB_SELLER_FAQ_OPEN,
     CB_SELLER_FINISH_BATCH,
     CB_SELLER_FSM_CAT,
     CB_SELLER_INFO_FAQ,
     CB_SELLER_INFO_MANUALS,
     CB_SELLER_INFO_ROOT,
+    CB_SELLER_MANUAL_LEVEL,
     CB_SELLER_MANUAL_OPEN,
     CB_SELLER_MAT_BACK,
     CB_SELLER_MAT_CAT,
@@ -62,6 +64,7 @@ from src.keyboards.callbacks import (
     CB_SELLER_PAYHIST_PAGE,
     CB_SELLER_STATS_VIEW,
 )
+from src.manuals import MANUAL_LEVELS, get_manual_by_id, get_manuals_by_level
 from src.services import (
     AdminService,
     BillingService,
@@ -80,7 +83,6 @@ from src.utils.submission_media import (
     bot_send_submission,
     is_allowed_archive_document,
 )
-from src.manuals import MANUALS, get_manual_by_id
 from src.utils.text_format import edit_message_text_safe
 from src.utils.ui_builder import GDPXRenderer
 
@@ -100,27 +102,67 @@ MATERIAL_FILTER_ORDER = (
 _renderer = GDPXRenderer()
 _batch_idle_tasks: dict[int, asyncio.Task] = {}
 
+DIVIDER = "━━━━━━━━━━━━━━━━━━━━"
+
 # ---------- Мануалы ----------
 
 
-def _manuals_list_keyboard() -> InlineKeyboardMarkup:
-    """Клавиатура со списком всех мануалов."""
+def _manuals_levels_keyboard() -> InlineKeyboardMarkup:
+    """Клавиатура с уровнями мануалов."""
     rows: list[list[InlineKeyboardButton]] = []
-    for m in MANUALS:
+    for lvl in MANUAL_LEVELS:
         rows.append([
             InlineKeyboardButton(
-                text=f"{m.emoji} {m.title}",
-                callback_data=f"{CB_SELLER_MANUAL_OPEN}:{m.id}",
+                text=f"{lvl.emoji} {lvl.title}",
+                callback_data=f"{CB_SELLER_MANUAL_LEVEL}:{lvl.id}",
             )
         ])
     rows.append([InlineKeyboardButton(text="⬅️ В INFO", callback_data=CB_SELLER_INFO_ROOT)])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
-def _manual_detail_keyboard() -> InlineKeyboardMarkup:
-    """Кнопка назад к списку мануалов."""
+def _manuals_level_keyboard(level_id: str) -> InlineKeyboardMarkup:
+    """Клавиатура со списком мануалов внутри уровня."""
+    rows: list[list[InlineKeyboardButton]] = []
+    for m in get_manuals_by_level(level_id):
+        rows.append([
+            InlineKeyboardButton(
+                text=f"{m.emoji} {m.title}",
+                callback_data=f"{CB_SELLER_MANUAL_OPEN}:{m.id}",
+            )
+        ])
+    rows.append([InlineKeyboardButton(text="⬅️ К уровням", callback_data=CB_SELLER_INFO_MANUALS)])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def _manual_detail_keyboard(level_id: str) -> InlineKeyboardMarkup:
+    """Кнопка назад к списку мануалов уровня."""
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="⬅️ К мануалам", callback_data=CB_SELLER_INFO_MANUALS)],
+        [InlineKeyboardButton(text="⬅️ Назад", callback_data=f"{CB_SELLER_MANUAL_LEVEL}:{level_id}")],
+    ])
+
+
+# ---------- FAQ ----------
+
+
+def _faq_list_keyboard() -> InlineKeyboardMarkup:
+    """Клавиатура со списком всех FAQ-карточек."""
+    rows: list[list[InlineKeyboardButton]] = []
+    for f in FAQ_CARDS:
+        rows.append([
+            InlineKeyboardButton(
+                text=f"{f.emoji} {f.title}",
+                callback_data=f"{CB_SELLER_FAQ_OPEN}:{f.id}",
+            )
+        ])
+    rows.append([InlineKeyboardButton(text="⬅️ В INFO", callback_data=CB_SELLER_INFO_ROOT)])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def _faq_detail_keyboard() -> InlineKeyboardMarkup:
+    """Кнопка назад к списку FAQ."""
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="⬅️ К FAQ", callback_data=CB_SELLER_INFO_FAQ)],
     ])
 
 
@@ -186,9 +228,9 @@ def _info_root_keyboard(channel_url: str | None, chat_url: str | None) -> Inline
     rows: list[list[InlineKeyboardButton]] = []
     links_row: list[InlineKeyboardButton] = []
     if channel_url:
-        links_row.append(InlineKeyboardButton(text="GDPX // ACADEMIC", url=channel_url))
+        links_row.append(InlineKeyboardButton(text="GDPX // ACADEMY", url=channel_url))
     if chat_url:
-        links_row.append(InlineKeyboardButton(text="GDPX Academic | Чат", url=chat_url))
+        links_row.append(InlineKeyboardButton(text="GDPX Academy | Чат", url=chat_url))
     if links_row:
         rows.append(links_row)
     rows.append(
@@ -197,19 +239,24 @@ def _info_root_keyboard(channel_url: str | None, chat_url: str | None) -> Inline
             InlineKeyboardButton(text="🧭 Мануалы", callback_data=CB_SELLER_INFO_MANUALS),
         ]
     )
-    rows.append([InlineKeyboardButton(text="🔄 Обновить", callback_data=CB_SELLER_INFO_ROOT)])
+    rows.append([InlineKeyboardButton(text="⬅️ Назад", callback_data=CB_SELLER_MENU_PROFILE)])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 def _info_root_text() -> str:
     return (
-        "Справка · Центр помощи\n\n"
-        "Что внутри:\n"
-        "• Канал с обновлениями\n"
-        "• Чат сообщества\n"
-        "• FAQ по частым вопросам\n"
-        "• Мануалы по шагам\n\n"
-        "Выбери нужный раздел кнопками ниже."
+        "<b>❖ GDPX // INFO CENTER</b>\n\n"
+        "Доступ к методологии GDPX ACADEMY открыт. Вы вошли в закрытый лекторий.\n"
+        "Здесь знания конвертируются в капитал по высшим стандартам качества.»\n\n"
+        "<b>АРХИТЕКТУРА РАЗДЕЛА:</b>\n"
+        "❂ <b>КОМЬЮИНИТИ //</b>\n"
+        "└ Прямой доступ к штабу сообщества.\n\n"
+        "❂ <b>F.A.Q. //</b>\n"
+        "└ Свод протоколов по финансовым и техническим вопросам.\n\n"
+        "❂ <b>МАНУАЛЫ //</b>\n"
+        "└ Пошаговые алгоритмы действий для полевых агентов (селлеров).\n\n"
+        "━━━━━━━━━━━━━━━━━━━━\n"
+        "<i>Выберите целевой сектор управления кнопками ниже.</i>"
     )
 
 
@@ -1536,7 +1583,6 @@ async def on_seller_finish_batch(callback: CallbackQuery, state: FSMContext, ses
     accepted = int(data.get("batch_accepted", 0))
     rejected = int(data.get("batch_rejected", 0))
     reasons = dict(data.get("batch_reject_reasons", {}))
-    rows = list(data.get("batch_rows", []))
 
     await state.update_data(batch_final_accepted=accepted, batch_final_rejected=rejected, batch_final_reasons=reasons)
     await state.set_state(SubmissionState.waiting_for_batch_csv_choice)
@@ -1783,7 +1829,7 @@ async def _finalize_submission_after_upload(
             )
             return False
 
-    submission = await SubmissionService(session=session).create_submission(
+    await SubmissionService(session=session).create_submission(
         user_id=user.id,
         category_id=selected_category.id,
         telegram_file_id=str(telegram_file_id),
@@ -2103,35 +2149,6 @@ async def on_description_expected(message: Message) -> None:
     )
 
 
-@router.message(F.text == "Поддержка")
-async def on_support(message: Message, session: AsyncSession) -> None:
-    if message.from_user is None:
-        return
-    user = await UserService(session=session).get_by_telegram_id(message.from_user.id)
-    if user is None:
-        await message.answer("Сначала пройди регистрацию через /start.")
-        return
-    support_link = "@GDPX1"
-
-    text = (
-        f"❖ <b>GDPX // Academy</b> ─ Поддержка\n"
-        f"{DIVIDER}\n"
-        "ПРОТОКОЛЫ ИСПРАВЛЕНИЯ ОШИБОК\n\n"
-        "FAQ:\n"
-        "• Если дубликат/таймаут: проверь, что симка не отправлялась ранее.\n"
-        "• Если не зачёт: смотри статус в разделе «Материал».\n"
-        "• Выплаты: история и суммы в разделе «История выплат».\n"
-        "• Проблема с загрузкой: отправляй архив как файл.\n\n"
-        f"Написать: {support_link}"
-    )
-    await send_clean_text_screen(
-        trigger_message=message,
-        text=text,
-        key="seller:support",
-        reply_markup=seller_main_inline_keyboard(),
-    )
-
-
 @router.callback_query(F.data == CB_SELLER_MENU_SUPPORT)
 async def on_seller_menu_support(callback: CallbackQuery, session: AsyncSession) -> None:
     if callback.from_user is None:
@@ -2141,19 +2158,25 @@ async def on_seller_menu_support(callback: CallbackQuery, session: AsyncSession)
         await callback.answer("Сначала /start", show_alert=True)
         return
     support_link = "@GDPX1"
+    support_link2 = "@brug0S"
+    helper_1 = "@oduvan_kenoby"  # Первый помощник
+    helper_2 = "@hdksiwns"
     text = (
-        "Support / Помощь\n\n"
-        "FAQ:\n"
-        "• Если дубликат/таймаут: проверь, что симка не отправлялась ранее.\n"
-        "• Если не зачёт: смотри статус в разделе «Материал».\n"
-        "• Выплаты: история и суммы в разделе «История выплат».\n"
-        "• Проблема с загрузкой: отправляй архив как файл.\n\n"
-        f"Написать: {support_link}"
+        f"❖ <b>GDPX // SUPPORT CENTER</b>\n"
+        f"{DIVIDER}\n"
+        f"🌑 <b>ОСНОВАТЕЛЬ</b> ── {support_link}\n"
+        f"  └─<i>Ресурсная база / Глобальный выкуп</i>\n\n"
+        f"🛡 <b>САППОРТЫ</b> ── {helper_1} | {helper_2}\n"
+        f"  └─<i>Наставление / Прием материала</i>\n\n"
+        f"⚙️ <b>АРХИТЕКТОР</b> ── {support_link2}\n"
+        f"  └─<i>Технические вопросы / Бот </i>\n"
+        f"{DIVIDER}\n"
+        f"[🟢 <b>ONLINE</b>] ── <i>Отклик: 15 MIN.</i>\n"
     )
     await callback.answer()
     if callback.message is not None:
-        await edit_message_text_safe(callback.message, text, reply_markup=seller_main_inline_keyboard())
-
+        await edit_message_text_safe(callback.message, text, reply_markup=seller_main_inline_keyboard(),
+        parse_mode="HTML")
 
 @router.message(F.text.in_({"INFO", "Справка"}))
 async def on_info_root(message: Message, session: AsyncSession) -> None:
@@ -2171,6 +2194,7 @@ async def on_info_root(message: Message, session: AsyncSession) -> None:
         text=_info_root_text(),
         key="seller:info",
         reply_markup=_info_root_keyboard(channel_url, chat_url),
+        parse_mode="HTML",
     )
 
 
@@ -2186,6 +2210,7 @@ async def on_seller_menu_info(callback: CallbackQuery) -> None:
         callback.message,
         _info_root_text(),
         reply_markup=_info_root_keyboard(channel_url, chat_url),
+        parse_mode="HTML",
     )
 
 
@@ -2201,6 +2226,7 @@ async def on_info_root_refresh(callback: CallbackQuery) -> None:
         callback.message,
         _info_root_text(),
         reply_markup=_info_root_keyboard(channel_url, chat_url),
+        parse_mode="HTML",
     )
 
 
@@ -2208,20 +2234,28 @@ async def on_info_root_refresh(callback: CallbackQuery) -> None:
 async def on_info_faq(callback: CallbackQuery) -> None:
     if callback.message is None:
         return
+    
     await callback.answer()
-    await edit_message_text_safe(
-        callback.message,
-        "FAQ · Быстрые ответы\n\n"
-        "1) Как загрузить симку?\n"
-        "Отправь фото или архив файлом.\n\n"
-        "2) Какой формат номера?\n"
-        "+79999999999\n\n"
-        "3) Где смотреть итог?\n"
-        "В разделе «Материал» и «История выплат».",
-        reply_markup=InlineKeyboardMarkup(
-            inline_keyboard=[[InlineKeyboardButton(text="⬅️ В INFO", callback_data=CB_SELLER_INFO_ROOT)]]
-        ),
+
+    # Формируем текст в стиле закрытого терминала
+    text = (
+        f"❖ <b>GDPX ACADEMY // БАЗА ЗНАНИЙ</b>\n"
+        f"{DIVIDER}\n"
+        f"Доступ к архивным протоколам разрешен.\n"
+        f"Выберите директорию для изучения:\n\n"
+        f"📡 <b>STATUS:</b> <code>UNDER ARCHITECT OVERWATCH</code>\n"
+        f" ╰ <i>Архитектор мовиниторит фрод-алгоритм 24/7.</i>"
+        f"{DIVIDER}"
     )
+
+    # Выполняем обновление сообщения
+    await edit_message_text_safe(
+        message=callback.message,
+        text=text,
+        reply_markup=_faq_list_keyboard(),
+        parse_mode="HTML",
+    )
+
 
 
 @router.callback_query(F.data == CB_SELLER_INFO_MANUALS)
@@ -2229,10 +2263,57 @@ async def on_info_manuals(callback: CallbackQuery) -> None:
     if callback.message is None:
         return
     await callback.answer()
+    text = (
+        f"❖ <b>GDPX ACADEMY // МАНУАЛЫ</b>\n"
+        f"{DIVIDER}\n"
+        f"Доступные уровни подготовки:\n\n"
+        f"📡 <b>STATUS:</b> <code>READY</code>"
+    )
     await edit_message_text_safe(
         callback.message,
-        "<b>🧭 Мануалы</b>\n\nВыбери раздел:",
-        reply_markup=_manuals_list_keyboard(),
+        text,
+        reply_markup=_manuals_levels_keyboard(),
+        parse_mode="HTML",
+    )
+
+
+@router.callback_query(F.data.startswith(f"{CB_SELLER_FAQ_OPEN}:"))
+async def on_faq_open(callback: CallbackQuery) -> None:
+    if callback.message is None or callback.data is None:
+        return
+    faq_id = callback.data.split(":")[3]
+    card = get_faq_by_id(faq_id)
+    if card is None:
+        await callback.answer("FAQ не найден", show_alert=True)
+        return
+    await callback.answer()
+    await edit_message_text_safe(
+        callback.message,
+        card.text,
+        reply_markup=_faq_detail_keyboard(),
+        parse_mode="HTML",
+    )
+
+
+@router.callback_query(F.data.startswith(f"{CB_SELLER_MANUAL_LEVEL}:"))
+async def on_manual_level(callback: CallbackQuery) -> None:
+    if callback.message is None or callback.data is None:
+        return
+    level_id = callback.data.split(":")[3]
+    level = next((lvl for lvl in MANUAL_LEVELS if lvl.id == level_id), None)
+    if level is None:
+        await callback.answer("Уровень не найден", show_alert=True)
+        return
+    await callback.answer()
+    text = (
+        f"❖ <b>{level.emoji} {level.title}</b>\n"
+        f"{DIVIDER}\n"
+        f"<i>Выберите мануал:</i>"
+    )
+    await edit_message_text_safe(
+        callback.message,
+        text,
+        reply_markup=_manuals_level_keyboard(level_id),
         parse_mode="HTML",
     )
 
@@ -2250,7 +2331,7 @@ async def on_manual_open(callback: CallbackQuery) -> None:
     await edit_message_text_safe(
         callback.message,
         card.text,
-        reply_markup=_manual_detail_keyboard(),
+        reply_markup=_manual_detail_keyboard(card.level),
         parse_mode="HTML",
     )
 

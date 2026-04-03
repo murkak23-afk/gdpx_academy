@@ -764,7 +764,6 @@ async def _forward_for_category(
         for s in successfully_sent:
             s.hold_assigned = hold_to_assign
             session.add(s)
-        await session.commit()
 
     marked = await SubmissionService(session=session).mark_submissions_in_review(
         submissions=successfully_sent,
@@ -844,6 +843,7 @@ async def cb_group_forward(callback: CallbackQuery, session: AsyncSession, bot: 
 
 
 import asyncio
+
 
 @router.callback_query(F.data.startswith(f"{_CB_QTY_INPUT}:"), F.message.chat.type.in_(_GROUP_TYPES))
 async def cb_queue_qty_input(callback: CallbackQuery, session: AsyncSession, bot: Bot) -> None:
@@ -980,47 +980,49 @@ async def on_queue_qty_input_message(message: Message, session: AsyncSession, bo
             if admin_user is None:
                 return
 
-        changed = await SubmissionService(session=session).final_reject_in_review_by_phone(
-            phone=phone_norm,
-            admin_id=admin_user.id,
-            to_status=to_status,
-            reason=reason,
-            comment=comment,
-        )
+            changed = await SubmissionService(session=session).final_reject_in_review_by_phone(
+                phone=phone_norm,
+                admin_id=admin_user.id,
+                to_status=to_status,
+                reason=reason,
+                comment=comment,
+            )
 
-        await AdminAuditService(session=session).log(
-            admin_id=admin_user.id,
-            action="group_status_by_phone",
-            target_type="phone",
-            details=(
-                f"chat_id={message.chat.id}, thread_id={message.message_thread_id}, "
-                f"phone={phone_norm}, to_status={to_status.value}, count={len(changed)}, "
-                f"ids={[item.id for item in changed][:20]}"
-            ),
-        )
+            await AdminAuditService(session=session).log(
+                admin_id=admin_user.id,
+                action="group_status_by_phone",
+                target_type="phone",
+                details=(
+                    f"chat_id={message.chat.id}, thread_id={message.message_thread_id}, "
+                    f"phone={phone_norm}, to_status={to_status.value}, count={len(changed)}, "
+                    f"ids={[item.id for item in changed][:20]}"
+                ),
+            )
 
-        if not changed:
+            if not changed:
+                await _send_to_thread(
+                    source_message=message,
+                    text=(
+                        f"По номеру +{phone_norm} нет карточек со статусом IN_REVIEW. "
+                        "Ничего не изменено."
+                    ),
+                    thread_id=message.message_thread_id,
+                )
+                return
+
             await _send_to_thread(
                 source_message=message,
                 text=(
-                    f"По номеру +{phone_norm} нет карточек со статусом IN_REVIEW. "
-                    "Ничего не изменено."
+                    f"Обновлено: {len(changed)} шт.\n"
+                    f"Номер: +{phone_norm}\n"
+                    f"Новый статус: {_STATUS_LABELS.get(to_status, to_status.value)}"
                 ),
                 thread_id=message.message_thread_id,
             )
             return
 
-        await _send_to_thread(
-            source_message=message,
-            text=(
-                f"Обновлено: {len(changed)} шт.\n"
-                f"Номер: +{phone_norm}\n"
-                f"Новый статус: {_STATUS_LABELS.get(to_status, to_status.value)}"
-            ),
-            thread_id=message.message_thread_id,
-        )
+    if not message.text:
         return
-
     text = message.text.strip()
     if category_id is not None:
         if not text.isdigit():

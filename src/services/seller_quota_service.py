@@ -6,7 +6,6 @@ from decimal import Decimal
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.database.models.category import Category
 from src.database.models.seller_daily_quota import SellerDailyQuota
 
 
@@ -29,13 +28,6 @@ class SellerQuotaService:
         - иначе берём лимит из `categories.total_upload_limit`, который админ задаёт через `/adm_oper`.
         """
 
-        today = self.today_utc()
-        stmt = select(SellerDailyQuota.max_uploads).where(
-            SellerDailyQuota.user_id == user_id,
-            SellerDailyQuota.category_id == category_id,
-            SellerDailyQuota.quota_date == today,
-        )
-        row = (await self._session.execute(stmt)).scalar_one_or_none()
         # Лимит по количеству загрузок отключён по требованию
         return 10**9
 
@@ -68,7 +60,6 @@ class SellerQuotaService:
             existing.max_uploads = max_uploads
             existing.unit_price = unit_price
             row = existing
-        await self._session.commit()
         await self._session.refresh(row)
         return row
 
@@ -98,7 +89,6 @@ class SellerQuotaService:
         if row is None:
             return False
         await self._session.delete(row)
-        await self._session.commit()
         return True
 
     async def clear_quotas_for_date(self, quota_date: date) -> int:
@@ -107,7 +97,6 @@ class SellerQuotaService:
             return 0
         for row in rows:
             await self._session.delete(row)
-        await self._session.commit()
         return len(rows)
 
     async def clear_quotas_for_category_on_date(self, category_id: int, quota_date: date) -> int:
@@ -120,7 +109,6 @@ class SellerQuotaService:
             return 0
         for row in rows:
             await self._session.delete(row)
-        await self._session.commit()
         return len(rows)
 
     async def clear_all_quotas(self) -> int:
@@ -130,5 +118,4 @@ class SellerQuotaService:
             return 0
         for row in rows:
             await self._session.delete(row)
-        await self._session.commit()
         return len(rows)

@@ -68,7 +68,6 @@ class UserService:
             existing.language = language
             if existing.role is None:
                 existing.role = UserRole.SELLER
-            await self._session.commit()
             await self._session.refresh(existing)
             return existing
 
@@ -81,7 +80,6 @@ class UserService:
             is_active=True,
         )
         self._session.add(user)
-        await self._session.commit()
         await self._session.refresh(user)
         return user
 
@@ -95,7 +93,6 @@ class UserService:
         if not value:
             user.captcha_answer = None
             user.captcha_attempts = 0
-        await self._session.commit()
         await self._session.refresh(user)
         return user
 
@@ -108,7 +105,6 @@ class UserService:
         answer = str(random.randint(1000, 9999))
         user.captcha_answer = answer
         user.captcha_attempts = 0
-        await self._session.commit()
         return answer
 
     async def verify_captcha(self, user_id: int, answer: str) -> bool:
@@ -123,10 +119,8 @@ class UserService:
             user.is_restricted = False
             user.captcha_answer = None
             user.captcha_attempts = 0
-            await self._session.commit()
             return True
         user.captcha_attempts += 1
-        await self._session.commit()
         return False
 
     async def set_duplicate_timeout(self, user_id: int, minutes: int = 60) -> User | None:
@@ -137,6 +131,5 @@ class UserService:
             return None
         user.duplicate_timeout_until = datetime.now(timezone.utc) + timedelta(minutes=minutes)
         user.is_restricted = True
-        await self._session.commit()
         await self._session.refresh(user)
         return user

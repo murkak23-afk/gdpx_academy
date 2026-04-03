@@ -34,10 +34,9 @@ async def setup_bot_commands(bot: Bot) -> None:
     """Устанавливает красивое меню команд в Telegram (/start, /profile, /sell, etc)."""
 
     commands = [
-        BotCommand(command="start", description="🚀 Начать работу"),
-        BotCommand(command="profile", description="👤 Мой профиль"),
-        BotCommand(command="sell", description="📤 Сдать eSIM"),
-        BotCommand(command="stats", description="📊 Статистика продаж"),
-        BotCommand(command="help", description="❓ Справка"),
+        BotCommand(command="start", description="🚪 Открыть дверь в GDPX // ACADEMY"),
+        BotCommand(command="profile", description="🀄️ ПРОФИЛЬ"),
+        BotCommand(command="sell", description="❖ Залить eSIM"),
+        BotCommand(command="help", description="🛡 SUPPORT CENTER"),
     ]
     await bot.set_my_commands(commands, scope=BotCommandScopeDefault())

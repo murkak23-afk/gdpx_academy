@@ -21,4 +21,9 @@ class DbSessionMiddleware(BaseMiddleware):
     ) -> Any:
         async with self._session_factory() as session:
             data["session"] = session
-            return await handler(event, data)
+            try:
+                result = await handler(event, data)
+                return result
+            except Exception:
+                await session.rollback()
+                raise

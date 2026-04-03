@@ -35,7 +35,6 @@ class AdminChatForwardStatsService:
             )
         else:
             row.forward_count += delta
-        await self._session.commit()
 
     async def get_counts_last_7_days(self, telegram_chat_id: int) -> dict[date, int]:
         """Счётчики по дням за последние 7 календарных дней (UTC), включая сегодня."""

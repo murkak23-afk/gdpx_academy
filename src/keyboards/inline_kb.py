@@ -13,14 +13,8 @@ from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from src.keyboards.callbacks import (
     CB_SELLER_FSM_CAT,
     CB_SELLER_MAT_PAGE,
-    CB_SELLER_MENU_INFO,
-    CB_SELLER_MENU_MATERIAL,
-    CB_SELLER_MENU_PAYHIST,
-    CB_SELLER_MENU_PROFILE,
-    CB_SELLER_MENU_QUICK_ADD,
-    CB_SELLER_MENU_SELL,
-    CB_SELLER_MENU_SUPPORT,
 )
+from src.keyboards.constants import CALLBACK_INLINE_BACK, REPLY_BTN_BACK
 
 # Реэкспорт из основного модуля — используй эти имена напрямую из inline_kb
 from src.keyboards.inline import (
@@ -31,7 +25,6 @@ from src.keyboards.inline import (
     payout_mark_paid_keyboard,
     seller_main_inline_keyboard,
 )
-from src.keyboards.constants import REPLY_BTN_BACK, CALLBACK_INLINE_BACK
 
 __all__ = [
     # реэкспорт

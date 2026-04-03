@@ -23,9 +23,9 @@ from src.keyboards.callbacks import (
     CB_CATCON_CONFIRM,
     CB_CATCON_DELETE,
     CB_CATCON_DELETE_YES,
-    CB_CATCON_FORCE_DELETE_YES,
     CB_CATCON_DETAIL,
     CB_CATCON_EDIT,
+    CB_CATCON_FORCE_DELETE_YES,
     CB_CATCON_HOLD,
     CB_CATCON_LIST,
     CB_CATCON_OPERATOR,
@@ -415,7 +415,6 @@ async def on_cat_edit(callback: CallbackQuery, state: FSMContext, session: Async
         elif field == "hold":
             cat.hold_condition = preset_val
         cat.title = _recompose_title(cat)
-        await session.commit()
         await callback.answer("✅ Сохранено")
 
         await session.refresh(cat)
@@ -508,7 +507,6 @@ async def on_edit_text_input(message: Message, state: FSMContext, session: Async
             return
         cat.operator = val
         cat.title = _recompose_title(cat)
-        await session.commit()
     elif field == "type":
         val = raw[:60]
         if len(val) < 2:
@@ -516,7 +514,6 @@ async def on_edit_text_input(message: Message, state: FSMContext, session: Async
             return
         cat.sim_type = val
         cat.title = _recompose_title(cat)
-        await session.commit()
     elif field == "hold":
         val = raw[:60]
         if len(val) < 2:
@@ -524,7 +521,6 @@ async def on_edit_text_input(message: Message, state: FSMContext, session: Async
             return
         cat.hold_condition = val
         cat.title = _recompose_title(cat)
-        await session.commit()
 
     await state.clear()
     cat = await cat_svc.get_by_id(cat_id)
@@ -723,7 +719,6 @@ async def on_confirm(callback: CallbackQuery, state: FSMContext, session: AsyncS
         cat_obj.operator = operator
         cat_obj.sim_type = sim_type
         cat_obj.hold_condition = None
-        await session.commit()
 
     await callback.answer("✅ Категория создана!")
 

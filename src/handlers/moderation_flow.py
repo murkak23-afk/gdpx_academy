@@ -1,16 +1,14 @@
 from __future__ import annotations
 
-import csv
 import logging
 import re
 from datetime import datetime, timezone
 from html import escape
-from io import StringIO
 
 from aiogram import Bot, F, Router
 from aiogram.enums import ContentType
 from aiogram.exceptions import TelegramAPIError
-from aiogram.filters import Command, StateFilter, or_f
+from aiogram.filters import Command, or_f
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 from sqlalchemy import func, select
@@ -27,29 +25,24 @@ from src.keyboards import (
     match_admin_menu_canonical,
     moderation_item_keyboard,
     moderation_reject_template_keyboard,
-    moderation_review_keyboard,
-    moderation_seller_group_keyboard,
-    pagination_keyboard,
 )
-from src.keyboards.admin_hints import HINT_IN_REVIEW, HINT_QUEUE
 from src.keyboards.callbacks import (
     CB_MOD_ACCEPT,
+    CB_MOD_BATCH_ACTION,
+    CB_MOD_BATCH_CANCEL,
+    CB_MOD_BATCH_CONFIRM,
     CB_MOD_BUFFER_ACT,
     CB_MOD_BUFFER_CARD_PAGE,
-    CB_MOD_BUFFER_CFG_BACK,
     CB_MOD_BUFFER_CFG_CAT,
     CB_MOD_BUFFER_CFG_CAT_PAGE,
     CB_MOD_BUFFER_CFG_CAT_PICK,
+    CB_MOD_BUFFER_PAGE,
     CB_MOD_BUFFER_PICK_N,
     CB_MOD_BUFFER_PICK_QTY,
-    CB_MOD_BUFFER_PAGE,
     CB_MOD_BUFFER_SEARCH,
     CB_MOD_BUFFER_SEL_ALL,
     CB_MOD_BUFFER_SELLER,
     CB_MOD_BUFFER_TOGGLE,
-    CB_MOD_BATCH_ACTION,
-    CB_MOD_BATCH_CANCEL,
-    CB_MOD_BATCH_CONFIRM,
     CB_MOD_DEBIT,
     CB_MOD_FORWARD_CANCEL,
     CB_MOD_FORWARD_CONFIRM,
@@ -76,13 +69,9 @@ from src.services import (
 )
 from src.states.moderation_state import AdminBatchPickState, AdminCardFilterState, AdminModerationForwardState
 from src.utils.admin_keyboard import send_admin_dashboard
-from src.utils.clean_screen import send_clean_text_screen
 from src.utils.forward_target import target_chat_id_from_forward_pick
 from src.utils.submission_format import (
-    duplicate_warning_html,
-    format_phone_category_html,
     format_submission_chat_forward_title,
-    submission_status_emoji_line,
 )
 from src.utils.submission_media import bot_send_submission, message_answer_submission
 from src.utils.text_format import edit_message_text_or_caption_safe, edit_message_text_safe
@@ -932,7 +921,7 @@ async def on_buffer_action_execute(
                     )
                 ],
                 [InlineKeyboardButton(text="← Назад к действиям", callback_data=f"{CB_MOD_BUFFER_ACT}:{seller_id}:{page}")],
-                [InlineKeyboardButton(text=f"↩ К SIM", callback_data=f"{CB_MOD_BUFFER_CARD_PAGE}:{seller_id}:{page}")],
+                [InlineKeyboardButton(text="↩ К SIM", callback_data=f"{CB_MOD_BUFFER_CARD_PAGE}:{seller_id}:{page}")],
             ]
         )
         await callback.answer()
@@ -960,7 +949,6 @@ async def on_buffer_action_execute(
         for s in submissions:
             await session.delete(s)
             done += 1
-        await session.commit()
         await AdminAuditService(session=session).log(
             admin_id=admin_user.id,
             action="buffer_delete_batch",
@@ -1181,7 +1169,6 @@ async def on_buffer_setup_category_apply(callback: CallbackQuery, session: Async
         if s.id in selected:
             s.category_id = category_id
             updated += 1
-    await session.commit()
 
     await callback.answer(f"✅ Обновлено: {updated}", show_alert=True)
     if callback.message is not None:
@@ -1396,7 +1383,6 @@ async def on_batch_action_confirm(
             if sub:
                 await session.delete(sub)
                 deleted += 1
-        await session.commit()
         await state.clear()
         await callback.answer()
         if callback.message is not None:
