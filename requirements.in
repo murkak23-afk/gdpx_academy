@@ -1,0 +1,43 @@
+# requirements.in — direct (top-level) dependencies only.
+# Generate the pinned requirements.txt with:
+#   pip install pip-tools
+#   pip-compile requirements.in -o requirements.txt --strip-extras
+#
+# To upgrade all pins:
+#   pip-compile --upgrade requirements.in -o requirements.txt --strip-extras
+
+# ── Telegram bot framework ────────────────────────────────────────────────
+aiogram>=3.22,<4
+
+# ── Async HTTP (used by aiogram internally) ───────────────────────────────
+aiohttp>=3.12
+
+# ── Database ──────────────────────────────────────────────────────────────
+sqlalchemy[asyncio]>=2.0
+asyncpg>=0.30          # async driver (runtime)
+psycopg[binary]>=3.2   # sync driver (Alembic migrations only)
+alembic>=1.16
+
+# ── Settings & validation ─────────────────────────────────────────────────
+pydantic>=2.11
+pydantic-settings>=2.11
+
+# ── Redis (FSM storage) ───────────────────────────────────────────────────
+redis>=5.2
+
+# ── HTTP API (health + webhook endpoint) ─────────────────────────────────
+fastapi>=0.118
+uvicorn>=0.37
+
+# ── Crypto Pay integration ────────────────────────────────────────────────
+aiosend>=3.0
+
+# ── Spreadsheet export (CSV / XLSX) ──────────────────────────────────────
+openpyxl>=3.1
+
+# ── Caching ───────────────────────────────────────────────────────────────
+cachetools>=5.5
+
+# ── Dev / test (not needed in production image) ───────────────────────────
+pytest>=8.4
+ruff>=0.13
