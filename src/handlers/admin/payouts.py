@@ -26,8 +26,8 @@ from src.database.models.submission import Submission
 from src.database.models.user import User
 from src.keyboards import REPLY_BTN_BACK, payout_confirm_keyboard, payout_final_confirm_keyboard
 from src.keyboards.admin_hints import HINT_PAYOUTS
+from src.keyboards.constants import CALLBACK_INLINE_BACK
 from src.keyboards.callbacks import (
-    CALLBACK_INLINE_BACK,
     CB_NOOP,
     CB_PAY_CANCEL,
     CB_PAY_CONFIRM,

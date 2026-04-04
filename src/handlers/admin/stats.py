@@ -20,8 +20,8 @@ from src.keyboards.callbacks import (
     CB_ADMIN_STATS_MONTH,
     CB_ADMIN_STATS_RESET,
     CB_ADMIN_STATS_RESET_CONFIRM,
-    CALLBACK_INLINE_BACK,
 )
+from src.keyboards.constants import CALLBACK_INLINE_BACK
 from src.keyboards import REPLY_BTN_BACK
 from src.services import (
     AdminAuditService,

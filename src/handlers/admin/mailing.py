@@ -21,8 +21,8 @@ from src.keyboards import REPLY_BTN_BACK
 from src.keyboards.admin_hints import HINT_BROADCAST
 from src.keyboards.callbacks import (
     CB_ADMIN_BROADCAST,
-    CALLBACK_INLINE_BACK,
 )
+from src.keyboards.constants import CALLBACK_INLINE_BACK
 from src.services import (
     AdminAuditService,
     AdminService,
