@@ -16,6 +16,39 @@ class CategoryService:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
 
+    async def create_category(
+        self,
+        title: str,
+        operator: str,
+        sim_type: str,
+        payout_rate: Decimal,
+        is_active: bool = True,
+    ) -> Category:
+        """Создает новую категорию (кластер) в БД из конструктора."""
+        import re
+        import uuid
+
+        # Генерируем безопасный уникальный slug
+        base_slug = re.sub(r"[^a-z0-9]+", "-", title.lower()).strip("-")
+        unique_slug = f"{base_slug}-{uuid.uuid4().hex[:6]}" if base_slug else uuid.uuid4().hex[:12]
+
+        category = Category(
+            title=title.strip(),
+            slug=unique_slug,
+            operator=operator.strip(),
+            sim_type=sim_type.strip(),
+            payout_rate=payout_rate,
+            is_active=is_active,
+        )
+
+        self._session.add(category)
+        # flush — чтобы получить id сразу, commit будет в хендлере
+        await self._session.add(category)
+        await self._session.flush()
+        await self._session.refresh(category)   # ←←← ЭТО КЛЮЧЕВАЯ СТРОКА
+        return category
+         
+
     async def get_active_categories(self) -> list[Category]:
         """Возвращает все активные категории."""
 

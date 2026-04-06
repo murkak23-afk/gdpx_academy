@@ -105,3 +105,21 @@ async def cancel_catcon(callback: CallbackQuery, state: FSMContext) -> None:
     await callback.message.delete()
     await callback.message.answer("❌ Конфигурация отменена.")
     await callback.answer()
+
+
+@router.callback_query(CatConCD.filter(F.action == "list"))
+async def catcon_list_categories(callback: CallbackQuery, session: AsyncSession) -> None:
+    """Список всех категорий (кластеров) для админа."""
+
+    categories = await CategoryService(session=session).get_all_categories()
+    if not categories:
+        await callback.answer("🔴 База кластеров пуста", show_alert=True)
+        return
+
+    text = "<b>Список всех кластеров сети:</b>\n\n"
+    for cat in categories:
+        status = "🟢 АКТИВЕН" if cat.is_active else "🔴 ОТКЛЮЧЕН"
+        text += f"{status}\n└ <b>ID:</b> <code>{cat.id}</code> | <b>{cat.title}</b> | {cat.payout_rate} USDT\n\n"
+
+    await callback.message.answer(text[:4000], parse_mode="HTML")
+    await callback.answer()

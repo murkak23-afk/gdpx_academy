@@ -49,6 +49,11 @@ class UserThrottlingMiddleware(BaseMiddleware):
         event: TelegramObject,
         data: Dict[str, Any],
     ) -> Any:
+        """Основной метод middleware с полной защитой от None-handler."""
+
+        if handler is None:
+            return None
+
         if not isinstance(event, Update):
             return await handler(event, data)
 
@@ -57,15 +62,13 @@ class UserThrottlingMiddleware(BaseMiddleware):
         if uid is None:
             return await handler(event, data)
 
+        # === BULK RATE LIMITING (max ~4 файла в секунду) ===
         if _is_bulk_upload_message(event):
-            # === BULK RATE LIMITING (max ~4 файла в секунду) ===
             now = time.monotonic()
-            # Получаем user_id безопасно
             uid = getattr(event.from_user, 'id', 0) if hasattr(event, 'from_user') else 0
             bulk_key = (uid, "bulk")
 
             async with self._lock:
-                # Инициализация при первом bulk-запросе от пользователя
                 if bulk_key not in self._last_ts:
                     self._last_ts[bulk_key] = now - 0.25
 
@@ -74,12 +77,12 @@ class UserThrottlingMiddleware(BaseMiddleware):
                 self._last_ts[bulk_key] = next_allowed
 
                 delay = next_allowed - now
-
                 if delay > 0:
-                    await asyncio.sleep(delay)   # сглаживаем нагрузку
+                    await asyncio.sleep(delay)
 
             return await handler(event, data)
 
+        # === ОБЫЧНЫЙ THROTTLING ===
         callback_key = self._callback_key(event)
         if callback_key is not None:
             key = (uid, f"cb:{callback_key}")
@@ -94,7 +97,7 @@ class UserThrottlingMiddleware(BaseMiddleware):
             if now - prev < interval:
                 logger.warning(
                     "throttle: пропуск update_id=%s user_id=%s (min interval %ss)",
-                    event.update_id,
+                    getattr(event, 'update_id', None),
                     uid,
                     interval,
                 )
