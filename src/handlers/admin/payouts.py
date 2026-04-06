@@ -327,6 +327,8 @@ async def on_export_report(message: Message, session: AsyncSession) -> None:
     if not await AdminService(session=session).is_admin(message.from_user.id):
         await message.answer("Недостаточно прав.")
         return
+    from src.utils.ux import send_typing_action
+    await send_typing_action(message)
     fmt = message.text.replace("/export_report", "", 1).strip().lower() or "csv"
     rows = await BillingService(session=session).get_daily_report_rows()
     if not rows:

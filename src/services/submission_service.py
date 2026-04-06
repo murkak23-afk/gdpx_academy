@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+import re
 from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import delete, func, or_, select
+from sqlalchemy import delete, func, or_, select, case
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
@@ -14,7 +15,7 @@ from src.database.models.publication import Payout, PublicationArchive
 from src.database.models.submission import ReviewAction, Submission
 from src.database.models.user import User
 from src.main_operators import MAIN_OPERATOR_GROUPS, category_title_to_main_group_label
-from src.utils.phone_norm import normalize_phone_key
+from src.utils.phone_norm import normalize_phone_key, normalize_phone_strict
 
 
 class SubmissionService:
@@ -75,9 +76,6 @@ class SubmissionService:
         """Создаёт новую карточку в статусе pending."""
 
         now = datetime.now(timezone.utc)
-        import re
-
-        from src.utils.phone_norm import normalize_phone_strict
         
         # 1. Просто ищем первую последовательность цифр (10-11 штук) в тексте
         # Это позволит писать "Билайн", "холд" и что угодно вокруг номера
@@ -85,7 +83,6 @@ class SubmissionService:
         
         if phone_match:
             # Если нашли, нормализуем (приводим к виду 79xxxxxxxxx)
-            from src.utils.phone_norm import normalize_phone_strict
             norm = normalize_phone_strict(phone_match.group())
         else:
             # Если в тексте вообще нет цифр, похожих на номер
@@ -105,68 +102,40 @@ class SubmissionService:
             last_status_change=now,
         )
         self._session.add(submission)
-        await self._session.refresh(submission)
+        # Flush to get the ID but don't commit here — let the handler/middleware decide
+        await self._session.flush()
         return submission
 
     async def get_user_dashboard_stats(self, user_id: int) -> dict[str, int | Decimal]:
-        """Возвращает агрегированную статистику для дашборда пользователя."""
+        """Возвращает агрегированную статистику для дашборда пользователя за один запрос."""
 
-        pending_stmt = select(func.count(Submission.id)).where(
-            Submission.user_id == user_id,
-            Submission.status.in_([SubmissionStatus.PENDING, SubmissionStatus.IN_REVIEW]),
-        )
-        accepted_stmt = select(func.count(Submission.id)).where(
-            Submission.user_id == user_id,
-            Submission.status == SubmissionStatus.ACCEPTED,
-        )
-        rejected_stmt = select(func.count(Submission.id)).where(
-            Submission.user_id == user_id,
-            or_(
-                Submission.status == SubmissionStatus.REJECTED,
-                Submission.status == SubmissionStatus.BLOCKED,
-                Submission.status == SubmissionStatus.NOT_A_SCAN,
-            ),
-        )
-        balance_stmt = select(func.coalesce(func.sum(Submission.accepted_amount), Decimal("0.00"))).where(
-            Submission.user_id == user_id,
-            Submission.status == SubmissionStatus.ACCEPTED,
-        )
+        stmt = select(
+            func.count(case((Submission.status.in_([SubmissionStatus.PENDING, SubmissionStatus.IN_REVIEW]), 1))),
+            func.count(case((Submission.status == SubmissionStatus.ACCEPTED, 1))),
+            func.count(case((Submission.status.in_([SubmissionStatus.REJECTED, SubmissionStatus.BLOCKED, SubmissionStatus.NOT_A_SCAN]), 1))),
+            func.coalesce(func.sum(case((Submission.status == SubmissionStatus.ACCEPTED, Submission.accepted_amount))), Decimal("0.00"))
+        ).where(Submission.user_id == user_id)
 
-        pending_count = int((await self._session.execute(pending_stmt)).scalar_one())
-        accepted_count = int((await self._session.execute(accepted_stmt)).scalar_one())
-        rejected_count = int((await self._session.execute(rejected_stmt)).scalar_one())
-        current_balance = Decimal((await self._session.execute(balance_stmt)).scalar_one())
+        result = await self._session.execute(stmt)
+        pending, accepted, rejected, balance = result.one()
 
         return {
-            "pending": pending_count,
-            "accepted": accepted_count,
-            "rejected": rejected_count,
-            "balance": current_balance,
+            "pending": int(pending or 0),
+            "accepted": int(accepted or 0),
+            "rejected": int(rejected or 0),
+            "balance": Decimal(balance or "0.00"),
         }
 
     async def get_user_esim_seller_stats(self, user_id: int) -> dict[str, int | Decimal | dict[str, int]]:
-        """Расширенная статистика продавца eSIM: операторы, блоки, не скан, заработок."""
+        """Расширенная статистика продавца eSIM за два запроса (агрегация + категории)."""
 
-        blocked_stmt = select(func.count(Submission.id)).where(
-            Submission.user_id == user_id,
-            Submission.status == SubmissionStatus.BLOCKED,
-        )
-        not_scan_stmt = select(func.count(Submission.id)).where(
-            Submission.user_id == user_id,
-            Submission.status == SubmissionStatus.NOT_A_SCAN,
-        )
-        rejected_only_stmt = select(func.count(Submission.id)).where(
-            Submission.user_id == user_id,
-            Submission.status == SubmissionStatus.REJECTED,
-        )
-        accepted_stmt = select(func.count(Submission.id)).where(
-            Submission.user_id == user_id,
-            Submission.status == SubmissionStatus.ACCEPTED,
-        )
-        balance_stmt = select(func.coalesce(func.sum(Submission.accepted_amount), Decimal("0.00"))).where(
-            Submission.user_id == user_id,
-            Submission.status == SubmissionStatus.ACCEPTED,
-        )
+        stmt = select(
+            func.count(case((Submission.status == SubmissionStatus.BLOCKED, 1))),
+            func.count(case((Submission.status == SubmissionStatus.NOT_A_SCAN, 1))),
+            func.count(case((Submission.status == SubmissionStatus.REJECTED, 1))),
+            func.count(case((Submission.status == SubmissionStatus.ACCEPTED, 1))),
+            func.coalesce(func.sum(case((Submission.status == SubmissionStatus.ACCEPTED, Submission.accepted_amount))), Decimal("0.00"))
+        ).where(Submission.user_id == user_id)
 
         by_cat_stmt = (
             select(Category.title, func.count(Submission.id))
@@ -179,11 +148,8 @@ class SubmissionService:
             .group_by(Category.id, Category.title)
         )
 
-        blocked = int((await self._session.execute(blocked_stmt)).scalar_one())
-        not_scan = int((await self._session.execute(not_scan_stmt)).scalar_one())
-        rejected_only = int((await self._session.execute(rejected_only_stmt)).scalar_one())
-        accepted_total = int((await self._session.execute(accepted_stmt)).scalar_one())
-        balance = Decimal((await self._session.execute(balance_stmt)).scalar_one())
+        main_result = await self._session.execute(stmt)
+        blocked, not_scan, rejected, accepted_total, balance = main_result.one()
 
         by_main: dict[str, int] = {label: 0 for label, _ in MAIN_OPERATOR_GROUPS}
         by_main["Другое"] = 0
@@ -196,11 +162,11 @@ class SubmissionService:
                 by_main["Другое"] += int(cnt)
 
         return {
-            "accepted_total": accepted_total,
-            "blocked": blocked,
-            "not_a_scan": not_scan,
-            "rejected_moderation": rejected_only,
-            "balance": balance,
+            "accepted_total": int(accepted_total or 0),
+            "blocked": int(blocked or 0),
+            "not_a_scan": int(not_scan or 0),
+            "rejected_moderation": int(rejected or 0),
+            "balance": Decimal(balance or "0.00"),
             "by_main_operator": by_main,
         }
 

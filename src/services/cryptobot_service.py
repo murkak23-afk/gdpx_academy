@@ -9,9 +9,13 @@ from aiosend.enums import Asset
 from aiosend.exceptions import CryptoPayError
 
 from src.core.config import get_settings
+from src.core.http_client import get_http_session
 from src.services.alert_service import alert_cryptobot_error
 
 logger = logging.getLogger(__name__)
+
+# Кеш клиентов CryptoPay (по токену), использующих общую HTTP-сессию.
+_client_cache: dict[str, CryptoPay] = {}
 
 
 @dataclass(frozen=True)
@@ -43,23 +47,25 @@ def _asset_from_settings(raw: str | None) -> Asset:
 
 class CryptoBotService:
     def __init__(self) -> None:
-        self._client: CryptoPay | None = None
+        pass
 
-    def _get_client(self) -> CryptoPay:
-        if self._client is None:
-            settings = get_settings()
+    async def _get_client(self) -> CryptoPay:
+        """Возвращает (или создаёт) клиент CryptoPay с использованием глобальной сессии."""
 
-            if not settings.crypto_pay_token:
-                raise RuntimeError("CRYPTO_PAY_TOKEN not set")
+        settings = get_settings()
+        token = settings.crypto_pay_token
+        if not token:
+            raise RuntimeError("CRYPTO_PAY_TOKEN not set")
 
-            logger.info("CryptoBot init (token prefix=%s)", settings.crypto_pay_token[:5])
+        if token not in _client_cache:
+            logger.info("CryptoBot init (token prefix=%s)", token[:5])
+            session = await get_http_session()
+            _client_cache[token] = CryptoPay(token, session=session)
 
-            self._client = CryptoPay(settings.crypto_pay_token)
-
-        return self._client
+        return _client_cache[token]
 
     async def get_balance(self):
-        client = self._get_client()
+        client = await self._get_client()
         return await client.get_balance()
 
     async def get_available_balance(self, *, asset_code: str = "USDT") -> Decimal:
@@ -88,7 +94,7 @@ class CryptoBotService:
         if amount <= 0:
             raise ValueError("Amount must be > 0")
 
-        client = self._get_client()
+        client = await self._get_client()
         settings = get_settings()
         asset = _asset_from_settings(settings.crypto_asset)
 
@@ -130,7 +136,7 @@ class CryptoBotService:
         if amount <= 0:
             raise ValueError("Amount must be > 0")
 
-        client = self._get_client()
+        client = await self._get_client()
         settings = get_settings()
         asset = _asset_from_settings(settings.crypto_asset)
 
@@ -160,7 +166,7 @@ class CryptoBotService:
         if invoice_id <= 0:
             raise ValueError("Invoice ID must be > 0")
 
-        client = self._get_client()
+        client = await self._get_client()
         try:
             invoice = await client.get_invoice(invoice=invoice_id)
         except CryptoPayError as exc:

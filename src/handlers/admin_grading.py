@@ -94,17 +94,14 @@ async def on_grade_take(
 
     await callback.answer("✅ Симка взята в работу")
 
+    from src.utils.text_format import edit_message_text_or_caption_safe
     if callback.message is not None:
         try:
-            if callback.message.caption is not None:
-                await callback.message.edit_caption(
-                    caption=callback.message.caption,
-                    reply_markup=grading_matrix_keyboard(submission_id),
-                )
-            else:
-                await callback.message.edit_reply_markup(
-                    reply_markup=grading_matrix_keyboard(submission_id),
-                )
+            await edit_message_text_or_caption_safe(
+                callback.message,
+                text=callback.message.caption,
+                reply_markup=grading_matrix_keyboard(submission_id),
+            )
         except TelegramAPIError:
             pass
 
@@ -190,14 +187,12 @@ async def on_grade_accept(
     await callback.answer("✅ Зачёт поставлен")
 
     if callback.message is not None:
+        from src.utils.text_format import edit_message_text_or_caption_safe
         sent_at = accepted.reviewed_at.strftime("%d.%m.%Y %H:%M") if accepted.reviewed_at else "—"
         current_caption = (callback.message.caption or callback.message.text or "").strip()
         updated = f"✅ ЗАЧЁТ · {sent_at}\n\n{current_caption}"
         try:
-            if callback.message.caption is not None:
-                await callback.message.edit_caption(caption=updated, reply_markup=None)
-            else:
-                await edit_message_text_safe(callback.message, updated, reply_markup=None)
+            await edit_message_text_or_caption_safe(callback.message, text=updated, reply_markup=None)
         except TelegramAPIError:
             await callback.message.edit_reply_markup(reply_markup=None)
 
@@ -484,11 +479,9 @@ async def _grade_reject(
 
         current_caption = (callback.message.caption or callback.message.text or "").strip()
         updated = f"{status_label} · {rejected_at}\n\n{current_caption}"
+        from src.utils.text_format import edit_message_text_or_caption_safe
         try:
-            if callback.message.caption is not None:
-                await callback.message.edit_caption(caption=updated, reply_markup=None)
-            else:
-                await edit_message_text_safe(callback.message, updated, reply_markup=None)
+            await edit_message_text_or_caption_safe(callback.message, text=updated, reply_markup=None)
         except TelegramAPIError:
             await callback.message.edit_reply_markup(reply_markup=None)
 

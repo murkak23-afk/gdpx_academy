@@ -18,9 +18,15 @@ def build_fsm_storage() -> BaseStorage:
 
     settings = get_settings()
     if settings.redis_url:
-        storage = RedisStorage.from_url(settings.redis_url)
-        logger.info("FSM: используется RedisStorage (REDIS_URL задан)")
+        storage = RedisStorage.from_url(
+            settings.redis_url,
+            state_ttl=3600,  # 1 час
+            data_ttl=3600
+        )
+        logger.info("FSM: используется RedisStorage (REDIS_URL задан, TTL 1 час)")
         return storage
 
     logger.warning("Используется MemoryStorage. Не для продакшена!")
     return MemoryStorage()
+
+

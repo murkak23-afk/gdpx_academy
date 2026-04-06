@@ -34,6 +34,12 @@ class Settings(BaseSettings):
     http_host: str = Field(default="0.0.0.0", alias="HTTP_HOST")
     http_port: int = Field(default=8000, alias="HTTP_PORT")
 
+    admin_telegram_ids: list[int] = Field(
+        default_factory=list,
+        alias="ADMIN_TELEGRAM_IDS",
+        description="Список ID администраторов (через запятую).",
+    )
+
     moderation_chat_id: int = Field(
         default=0,
         validation_alias=AliasChoices("MODERATION_CHAT_ID", "ARCHIVE_CHAT_ID"),
@@ -74,6 +80,24 @@ class Settings(BaseSettings):
         alias="BRAND_PAYMENTS_URL",
         description="Ссылка на выплаты (страница, бот, t.me — кнопка ВЫПЛАТЫ / PAYMENTS).",
     )
+
+    support_contact_founder: str | None = Field(default=None, alias="SUPPORT_CONTACT_FOUNDER")
+    support_contact_architect: str | None = Field(default=None, alias="SUPPORT_CONTACT_ARCHITECT")
+    support_contact_helper_1: str | None = Field(default=None, alias="SUPPORT_CONTACT_HELPER_1")
+    support_contact_helper_2: str | None = Field(default=None, alias="SUPPORT_CONTACT_HELPER_2")
+    chats: str | None = Field(default=None, alias="CHATS")
+
+    @field_validator("admin_telegram_ids", mode="before")
+    @classmethod
+    def _normalize_admin_ids(cls, value: object) -> list[int]:
+        if value is None or value == "":
+            return []
+        if isinstance(value, list):
+            return [int(v) for v in value if str(v).strip()]
+        if isinstance(value, str):
+            items = [s.strip() for s in value.split(",") if s.strip()]
+            return [int(i) for i in items]
+        return []
 
     @field_validator("redis_url", mode="before")
     @classmethod

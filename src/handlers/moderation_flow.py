@@ -2013,11 +2013,9 @@ async def on_reject_template(
         )
         current_caption = (callback.message.caption or callback.message.text or "").strip()
         updated_caption = f"❌ ОТКЛОНЕНО · {rejected_at}\n\n{current_caption}"
+        from src.utils.text_format import edit_message_text_or_caption_safe
         try:
-            if callback.message.caption is not None:
-                await callback.message.edit_caption(caption=updated_caption, reply_markup=None)
-            else:
-                await edit_message_text_safe(callback.message, updated_caption, reply_markup=None)
+            await edit_message_text_or_caption_safe(callback.message, text=updated_caption, reply_markup=None)
         except TelegramAPIError:
             await callback.message.edit_reply_markup(reply_markup=None)
         await _return_after_final_review(
@@ -2111,11 +2109,9 @@ async def on_accept(callback: CallbackQuery, session: AsyncSession, bot: Bot) ->
         sent_at = accepted.reviewed_at.strftime("%Y-%m-%d %H:%M:%S UTC") if accepted.reviewed_at else "—"
         current_caption = (callback.message.caption or callback.message.text or "").strip()
         updated_caption = f"✅ ОТПРАВЛЕНО В ЧАТ: {chat_label}\n🕒 Время отправки: {sent_at}\n\n{current_caption}"
+        from src.utils.text_format import edit_message_text_or_caption_safe
         try:
-            if callback.message.caption is not None:
-                await callback.message.edit_caption(caption=updated_caption, reply_markup=None)
-            else:
-                await edit_message_text_safe(callback.message, updated_caption, reply_markup=None)
+            await edit_message_text_or_caption_safe(callback.message, text=updated_caption, reply_markup=None)
         except TelegramAPIError:
             await callback.message.edit_reply_markup(reply_markup=None)
 
@@ -2257,11 +2253,9 @@ async def _handle_final_reject(
         )
         current_caption = (callback.message.caption or callback.message.text or "").strip()
         updated_caption = f"{header}\n🕒 Время отказа: {sent_at}\n\n{current_caption}"
+        from src.utils.text_format import edit_message_text_or_caption_safe
         try:
-            if callback.message.caption is not None:
-                await callback.message.edit_caption(caption=updated_caption, reply_markup=None)
-            else:
-                await edit_message_text_safe(callback.message, updated_caption, reply_markup=None)
+            await edit_message_text_or_caption_safe(callback.message, text=updated_caption, reply_markup=None)
         except TelegramAPIError:
             await callback.message.edit_reply_markup(reply_markup=None)
 

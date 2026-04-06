@@ -82,9 +82,9 @@ def submission_status_emoji_line(status: SubmissionStatus) -> str:
     """Короткая строка статуса с цветовым маркером."""
 
     if status == SubmissionStatus.PENDING:
-        return "⚪ Ожидание"
+        return "⏳ Ожидание"
     if status == SubmissionStatus.IN_REVIEW:
-        return "🟡 В работе"
+        return "🟠 В работе"
     if status == SubmissionStatus.ACCEPTED:
         return "🟢 Готово"
     return "🔴 Брак"

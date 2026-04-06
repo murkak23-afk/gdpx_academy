@@ -10,6 +10,7 @@ from html import escape
 import aiohttp
 
 from src.core.config import get_settings
+from src.core.http_client import get_http_session
 
 logger = logging.getLogger(__name__)
 
@@ -21,12 +22,12 @@ async def _send_telegram_html(chat_id: int, text: str) -> None:
     settings = get_settings()
     url = f"https://api.telegram.org/bot{settings.bot_token}/sendMessage"
     payload = {"chat_id": chat_id, "text": text, "parse_mode": "HTML"}
-    timeout = aiohttp.ClientTimeout(total=12)
-    async with aiohttp.ClientSession(timeout=timeout) as session:
-        async with session.post(url, json=payload) as resp:
-            if resp.status != 200:
-                body = await resp.text()
-                logger.warning("Alert send failed: HTTP %s %s", resp.status, body[:500])
+    
+    session = await get_http_session()
+    async with session.post(url, json=payload) as resp:
+        if resp.status != 200:
+            body = await resp.text()
+            logger.warning("Alert send failed: HTTP %s %s", resp.status, body[:500])
 
 
 async def alert_cryptobot_error(detail: str, *, dedupe_key: str = "cryptobot_api") -> None:

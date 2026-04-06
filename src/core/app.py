@@ -54,6 +54,9 @@ async def run_application() -> None:
         bot = create_bot()
         await setup_bot_commands(bot)  # 🆕 Устанавливаем красивое меню команд
         dispatcher = create_dispatcher()
+        # Anti-flood middleware
+        from middlewares.antiflood_middleware import AntiFloodMiddleware
+        dispatcher.message.middleware(AntiFloodMiddleware(rate_limit=1.0))
 
         fastapi_app = create_fastapi_app()
         uvicorn_config = uvicorn.Config(
@@ -81,10 +84,14 @@ async def run_application() -> None:
             run_bot(),
         )
     finally:
+        from src.core.http_client import close_http_session
+
         if bot is not None:
             with suppress(Exception):
                 await bot.session.close()
                 logger.debug("Сессия Telegram (aiohttp) закрыта")
+        with suppress(Exception):
+            await close_http_session()
         with suppress(Exception):
             await engine.dispose()
             logger.debug("Пул соединений SQLAlchemy освобождён")
@@ -118,10 +125,14 @@ async def run_polling() -> None:
             close_bot_session=False,
         )
     finally:
+        from src.core.http_client import close_http_session
+
         if bot is not None:
             with suppress(Exception):
                 await bot.session.close()
                 logger.debug("Сессия Telegram (aiohttp) закрыта")
+        with suppress(Exception):
+            await close_http_session()
         with suppress(Exception):
             await engine.dispose()
             logger.debug("Пул соединений SQLAlchemy освобождён")

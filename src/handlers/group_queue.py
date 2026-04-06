@@ -438,14 +438,12 @@ async def _render_queue_menu(
         refresh_kb = InlineKeyboardMarkup(
             inline_keyboard=[[InlineKeyboardButton(text="🔄 Обновить", callback_data=_CB_QUEUE)]]
         )
-        sent = await _send_to_thread(
-            source_message=target_message,
+        await edit_message_text_or_caption_safe(
+            target_message,
             text="📭 Очередь пустая.",
-            thread_id=thread_id,
             reply_markup=refresh_kb,
         )
-        _remember_active_menu(sent)
-        return sent
+        return target_message
 
     sent = await _send_to_thread(
         source_message=target_message,
@@ -616,11 +614,12 @@ async def cb_queue_refresh(callback: CallbackQuery, session: AsyncSession) -> No
     await callback.answer()
 
     if not rows:
-        await callback.message.edit_text("📭 Очередь пустая.")
+        await edit_message_text_or_caption_safe(callback.message, text="📭 Очередь пустая.")
         return
 
-    await callback.message.edit_text(
-        f"📋 <b>Очередь</b> — всего: <b>{total}</b> шт.\n\nВыбери категорию:",
+    await edit_message_text_or_caption_safe(
+        callback.message,
+        text=f"📋 <b>Очередь</b> — всего: <b>{total}</b> шт.\n\nВыбери категорию:",
         parse_mode="HTML",
         reply_markup=_queue_keyboard(rows),
     )
@@ -654,8 +653,9 @@ async def cb_queue_cat(callback: CallbackQuery, session: AsyncSession) -> None:
     await callback.answer()
 
     if count == 0:
-        await callback.message.edit_text(
-            f"📭 В категории <b>{escape(cat.compose_title())}</b> нет карточек в очереди.",
+        await edit_message_text_or_caption_safe(
+            callback.message,
+            text=f"📭 В категории <b>{escape(cat.compose_title())}</b> нет карточек в очереди.",
             parse_mode="HTML",
             reply_markup=InlineKeyboardMarkup(
                 inline_keyboard=[[InlineKeyboardButton(text="◀️ Назад", callback_data=_CB_QUEUE)]]
@@ -663,8 +663,9 @@ async def cb_queue_cat(callback: CallbackQuery, session: AsyncSession) -> None:
         )
         return
 
-    await callback.message.edit_text(
-        f"📦 <b>{escape(cat.compose_title())}</b>\n"
+    await edit_message_text_or_caption_safe(
+        callback.message,
+        text=f"📦 <b>{escape(cat.compose_title())}</b>\n"
         f"Доступно: <b>{count}</b> шт.\n\n"
         "Сколько карточек отправить в этот чат? (1..999)",
         parse_mode="HTML",
@@ -878,6 +879,8 @@ async def on_queue_qty_input_message(message: Message, session: AsyncSession, bo
         return
 
     raw_text = (message.text or message.caption or "").strip()
+    key = _qty_input_key(message.from_user.id, message.chat.id, message.message_thread_id)
+    category_id = _pending_qty_input.get(key)
 
     # Авто-фиксация: ищем правило по (chat_id, topic_id)
     rule = _get_auto_fix_rule(message.chat.id, message.message_thread_id)
@@ -968,8 +971,6 @@ async def on_queue_qty_input_message(message: Message, session: AsyncSession, bo
         if not await AdminService(session=session).can_use_sim_groups(message.from_user.id):
             return
 
-        key = _qty_input_key(message.from_user.id, message.chat.id, message.message_thread_id)
-        category_id = _pending_qty_input.get(key)
         if category_id is None:
             parsed = _parse_group_status_change_request(message.text)
             if parsed is None:
@@ -1047,15 +1048,15 @@ async def on_queue_qty_input_message(message: Message, session: AsyncSession, bo
             await message.answer("Категория не найдена")
             return
 
-    await _forward_for_category(
-        actor_tg_id=message.from_user.id,
-        target_message=message,
-        session=session,
-        bot=bot,
-        category_id=category_id,
-        qty=qty,
-        selected_hold="no_hold",
-    )
+        await _forward_for_category(
+            actor_tg_id=message.from_user.id,
+            target_message=message,
+            session=session,
+            bot=bot,
+            category_id=category_id,
+            qty=qty,
+            selected_hold="no_hold",
+        )
     return
 
 

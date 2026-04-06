@@ -8,9 +8,19 @@ from src.services import AdminService
 
 
 class IsAdminFilter(BaseFilter):
-    """Пропускает апдейт только для админа (чтобы seller-FSM не перехватывал кнопки админ-меню)."""
+    """Пропускает апдейт только для админа (проверка по конфигу + БД)."""
 
     async def __call__(self, message: Message, session: AsyncSession) -> bool:
         if message.from_user is None:
             return False
-        return await AdminService(session=session).is_admin(message.from_user.id)
+
+        uid = message.from_user.id
+
+        # 1. Быстрая проверка по статическому списку (конфиг)
+        from src.core.config import get_settings
+        settings = get_settings()
+        if uid in settings.admin_telegram_ids:
+            return True
+
+        # 2. Проверка роли в базе данных
+        return await AdminService(session=session).is_admin(uid)

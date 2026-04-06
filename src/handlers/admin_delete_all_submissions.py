@@ -44,10 +44,11 @@ async def cb_confirm_delete_all_submissions(callback: CallbackQuery, session: As
         return
 
     count = (await session.execute(select(func.count(Submission.id)))).scalar_one()
+    from src.utils.text_format import edit_message_text_or_caption_safe
     if count == 0:
-        await callback.message.edit_text("✅ В базе нет записей.")
+        await edit_message_text_or_caption_safe(callback.message, "✅ В базе нет записей.")
         return
 
     await session.execute(delete(Submission))
-    await callback.message.edit_text(f"✅ Удалено {count} сим-карт. База пуста 🚀")
+    await edit_message_text_or_caption_safe(callback.message, f"✅ Удалено {count} сим-карт. База пуста 🚀")
     await callback.answer("Готово!", show_alert=True)

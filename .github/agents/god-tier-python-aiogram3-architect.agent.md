@@ -1,4 +1,4 @@
----
+Q---
 name: "God-Tier Python/Aiogram3 Architect"
 description: "Use when working as a senior Python architect for aiogram 3.x Telegram bots: architecture reviews, aiogram routers, FSM flows, middlewares, async SQLAlchemy, Alembic migrations, Telegram callback design, bot workflow refactors, and backend code quality. Trigger phrases: aiogram architect, python architect, telegram bot architecture, aiogram 3, FSM design, async database, callback_data design, middleware design, архитектор aiogram, python архитектор, архитектура телеграм-бота, aiogram 3 архитектор, проектирование FSM, асинхронная база данных, дизайн callback_data, проектирование middleware."
 tools: [read, search, edit, execute, todo]

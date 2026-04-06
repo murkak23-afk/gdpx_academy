@@ -1,121 +1,74 @@
 from __future__ import annotations
 
 import logging
-
-from aiogram import F, Router
-from aiogram.filters import CommandStart
+from aiogram import Router, F
+from aiogram.filters import CommandStart, StateFilter
 from aiogram.fsm.context import FSMContext
-from aiogram.types import Message
-from sqlalchemy.exc import SQLAlchemyError
+from aiogram.types import Message, CallbackQuery, InputMediaPhoto
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.database.models.enums import UserLanguage
-from src.database.models.user import User
-from src.keyboards import language_choice_keyboard, seller_main_inline_keyboard
-from src.services import BillingService, SubmissionService, UserService
-from src.states.registration_state import RegistrationState
+from src.services.user_service import UserService
+from src.services.submission_service import SubmissionService
+from src.utils.media import media
 from src.utils.ui_builder import GDPXRenderer
+from src.keyboards.builders import get_seller_main_kb
+from src.keyboards.factory import NavCD
+from src.database.models.enums import UserLanguage
 
 router = Router(name="start-router")
 logger = logging.getLogger(__name__)
+_renderer = GDPXRenderer()
 
-
-async def _send_welcome_banner(
-    message: Message,
-    user: User,
-    dashboard: dict[str, object],
-    total_earned: object,
-) -> None:
-    username = user.username
-    if not username:
-        username = str(user.id)
-    render_text = GDPXRenderer().render_dashboard(
-        {
-            "username": username,
-            "pending_count": int(dashboard.get("pending", 0)),
-            "in_review_count": 0,
-            "approved_count": int(dashboard.get("accepted", 0)),
-            "rejected_count": int(dashboard.get("rejected", 0)),
-            "total_payout_amount": total_earned,
-            "payout_label": "Капитал:",
-        },
-    )
-    # Hide legacy reply keyboard and send the inline profile hub in one message.
-    await message.answer(
-        render_text,
-        reply_markup=seller_main_inline_keyboard(),
-        parse_mode="HTML",
-    )
-
-
-@router.message(CommandStart(ignore_mention=True))
-async def on_start(message: Message, state: FSMContext, session: AsyncSession) -> None:
-    """Обрабатывает /start и запускает регистрацию."""
-
-    if message.from_user is None:
-        return
-
-    service = UserService(session=session)
-    try:
-        existing_user = await service.get_by_telegram_id(telegram_id=message.from_user.id)
-    except SQLAlchemyError as exc:
-        logger.exception("База данных недоступна при /start: %s", exc)
-        await message.answer(
-            "Сейчас не удаётся подключиться к базе данных. "
-            "Проверь, что PostgreSQL запущен и переменные POSTGRES_* в .env совпадают с контейнером.\n"
-            "Попробуй /start через минуту.",
+async def _show_main_dashboard(target: Message | CallbackQuery, user, session: AsyncSession):
+    """Вспомогательная функция для отрисовки красивого дашборда."""
+    dashboard_stats = await SubmissionService(session=session).get_user_dashboard_stats(user.id)
+    
+    # Формируем данные для рендерера (render_dashboard)
+    render_data = {
+        "username": user.username or "resident",
+        "telegram_id": user.telegram_id,
+        "approved_count": int(dashboard_stats.get("accepted", 0)),
+        "pending_count": int(dashboard_stats.get("pending", 0)),
+        "in_review_count": 0, # В агрегате dashboard_stats они уже в pending
+        "rejected_count": int(dashboard_stats.get("rejected", 0)),
+        "total_payout_amount": float(user.total_paid or 0),
+    }
+    
+    text = _renderer.render_dashboard(render_data)
+    banner = media.get("items.jpg")
+    
+    if isinstance(target, Message):
+        await target.answer_photo(
+            photo=banner,
+            caption=text,
+            reply_markup=get_seller_main_kb(),
+            parse_mode="HTML"
         )
-        return
+    else:
+        try:
+            await target.message.edit_media(
+                media=InputMediaPhoto(media=banner, caption=text),
+                reply_markup=get_seller_main_kb()
+            )
+        except Exception:
+            await target.message.answer_photo(photo=banner, caption=text, reply_markup=get_seller_main_kb())
+            await target.message.delete()
 
-    if existing_user is not None:
-        await state.clear()
-        dashboard = await SubmissionService(session=session).get_user_dashboard_stats(user_id=existing_user.id)
-        total_earned = await BillingService(session=session).get_user_total_paid_amount(existing_user.id)
-        await _send_welcome_banner(
-            message,
-            existing_user,
-            dashboard,
-            total_earned,
-        )
-        return
-
-    await state.set_state(RegistrationState.waiting_for_language)
-    await message.answer(
-        text="Добро пожаловать! Выбери язык интерфейса:",
-        reply_markup=language_choice_keyboard(),
-    )
-
-
-@router.message(RegistrationState.waiting_for_language, F.text == "Русский")
-async def on_language_selected(
-    message: Message,
-    state: FSMContext,
-    session: AsyncSession,
-) -> None:
-    """Завершает регистрацию — интерфейс только на русском."""
-
-    if message.from_user is None or message.text is None:
-        return
-
-    selected_language = UserLanguage.RU
-
-    service = UserService(session=session)
-    user = await service.register_seller(
-        tg_user=message.from_user,
-        language=selected_language,
-    )
-
+@router.message(CommandStart(), StateFilter(None))
+async def cmd_start(message: Message, session: AsyncSession, state: FSMContext) -> None:
+    """Точка входа: регистрация и красивый дашборд."""
     await state.clear()
-    dashboard = await SubmissionService(session=session).get_user_dashboard_stats(user_id=user.id)
-    total_earned = await BillingService(session=session).get_user_total_paid_amount(user.id)
-    await _send_welcome_banner(message, user, dashboard, total_earned)
-
-
-@router.message(RegistrationState.waiting_for_language)
-async def on_invalid_language(message: Message) -> None:
-    """Просит выбрать язык только из доступных кнопок."""
-
-    await message.answer(
-        text="Пожалуйста, выбери язык кнопкой ниже.",
-        reply_markup=language_choice_keyboard(),
+    user = await UserService(session=session).register_seller(
+        tg_user=message.from_user,
+        language=UserLanguage.RU,
     )
+    await session.flush()
+    await _show_main_dashboard(message, user, session)
+
+@router.callback_query(NavCD.filter(F.to == "menu"))
+async def back_to_menu(callback: CallbackQuery, session: AsyncSession, state: FSMContext) -> None:
+    """Возврат в меню через колбэк."""
+    await state.clear()
+    user = await UserService(session=session).get_by_telegram_id(callback.from_user.id)
+    await _show_main_dashboard(callback, user, session)
+    await callback.answer()

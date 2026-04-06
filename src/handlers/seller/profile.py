@@ -1,347 +1,200 @@
-"""Profile, statistics, payout history, and captcha handlers."""
-
 from __future__ import annotations
 
-from aiogram import F, Router
-from aiogram.filters import Command, StateFilter
-from aiogram.types import (
-    CallbackQuery,
-    InlineKeyboardButton,
-    InlineKeyboardMarkup,
-    Message,
-)
+import logging
+from aiogram import Router, F
+from aiogram.types import CallbackQuery, InputMediaPhoto, InlineKeyboardButton, InlineKeyboardMarkup
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.keyboards import seller_main_inline_keyboard
-from src.keyboards.callbacks import (
-    CB_CAPTCHA_CANCEL,
-    CB_CAPTCHA_START,
-    CB_NOOP,
-    CB_SELLER_MENU_PAYHIST,
-    CB_SELLER_MENU_PROFILE,
-    CB_SELLER_PAYHIST_PAGE,
-    CB_SELLER_STATS_VIEW,
+from src.services.user_service import UserService
+from src.services.submission_service import SubmissionService
+from src.database.models.publication import Payout
+from src.database.models.enums import PayoutStatus
+from src.utils.media import media
+from src.utils.ui_builder import GDPXRenderer, DIVIDER
+from src.keyboards.factory import SellerMenuCD, NavCD, SellerInfoCD
+from src.keyboards.builders import (
+    get_seller_main_kb, get_info_root_kb, get_faq_list_kb, 
+    get_manual_levels_kb, get_manuals_in_level_kb, get_back_to_manual_level_kb, get_back_to_info_kb
 )
-from src.services import AdminService, BillingService, SubmissionService, UserService
-from src.utils.clean_screen import send_clean_text_screen
-from src.utils.text_format import edit_message_text_safe
-from src.utils.ui_builder import GDPXRenderer
+from src.utils.text_format import edit_message_text_or_caption_safe
 
-from ._shared import (
-    SELLER_PAGE_SIZE,
-    _captcha_keyboard,
-    _render_profile_text,
-    _renderer,
-    _safe_delete_message,
-)
+# Подключаем данные FAQ и Мануалов
+from src.faq import FAQ_CARDS, get_faq_by_id
+from src.manuals import MANUAL_LEVELS, get_manual_by_id, get_manuals_by_level
 
 router = Router(name="seller-profile-router")
+logger = logging.getLogger(__name__)
+_renderer = GDPXRenderer()
 
-
-# ── Local keyboard builders ───────────────────────────────────────────────
-
-
-def _stats_period_keyboard(active_period: str) -> InlineKeyboardMarkup:
-    labels = [("today", "Сегодня"), ("week", "Отчёт за неделю")]
-    row: list[InlineKeyboardButton] = []
-    for key, label in labels:
-        title = f"• {label}" if key == active_period else label
-        row.append(
-            InlineKeyboardButton(
-                text=title, callback_data=f"{CB_SELLER_STATS_VIEW}:{key}"
-            )
-        )
-    return InlineKeyboardMarkup(inline_keyboard=[row])
-
-
-def _format_seller_stats_dashboard(user, stats: dict, *, period_label: str) -> str:
-    nick = f"@{user.username}" if user.username else f"@{user.telegram_id}"
-    by_op = stats["by_main_operator"]
-    operator_rows = sorted(
-        ((name, int(count)) for name, count in by_op.items()),
-        key=lambda x: x[1],
-        reverse=True,
-    )
-    top = [x for x in operator_rows if x[1] > 0][:3]
-    lines = [
-        f"Статистика продавца · {period_label}",
-        "",
-        "💰 Финансы",
-        f"• Сумма зачёта: {stats['balance']} USDT",
-        f"• Зачтено: {stats['accepted_total']} симок",
-        "",
-        "📊 Качество",
-        f"• Блок: {stats['blocked']}",
-        f"• Не скан: {stats['not_a_scan']}",
-        f"• Незачёт: {stats['rejected_moderation']}",
-    ]
-    if top:
-        lines.extend(["", "🏷 Топ операторов"])
-        for name, cnt in top:
-            lines.append(f"• {name}: {cnt}")
-    lines.extend(["", f"Продавец: {nick}"])
-    return "\n".join(lines)
-
-
-def _seller_payout_history_kb(page: int, total: int) -> InlineKeyboardMarkup:
-    max_page = (max(total, 1) - 1) // SELLER_PAGE_SIZE
-    rows: list[list[InlineKeyboardButton]] = []
-    nav: list[InlineKeyboardButton] = []
-    if page > 0:
-        nav.append(
-            InlineKeyboardButton(
-                text="⬅️", callback_data=f"{CB_SELLER_PAYHIST_PAGE}:{page - 1}"
-            )
-        )
-    nav.append(
-        InlineKeyboardButton(text=f"{page + 1}/{max_page + 1}", callback_data=CB_NOOP)
-    )
-    if page < max_page:
-        nav.append(
-            InlineKeyboardButton(
-                text="➡️", callback_data=f"{CB_SELLER_PAYHIST_PAGE}:{page + 1}"
-            )
-        )
-    if nav:
-        rows.append(nav)
-    rows.append(
-        [InlineKeyboardButton(text="🏠 Главное меню", callback_data=CB_SELLER_MENU_PROFILE)]
-    )
-    return InlineKeyboardMarkup(inline_keyboard=rows)
-
-
-async def _send_payout_history_page(
-    message: Message, session: AsyncSession, *, user_id: int, page: int
-) -> None:
-    items, total = await BillingService(
-        session=session
-    ).get_user_payout_history_paginated(
-        user_id=user_id,
-        page=page,
-        page_size=SELLER_PAGE_SIZE,
-    )
-    text = GDPXRenderer().render_payout_history(
-        items,
-        page=page,
-        total=max(total, 1),
-        page_size=SELLER_PAGE_SIZE,
-    )
-    await send_clean_text_screen(
-        trigger_message=message,
-        text=text,
-        key="seller:payouts:history",
-        reply_markup=_seller_payout_history_kb(page=page, total=total),
-        parse_mode="HTML",
-    )
-
-
-# ── Handlers ──────────────────────────────────────────────────────────────
-
-
-@router.message(Command("profile"))
-@router.message(F.text.in_({"Профиль", "ПРОФИЛЬ"}))
-async def on_profile(message: Message, session: AsyncSession) -> None:
-    """Shows seller profile as compact dashboard."""
-    if message.from_user is None:
-        return
-    user = await UserService(session=session).get_by_telegram_id(message.from_user.id)
-    if user is None:
-        await message.answer("Сначала пройди регистрацию через /start.")
-        return
-    dashboard = await SubmissionService(session=session).get_user_dashboard_stats(
-        user_id=user.id
-    )
-    await message.answer(
-        _render_profile_text(user, dashboard),
-        reply_markup=seller_main_inline_keyboard(),
-        parse_mode="HTML",
-    )
-
-
-@router.callback_query(F.data == CB_SELLER_MENU_PROFILE)
-async def on_seller_menu_profile(callback: CallbackQuery, session: AsyncSession) -> None:
-    if callback.from_user is None:
-        return
+@router.callback_query(SellerMenuCD.filter(F.action == "profile"))
+async def show_profile(callback: CallbackQuery, session: AsyncSession) -> None:
+    """Обновление экрана профиля (баннер profile.jpg)."""
     user = await UserService(session=session).get_by_telegram_id(callback.from_user.id)
-    if user is None:
-        await callback.answer("Сначала /start", show_alert=True)
-        return
-    dashboard = await SubmissionService(session=session).get_user_dashboard_stats(
-        user_id=user.id
+    dashboard = await SubmissionService(session=session).get_user_dashboard_stats(user.id)
+    
+    text = _renderer.render_user_profile(
+        {
+            "username": user.username or "resident",
+            "user_id": user.telegram_id,
+            "approved_count": int(dashboard.get("accepted", 0)),
+            "pending_count": int(dashboard.get("pending", 0)),
+            "rejected_count": int(dashboard.get("rejected", 0)),
+        },
+        user.telegram_id,
     )
-    text = _render_profile_text(user, dashboard)
+    
+    banner = media.get("profile.jpg")
+    try:
+        await callback.message.edit_media(
+            media=InputMediaPhoto(media=banner, caption=text, parse_mode="HTML"),
+            reply_markup=get_seller_main_kb()
+        )
+    except Exception:
+        await edit_message_text_or_caption_safe(callback.message, text, reply_markup=get_seller_main_kb())
     await callback.answer()
-    if callback.message is not None:
-        await edit_message_text_safe(
-            callback.message,
-            text,
-            reply_markup=seller_main_inline_keyboard(),
-            parse_mode="HTML",
-        )
 
-
-@router.message(Command("stats"))
-@router.message(F.text == "Статистика")
-async def on_stats(message: Message, session: AsyncSession) -> None:
-    """Shows seller statistics dashboard."""
-    if message.from_user is None:
-        return
-    user = await UserService(session=session).get_by_telegram_id(message.from_user.id)
-    if user is None:
-        await message.answer("Сначала пройди регистрацию через /start.")
-        return
-    stats = await SubmissionService(session=session).get_user_esim_seller_stats(
-        user_id=user.id, days=1
-    )
-    await send_clean_text_screen(
-        trigger_message=message,
-        text=_format_seller_stats_dashboard(user, stats, period_label="сегодня"),
-        key="seller:stats:screen",
-        reply_markup=_stats_period_keyboard(active_period="today"),
-    )
-
-
-@router.callback_query(F.data.startswith(f"{CB_SELLER_STATS_VIEW}:"))
-async def on_stats_view(callback: CallbackQuery, session: AsyncSession) -> None:
-    if callback.from_user is None or callback.data is None:
-        return
+@router.callback_query(SellerMenuCD.filter(F.action == "payouts"))
+async def show_payouts(callback: CallbackQuery, session: AsyncSession) -> None:
+    """Экран выплат (баннер payouts.jpg)."""
     user = await UserService(session=session).get_by_telegram_id(callback.from_user.id)
-    if user is None:
-        await callback.answer("Сначала /start", show_alert=True)
-        return
-    period = callback.data.split(":")[3]
-    days = 7 if period == "week" else 1
-    period_label = "7 дней" if period == "week" else "сегодня"
-    stats = await SubmissionService(session=session).get_user_esim_seller_stats(
-        user_id=user.id, days=days
+    stmt_paid = select(func.sum(Payout.amount)).where(Payout.user_id == user.id, Payout.status == PayoutStatus.PAID)
+    total_paid = (await session.execute(stmt_paid)).scalar() or 0
+    
+    text = (
+        f"<b>❖ GDPX // FINANCE</b>\n"
+        f"{DIVIDER}\n"
+        f"💸 <b>К ВЫПЛАТЕ (СЕГОДНЯ):</b> <code>{user.pending_balance}</code> USDT\n"
+        f"💎 <b>ВСЕГО ВЫПЛАЧЕНО:</b> <code>{total_paid}</code> USDT\n\n"
+        f"<i>Инфо: выплаты производятся ежедневно в вечернее время.</i>\n"
+        f"{DIVIDER}"
+    )
+    
+    banner = media.get("payouts.jpg")
+    kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="❮ Назад", callback_data=NavCD(to="menu").pack())]])
+    try:
+        await callback.message.edit_media(
+            media=InputMediaPhoto(media=banner, caption=text, parse_mode="HTML"), 
+            reply_markup=kb
+        )
+    except Exception:
+        await edit_message_text_or_caption_safe(callback.message, text, reply_markup=kb)
+    await callback.answer()
+
+@router.callback_query(SellerMenuCD.filter(F.action == "info"))
+async def show_info(callback: CallbackQuery) -> None:
+    """Экран Кодекса (баннер info.jpg)."""
+    text = (
+        "<b>❖ GDPX // INFO CENTER</b>\n\n"
+        "Доступ к методологии GDPX ACADEMY открыт. Вы вошли в закрытый лекторий.\n"
+        "Здесь знания конвертируются в капитал по высшим стандартам качества.\n\n"
+        "<b>АРХИТЕКТУРА РАЗДЕЛА:</b>\n"
+        "❂ <b>F.A.Q. //</b>\n"
+        "└ Свод протоколов по финансовым и техническим вопросам.\n\n"
+        "❂ <b>МАНУАЛЫ //</b>\n"
+        "└ Пошаговые алгоритмы действий для полевых агентов.\n\n"
+        f"{DIVIDER}\n"
+        "<i>Выберите целевой сектор управления кнопками ниже.</i>"
+    )
+    
+    banner = media.get("info.jpg")
+    try:
+        await callback.message.edit_media(
+            media=InputMediaPhoto(media=banner, caption=text, parse_mode="HTML"),
+            reply_markup=get_info_root_kb()
+        )
+    except Exception:
+        await edit_message_text_or_caption_safe(callback.message, text, reply_markup=get_info_root_kb())
+    await callback.answer()
+
+@router.callback_query(SellerMenuCD.filter(F.action == "support"))
+async def show_support(callback: CallbackQuery) -> None:
+    """Экран техподдержки (баннер support.jpg)."""
+    text = (
+        f"❖ <b>GDPX // SUPPORT CENTER</b>\n"
+        f"{DIVIDER}\n"
+        f"🌑 <b>ОСНОВАТЕЛЬ</b> - @GDPX1\n"
+        f"  └ <i>Ресурсная база / Глобальный выкуп</i>\n\n"
+        f"🛡 <b>САППОРТЫ</b> - @oduvan_kenoby | @hdksiwns\n"
+        f"  └ <i>Наставление / Прием материала</i>\n\n"
+        f"⚙️ <b>АРХИТЕКТОР</b> - @brug0S\n"
+        f"  └ <i>Технические вопросы / Бот</i>\n"
+        f"{DIVIDER}\n"
+        f"✦ <b>ONLINE</b> // <i>Отклик: 15 MIN.</i>"
+    )
+    banner = media.get("support.jpg")
+    kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="❮ Назад", callback_data=NavCD(to="menu").pack())]])
+    try:
+        await callback.message.edit_media(
+            media=InputMediaPhoto(media=banner, caption=text, parse_mode="HTML"), 
+            reply_markup=kb
+        )
+    except Exception:
+        await edit_message_text_or_caption_safe(callback.message, text, reply_markup=kb)
+    await callback.answer()
+
+@router.callback_query(SellerMenuCD.filter(F.action == "faq"))
+async def list_faq(callback: CallbackQuery) -> None:
+    """Список вопросов FAQ (баннер faq.jpg)."""
+    text = "<b>❖ GDPX ACADEMY // FAQ</b>\n\nВыберите интересующий вопрос:"
+    banner = media.get("faq.jpg")
+    await callback.message.edit_media(
+        media=InputMediaPhoto(media=banner, caption=text, parse_mode="HTML"),
+        reply_markup=get_faq_list_kb(FAQ_CARDS)
     )
     await callback.answer()
-    if callback.message is not None:
-        await edit_message_text_safe(
-            callback.message,
-            _format_seller_stats_dashboard(user, stats, period_label=period_label),
-            reply_markup=_stats_period_keyboard(
-                active_period="week" if period == "week" else "today"
-            ),
-        )
 
-
-@router.message(F.text == "История выплат")
-async def on_payout_history_root(message: Message, session: AsyncSession) -> None:
-    if message.from_user is None:
-        return
-    user = await UserService(session=session).get_by_telegram_id(message.from_user.id)
-    if user is None:
-        await message.answer("Сначала пройди регистрацию через /start.")
-        return
-    await _send_payout_history_page(message, session, user_id=user.id, page=0)
-
-
-@router.callback_query(F.data == CB_SELLER_MENU_PAYHIST)
-async def on_seller_menu_payhist(callback: CallbackQuery, session: AsyncSession) -> None:
-    if callback.from_user is None:
-        return
-    user = await UserService(session=session).get_by_telegram_id(callback.from_user.id)
-    if user is None:
-        await callback.answer("Сначала /start", show_alert=True)
-        return
-    await callback.answer()
-    if callback.message is not None:
-        await _send_payout_history_page(callback.message, session, user_id=user.id, page=0)
-
-
-@router.callback_query(F.data.startswith(f"{CB_SELLER_PAYHIST_PAGE}:"))
-async def on_payout_history_page(callback: CallbackQuery, session: AsyncSession) -> None:
-    if callback.from_user is None or callback.data is None:
-        return
-    user = await UserService(session=session).get_by_telegram_id(callback.from_user.id)
-    if user is None:
-        await callback.answer("Сначала /start", show_alert=True)
-        return
-    page = max(int(callback.data.split(":")[3]), 0)
-    await callback.answer()
-    if callback.message is not None:
-        await _send_payout_history_page(callback.message, session, user_id=user.id, page=page)
-
-
-@router.callback_query(F.data == CB_CAPTCHA_CANCEL)
-async def on_captcha_cancel(callback: CallbackQuery, session: AsyncSession) -> None:
-    """Dismisses the inline captcha prompt and returns the main menu."""
-    if callback.from_user is None:
-        return
-    user = await UserService(session=session).get_by_telegram_id(callback.from_user.id)
-    await callback.answer()
-    if callback.message is not None:
-        dashboard = {"accepted": 0, "pending": 0, "rejected": 0}
-        if user is not None:
-            dashboard = await SubmissionService(
-                session=session
-            ).get_user_dashboard_stats(user_id=user.id)
-        text = (
-            _render_profile_text(user, dashboard)
-            if user is not None
-            else "Сначала пройди регистрацию через /start."
-        )
-        await edit_message_text_safe(
-            callback.message,
-            text,
-            reply_markup=seller_main_inline_keyboard() if user is not None else None,
-            parse_mode="HTML" if user is not None else None,
-        )
-
-
-@router.callback_query(F.data == CB_CAPTCHA_START)
-async def on_captcha_start(callback: CallbackQuery, session: AsyncSession) -> None:
-    """Generates a captcha code and sends it to the user."""
-    if callback.from_user is None:
-        return
-    user = await UserService(session=session).get_by_telegram_id(callback.from_user.id)
-    if user is None:
-        await callback.answer("Сначала /start", show_alert=True)
-        return
-    answer = await UserService(session=session).create_captcha(user.id)
-    if answer is None:
-        await callback.answer("Ошибка капчи", show_alert=True)
-        return
-    await callback.answer()
-    if callback.message is not None:
-        await callback.message.answer(
-            f"Введи код ниже отдельным сообщением:\n{answer}\n\n"
-            "Это упрощенная captcha для снятия ограничения.",
-        )
-
-
-@router.message(F.text.regexp(r"^\d{4}$"))
-async def on_captcha_check(message: Message, session: AsyncSession) -> None:
-    """Verifies captcha input and removes the restriction."""
-    if message.from_user is None or message.text is None:
-        return
-    user_service = UserService(session=session)
-    user = await user_service.get_by_telegram_id(message.from_user.id)
-    if user is None or not user.is_restricted or not user.captcha_answer:
-        return
-    ok = await user_service.verify_captcha(user_id=user.id, answer=message.text.strip())
-    if ok:
-        dashboard = await SubmissionService(session=session).get_user_dashboard_stats(
-            user_id=user.id
-        )
-        await message.answer(
-            _render_profile_text(user, dashboard),
-            reply_markup=seller_main_inline_keyboard(),
-            parse_mode="HTML",
-        )
-        return
-    await message.answer(
-        "Неверный код. Нажми 'Пройти капчу' и попробуй снова.",
-        reply_markup=_captcha_keyboard(),
+@router.callback_query(SellerMenuCD.filter(F.action == "manuals"))
+async def list_manual_levels(callback: CallbackQuery) -> None:
+    """Список уровней мануалов (баннер baza.jpg)."""
+    text = "<b>❖ GDPX ACADEMY // МАНУАЛЫ</b>\n\nДоступные уровни подготовки:"
+    banner = media.get("baza.jpg")
+    await callback.message.edit_media(
+        media=InputMediaPhoto(media=banner, caption=text, parse_mode="HTML"),
+        reply_markup=get_manual_levels_kb(MANUAL_LEVELS)
     )
+    await callback.answer()
 
-
-@router.message(StateFilter(None), ~F.text.startswith("/"))
-async def on_seller_fallback_cleanup(message: Message, session: AsyncSession) -> None:
-    """Silently deletes stray messages outside FSM for a clean chat."""
-    if message.from_user is not None and await AdminService(
-        session=session
-    ).is_admin(message.from_user.id):
+@router.callback_query(SellerInfoCD.filter(F.type == "manual_lvl"))
+async def list_manuals_in_level(callback: CallbackQuery, callback_data: SellerInfoCD) -> None:
+    """Список мануалов в уровне."""
+    level = next((lvl for lvl in MANUAL_LEVELS if lvl.id == callback_data.id), None)
+    if not level:
+        await callback.answer("Уровень не найден", show_alert=True)
         return
-    await _safe_delete_message(message)
+    manuals = get_manuals_by_level(level.id)
+    text = f"<b>❖ {level.emoji} {level.title}</b>\n{DIVIDER}\nВыберите мануал:"
+    banner = media.get("baza.jpg")
+    await callback.message.edit_media(
+        media=InputMediaPhoto(media=banner, caption=text, parse_mode="HTML"),
+        reply_markup=get_manuals_in_level_kb(manuals)
+    )
+    await callback.answer()
+
+@router.callback_query(SellerInfoCD.filter(F.type == "manual_item"))
+async def show_manual_detail(callback: CallbackQuery, callback_data: SellerInfoCD) -> None:
+    """Отображение мануала."""
+    card = get_manual_by_id(callback_data.id)
+    if not card:
+        await callback.answer("Мануал не найден", show_alert=True)
+        return
+    banner = media.get("baza.jpg")
+    await callback.message.edit_media(
+        media=InputMediaPhoto(media=banner, caption=card.text, parse_mode="HTML"),
+        reply_markup=get_back_to_manual_level_kb(card.level)
+    )
+    await callback.answer()
+
+@router.callback_query(SellerInfoCD.filter(F.type == "faq"))
+async def show_faq_detail(callback: CallbackQuery, callback_data: SellerInfoCD) -> None:
+    """Отображение статьи FAQ."""
+    card = get_faq_by_id(callback_data.id)
+    if not card:
+        await callback.answer("FAQ не найден", show_alert=True)
+        return
+    banner = media.get("faq.jpg")
+    await callback.message.edit_media(
+        media=InputMediaPhoto(media=banner, caption=card.text, parse_mode="HTML"),
+        reply_markup=get_back_to_info_kb("faq")
+    )
+    await callback.answer()

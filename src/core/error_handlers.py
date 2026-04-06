@@ -50,9 +50,34 @@ async def _maybe_notify_admin_critical(
     update_id: int | None,
     user_id: int | None,
 ) -> None:
-    """Заглушка под future-интеграцию уведомлений админам о критических ошибках."""
+    """Шлёт алерты о критических ошибках всем админам из конфига."""
 
-    del bot, exc, update_id, user_id
+    if bot is None:
+        return
+
+    from src.core.config import get_settings
+    settings = get_settings()
+    admin_ids = settings.admin_telegram_ids
+
+    if not admin_ids:
+        return
+
+    from html import escape
+    error_type = type(exc).__name__
+    error_msg = escape(str(exc))
+    text = (
+        f"❌ <b>Критическая ошибка</b>\n\n"
+        f"<b>Тип:</b> {error_type}\n"
+        f"<b>Update ID:</b> {update_id}\n"
+        f"<b>User ID:</b> {user_id}\n"
+        f"<b>Текст:</b> <pre>{error_msg[:1000]}</pre>"
+    )
+
+    for admin_id in admin_ids:
+        try:
+            await bot.send_message(chat_id=admin_id, text=text, parse_mode="HTML")
+        except Exception as e:
+            logger.warning("Не удалось отправить алерт админу %s: %s", admin_id, e)
 
 
 def register_error_handlers(dispatcher: Dispatcher) -> None:
