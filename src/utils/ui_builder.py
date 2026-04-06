@@ -213,3 +213,24 @@ class GDPXRenderer:
             DIVIDER_LIGHT,
             "<i>Подтвердите интеграцию в базу данных</i> ↴",
         ])
+    
+
+
+    def render_category_manage(self, category: Any) -> str:
+            """Отрисовка карточки управления категорией (кластером)."""
+            from html import escape
+            priority = "🏮 ПРИОРИТЕТ" if getattr(category, "is_priority", False) else "▫️ ОБЫЧНЫЙ"
+            status = "🟢 АКТИВЕН" if category.is_active else "🔴 ОТКЛЮЧЕН"
+             
+            return "\n".join([
+                HEADER_CATCON,
+                DIVIDER,
+               f"🗂 <b>КЛАСТЕР:</b> <code>{escape(category.title)}</code>",
+               DIVIDER_LIGHT,
+               f" ├ <b>ID:</b> <code>{category.id}</code>",
+              f" ├ <b>Статус:</b> {status}",
+               f" ├ <b>Уровень:</b> {priority}",
+               f" └ <b>Ставка:</b> <code>{category.payout_rate}</code> USDT",
+               DIVIDER_LIGHT,
+               "Выберите действие для управления:"
+           ])

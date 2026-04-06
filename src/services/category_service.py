@@ -178,3 +178,30 @@ class CategoryService:
         await self._session.flush()
         await self._session.refresh(category) # обновляем ID
         return category
+
+    async def set_active(self, category_id: int, is_active: bool) -> Category | None:
+        """Включает/отключает категорию."""
+        category = await self.get_by_id(category_id)
+        if category is None:
+            return None
+        category.is_active = is_active
+        await self._session.refresh(category)
+        return category
+
+    async def update_payout_rate(self, category_id: int, payout_rate: Decimal) -> Category | None:
+        """Изменяет ставку выкупа (payout_rate)."""
+        category = await self.get_by_id(category_id)
+        if category is None:
+            return None
+        category.payout_rate = payout_rate
+        await self._session.refresh(category)
+        return category
+
+    async def set_priority(self, category_id: int, is_priority: bool) -> Category | None:
+        """Включает/выключает приоритет (🏮)."""
+        category = await self.get_by_id(category_id)
+        if category is None:
+            return None
+        category.is_priority = is_priority
+        await self._session.refresh(category)
+        return category

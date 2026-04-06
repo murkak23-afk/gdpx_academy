@@ -22,6 +22,8 @@ class Category(Base, TimestampMixin):
     payout_rate: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
     total_upload_limit: Mapped[int | None] = mapped_column(nullable=True)
     is_active: Mapped[bool] = mapped_column(nullable=False, default=True)
+    is_priority: Mapped[bool] = mapped_column(nullable=False, default=False)
+
 
     # Конструктор категории: Оператор | Тип | Холд
     operator: Mapped[str | None] = mapped_column(String(60), nullable=True)
