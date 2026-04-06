@@ -105,6 +105,44 @@ class SubmissionService:
         # Flush to get the ID but don't commit here — let the handler/middleware decide
         await self._session.flush()
         return submission
+    
+    async def create_bulk_submissions(
+        self,
+        user_id: int,
+        category_id: int,
+        fixed_payout_rate: Decimal,
+        media_items: list[dict[str, str]],
+    ) -> list[Submission]:
+        """Отказоустойчивое массовое сохранение."""
+        from datetime import datetime, timezone
+        import re
+        from src.utils.phone_norm import normalize_phone_strict
+
+        now = datetime.now(timezone.utc)
+        submissions = []
+
+        for item in media_items:
+            caption = item.get("caption", "")
+            phone_match = re.search(r"(?:\+7|7|8)\d{10}", caption)
+            norm = normalize_phone_strict(phone_match.group()) if phone_match else None
+
+            sub = Submission(
+                user_id=user_id,
+                category_id=category_id,
+                telegram_file_id=item["file_id"],
+                file_unique_id=item["unique_id"],
+                image_sha256="bulk_skip",
+                description_text=caption,
+                attachment_type=item["type"],
+                status=SubmissionStatus.PENDING,
+                phone_normalized=norm,
+                fixed_payout_rate=fixed_payout_rate,
+            )
+            submissions.append(sub)
+
+        self._session.add_all(submissions)
+        await self._session.flush()
+        return submissions
 
     async def get_user_dashboard_stats(self, user_id: int) -> dict[str, int | Decimal]:
         """Возвращает агрегированную статистику для дашборда пользователя за один запрос."""
