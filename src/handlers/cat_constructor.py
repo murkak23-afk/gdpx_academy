@@ -39,24 +39,6 @@ async def cmd_adm_cat(message: Message, session: AsyncSession) -> None:
     text = "<b>Конфигурация кластеров сети</b>\n\nВыберите действие:"
     await message.answer(text, reply_markup=get_catcon_main_kb(), parse_mode="HTML")
 
-
-@router.callback_query(CatConCD.filter(F.action == "list"))
-async def catcon_list_categories(callback: CallbackQuery, session: AsyncSession) -> None:
-    """Список всех категорий для админа."""
-    categories = await CategoryService(session=session).get_all_categories()
-    if not categories:
-        await callback.answer("🔴 База кластеров пуста", show_alert=True)
-        return
-
-    text = "<b>Список всех кластеров сети:</b>\n\n"
-    for cat in categories:
-        status = "🟢 АКТИВЕН" if cat.is_active else "🔴 ОТКЛЮЧЕН"
-        text += f"{status}\n└ <b>ID:</b> <code>{cat.id}</code> | <b>{cat.title}</b> | <code>{cat.payout_rate}</code> USDT\n\n"
-
-    await callback.message.answer(text[:4000], parse_mode="HTML")
-    await callback.answer()
-
-
 @router.callback_query(CatConCD.filter(F.action == "start"))
 async def start_creation(callback: CallbackQuery, state: FSMContext) -> None:
     """Шаг 1: Выбор оператора."""
@@ -177,8 +159,8 @@ async def catcon_list_categories(callback: CallbackQuery, session: AsyncSession)
     )
     await callback.answer()
 
-    @router.callback_query(CatManageCD.filter(F.action == "view"))
-    async def view_category(callback: CallbackQuery, callback_data: CatManageCD, session: AsyncSession) -> None:
+@router.callback_query(CatManageCD.filter(F.action == "view"))
+async def view_category(callback: CallbackQuery, callback_data: CatManageCD, session: AsyncSession) -> None:
         """Отображение детальной карточки управления кластером."""
         await state.clear()
         cat = await CategoryService(session=session).get_by_id(callback_data.cat_id)
