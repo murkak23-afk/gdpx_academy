@@ -38,7 +38,8 @@ async def start_creation(callback: CallbackQuery, state: FSMContext) -> None:
     """Шаг 1: Выбор оператора."""
     await state.set_state(CatConstructorState.step_operator)
     text = _r.render_cat_constructor_step(1, 4, "ОПЕРАТОР", "Выберите оператора из списка:")
-    await edit_message_text_or_caption_safe(callback.message, text, reply_markup=get_catcon_options_kb(OPERATORS, "op"))
+    await edit_message_text_or_caption_safe(callback.message, text, reply_markup=get_catcon_options_kb(OPERATORS,
+     "op"), parse_mode="HTML")
     await callback.answer()
 
 @router.callback_query(CatConCD.filter(F.action == "op"))
@@ -47,7 +48,8 @@ async def pick_operator(callback: CallbackQuery, callback_data: CatConCD, state:
     await state.update_data(operator=callback_data.value)
     await state.set_state(CatConstructorState.step_type)
     text = _r.render_cat_constructor_step(2, 4, "АРХИТЕКТУРА", "Выберите тип сим-карт:")
-    await edit_message_text_or_caption_safe(callback.message, text, reply_markup=get_catcon_options_kb(SIM_TYPES, "type"))
+    await edit_message_text_or_caption_safe(callback.message, text, reply_markup=get_catcon_options_kb(SIM_TYPES,
+     "type"), parse_mode="HTML")
     await callback.answer()
 
 @router.callback_query(CatConCD.filter(F.action == "type"))
@@ -56,7 +58,9 @@ async def pick_type(callback: CallbackQuery, callback_data: CatConCD, state: FSM
     await state.update_data(sim_type=callback_data.value)
     await state.set_state(CatConstructorState.step_price)
     text = _r.render_cat_constructor_step(3, 4, "ЛИКВИДНОСТЬ", "Введите ставку выкупа (USDT) ответным сообщением:")
-    await edit_message_text_or_caption_safe(callback.message, text, reply_markup=get_catcon_options_kb([], "cancel"))
+    await edit_message_text_or_caption_safe(callback.message, text, reply_markup=get_catcon_options_kb([],
+     "cancel"), parse_mode="HTML")
+
     await callback.answer()
 
 @router.message(CatConstructorState.step_price)

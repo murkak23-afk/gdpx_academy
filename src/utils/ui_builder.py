@@ -182,3 +182,34 @@ class GDPXRenderer:
             f" 🔴 Отклонено: <code>{rejected}</code>",
             DIVIDER,
         ])
+    
+
+
+    def render_cat_constructor_step(self, step: int, total_steps: int, title: str, description: str) -> str:
+        """Отрисовка шагов конструктора категорий (eSIM)."""
+        return "\n".join([
+            HEADER_CATCON,
+            DIVIDER,
+            f"🛠 <b>ШАГ {step}/{total_steps} | {escape(title)}</b>",
+            "",
+            escape(description),
+            DIVIDER_LIGHT,
+        ])
+
+
+
+
+    def render_cat_constructor_confirm(self, operator: str, sim_type: str, price: str) -> str:
+        """Отрисовка финального шага (подтверждение) конструктора категорий."""
+        return "\n".join([
+            HEADER_CATCON,
+            DIVIDER,
+            "🛠 <b>ШАГ 4/4 | ПОДТВЕРЖДЕНИЕ</b>",
+            "",
+            "<b>Проверьте параметры нового кластера:</b>",
+            f" ├ <b>Оператор:</b> <code>{escape(operator)}</code>",
+            f" ├ <b>Тип (архитектура):</b> <code>{escape(sim_type)}</code>",
+            f" └ <b>Ставка (ликвидность):</b> <code>{escape(price)}</code> USDT",
+            DIVIDER_LIGHT,
+            "<i>Подтвердите интеграцию в базу данных</i> ↴",
+        ])
