@@ -160,19 +160,19 @@ async def catcon_list_categories(callback: CallbackQuery, session: AsyncSession)
     await callback.answer()
 
 @router.callback_query(CatManageCD.filter(F.action == "view"))
-async def view_category(callback: CallbackQuery, callback_data: CatManageCD, session: AsyncSession) -> None:
-        """Отображение детальной карточки управления кластером."""
-        await state.clear()
-        cat = await CategoryService(session=session).get_by_id(callback_data.cat_id)
-        if not cat:
-            await callback.answer("🔴 Кластер не найден", show_alert=True)
-            return
+async def view_category(callback: CallbackQuery, callback_data: CatManageCD, session: AsyncSession, state: FSMContext) -> None:
+    """Отображение детальной карточки управления кластером."""
+    await state.clear()
+    cat = await CategoryService(session=session).get_by_id(callback_data.cat_id)
+    if not cat:
+        await callback.answer("🔴 Кластер не найден", show_alert=True)
+        return
 
-        text = _r.render_category_manage_detail(cat)
-        await edit_message_text_or_caption_safe(
-            callback.message, text, reply_markup=get_cat_manage_detail_kb(cat), parse_mode="HTML"
-        )
-        await callback.answer()
+    text = _r.render_category_manage(cat)
+    await edit_message_text_or_caption_safe(
+        callback.message, text, reply_markup=get_cat_manage_detail_kb(cat), parse_mode="HTML"
+    )
+    await callback.answer()
 
 @router.callback_query(CatManageCD.filter(F.action == "toggle_active"))
 async def cat_manage_toggle_active(callback: CallbackQuery, callback_data: CatManageCD, session: AsyncSession) -> None:
@@ -190,12 +190,11 @@ parse_mode="HTML")
     await callback.answer(f"Статус: {'АКТИВЕН' if cat.is_active else 'ОТКЛЮЧЕН'}")
 
 @router.callback_query(CatManageCD.filter(F.action == "toggle_priority"))
-async def cat_manage_toggle_priority(callback: CallbackQuery, callback_data: CatManageCD, session:
-AsyncSession) -> None:
+async def cat_manage_toggle_priority(callback: CallbackQuery, callback_data: CatManageCD, session: AsyncSession) -> None:
     """Изменение приоритета кластера (🏮)."""
     cat = await CategoryService(session=session).get_by_id(callback_data.cat_id)
     if not cat: return
-     
+          
     new_prio = not getattr(cat, "is_priority", False)
     await CategoryService(session=session).set_priority(cat.id, new_prio)
     await session.commit()
