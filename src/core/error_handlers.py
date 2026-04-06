@@ -1,3 +1,4 @@
+
 """Глобальная обработка ошибок апдейтов: классификация и логирование."""
 
 from __future__ import annotations
@@ -50,34 +51,43 @@ async def _maybe_notify_admin_critical(
     update_id: int | None,
     user_id: int | None,
 ) -> None:
-    """Шлёт алерты о критических ошибках всем админам из конфига."""
-
+    """Шлёт алерты в чат (временный хардкод для теста)."""
     if bot is None:
         return
 
-    from src.core.config import get_settings
-    settings = get_settings()
-    admin_ids = settings.admin_telegram_ids
-
-    if not admin_ids:
-        return
+    # ←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←
+    chat_id = -1003859937194  # ←←← СЮДА ВСТАВЬ РЕАЛЬНЫЙ ID ТВОЕЙ ГРУППЫ
+    # ←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←
 
     from html import escape
+    import traceback
+    from datetime import datetime
+
     error_type = type(exc).__name__
     error_msg = escape(str(exc))
+
+    tb_str = "".join(traceback.format_exception(type(exc), exc, exc.__traceback__, limit=5))
+    tb_escaped = escape(tb_str)
+
     text = (
-        f"❌ <b>Критическая ошибка</b>\n\n"
+        f"🚨 <b>#КРИТИЧЕСКА_ОШИБКА</b> {datetime.utcnow():%Y-%m-%d %H:%M:%S} UTC\n\n"
         f"<b>Тип:</b> {error_type}\n"
-        f"<b>Update ID:</b> {update_id}\n"
-        f"<b>User ID:</b> {user_id}\n"
-        f"<b>Текст:</b> <pre>{error_msg[:1000]}</pre>"
+        f"<b>Update ID:</b> <code>{update_id}</code>\n"
+        f"<b>User ID:</b> <code>{user_id}</code>\n\n"
+        f"<b>Сообщение:</b>\n<pre>{error_msg[:500]}</pre>\n\n"
+        f"<b>Traceback:</b>\n<pre><code class='language-python'>{tb_escaped[:2000]}</code></pre>"
     )
 
-    for admin_id in admin_ids:
-        try:
-            await bot.send_message(chat_id=admin_id, text=text, parse_mode="HTML")
-        except Exception as e:
-            logger.warning("Не удалось отправить алерт админу %s: %s", admin_id, e)
+    try:
+        await bot.send_message(
+            chat_id=chat_id,
+            text=text,
+            parse_mode="HTML",
+            disable_web_page_preview=True,
+        )
+        logger.info(f"✅ Алерт отправлен в чат {chat_id}")
+    except Exception as e:
+        logger.error(f"❌ Ошибка отправки в чат {chat_id}: {e}", exc_info=True)
 
 
 def register_error_handlers(dispatcher: Dispatcher) -> None:
