@@ -31,9 +31,9 @@ class UserThrottlingMiddleware(BaseMiddleware):
 
     def __init__(self, interval_sec: float = 1.0) -> None:
         self._interval = max(interval_sec, 0.05)
+        # TTLCache автоматически чистит старые записи
         self._last_ts: TTLCache[tuple[int, str], float] = TTLCache(maxsize=10000, ttl=600)
         self._lock = asyncio.Lock()
-        self._last_ts: dict = {}
 
     @staticmethod
     def _callback_key(event: Update) -> str | None:
@@ -58,26 +58,27 @@ class UserThrottlingMiddleware(BaseMiddleware):
             return await handler(event, data)
 
         if _is_bulk_upload_message(event):
-    # === BULK RATE LIMITING (max ~4 файла в секунду) ===
-         now = time.monotonic()
-        uid = event.from_user.id if hasattr(event, 'from_user') and event.from_user else 0
-        bulk_key = (uid, "bulk")
+            # === BULK RATE LIMITING (max ~4 файла в секунду) ===
+            now = time.monotonic()
+            # Получаем user_id безопасно
+            uid = getattr(event.from_user, 'id', 0) if hasattr(event, 'from_user') else 0
+            bulk_key = (uid, "bulk")
 
-        async with self._lock:
-        # Инициализация при первом использовании
-            if bulk_key not in self._last_ts:
-                self._last_ts[bulk_key] = now - 0.25
+            async with self._lock:
+                # Инициализация при первом bulk-запросе от пользователя
+                if bulk_key not in self._last_ts:
+                    self._last_ts[bulk_key] = now - 0.25
 
-        prev = self._last_ts[bulk_key]
-        next_allowed = max(now, prev + 0.25)
-        self._last_ts[bulk_key] = next_allowed
+                prev = self._last_ts[bulk_key]
+                next_allowed = max(now, prev + 0.25)
+                self._last_ts[bulk_key] = next_allowed
 
-        delay = next_allowed - now
+                delay = next_allowed - now
 
-        if delay > 0:
-            await asyncio.sleep(delay)   # сглаживаем пиковую нагрузку
+                if delay > 0:
+                    await asyncio.sleep(delay)   # сглаживаем нагрузку
 
-        return await handler(event, data)
+            return await handler(event, data)
 
         callback_key = self._callback_key(event)
         if callback_key is not None:
