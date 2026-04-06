@@ -58,6 +58,7 @@ async def _show_main_dashboard(target: Message | CallbackQuery, user, session: A
 async def cmd_start(message: Message, session: AsyncSession, state: FSMContext) -> None:
     """Точка входа: регистрация и красивый дашборд."""
     await state.clear()
+    
     user = await UserService(session=session).register_seller(
         tg_user=message.from_user,
         language=UserLanguage.RU,
