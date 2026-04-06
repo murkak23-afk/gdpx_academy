@@ -135,21 +135,14 @@ class SubmissionService:
         image_sha256: str,
         description_text: str,
         attachment_type: str = "photo",
+        fixed_payout_rate: Decimal = Decimal("0.0"),
     ) -> Submission:
         """Создаёт новую карточку в статусе pending."""
+        from datetime import datetime, timezone
+        from src.utils.phone_norm import extract_and_normalize_phone
 
         now = datetime.now(timezone.utc)
-        
-        # 1. Просто ищем первую последовательность цифр (10-11 штук) в тексте
-        # Это позволит писать "Билайн", "холд" и что угодно вокруг номера
-        phone_match = re.search(r"(?:\+7|7|8)\d{10}", description_text)
-        
-        if phone_match:
-            # Если нашли, нормализуем (приводим к виду 79xxxxxxxxx)
-            norm = normalize_phone_strict(phone_match.group())
-        else:
-            # Если в тексте вообще нет цифр, похожих на номер
-            norm = None
+        norm = extract_and_normalize_phone(description_text)
 
         submission = Submission(
             user_id=user_id,
@@ -161,11 +154,11 @@ class SubmissionService:
             attachment_type=attachment_type,
             status=SubmissionStatus.PENDING,
             phone_normalized=norm,
-            is_duplicate=False, # Добавь это явно, чтобы избежать NameError
+            fixed_payout_rate=fixed_payout_rate,
+            is_duplicate=False,
             last_status_change=now,
         )
         self._session.add(submission)
-        # Flush to get the ID but don't commit here — let the handler/middleware decide
         await self._session.flush()
         return submission
     
@@ -176,18 +169,18 @@ class SubmissionService:
         fixed_payout_rate: Decimal,
         media_items: list[dict[str, str]],
     ) -> list[Submission]:
-        """Отказоустойчивое массовое сохранение."""
+        """Отказоустойчивое массовое сохранение загруженных материалов."""
         from datetime import datetime, timezone
-        import re
-        from src.utils.phone_norm import normalize_phone_strict
+        from src.utils.phone_norm import extract_and_normalize_phone
 
         now = datetime.now(timezone.utc)
         submissions = []
 
         for item in media_items:
             caption = item.get("caption", "")
-            phone_match = re.search(r"(?:\+7|7|8)\d{10}", caption)
-            norm = normalize_phone_strict(phone_match.group()) if phone_match else None
+
+            # Интеллектуальный поиск номера в описании к файлу
+            norm = extract_and_normalize_phone(caption)
 
             sub = Submission(
                 user_id=user_id,
@@ -200,6 +193,8 @@ class SubmissionService:
                 status=SubmissionStatus.PENDING,
                 phone_normalized=norm,
                 fixed_payout_rate=fixed_payout_rate,
+                is_duplicate=False,
+                last_status_change=now,
             )
             submissions.append(sub)
 
