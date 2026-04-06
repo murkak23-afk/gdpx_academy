@@ -149,19 +149,32 @@ class CategoryService:
         await self._session.delete(category)
         return "deleted"
 
-    async def force_delete_category(self, category_id: int) -> Literal["deleted", "not_found"]:
-        """Принудительно удаляет категорию вместе со всеми связанными submissions."""
+    async def create_category(
+        self,
+        title: str,
+        operator: str,
+        sim_type: str,
+        payout_rate: Decimal,
+        is_active: bool = True,
+    ) -> Category:
+        """Создает новую категорию (кластер) в БД из конструктора."""
+        import re
+        import uuid
 
-        category = await self.get_by_id(category_id)
-        if category is None:
-            return "not_found"
+        # Генерируем безопасный уникальный slug
+        base_slug = re.sub(r"[^a-z0-9]+", "-", title.lower()).strip("-")
+        unique_slug = f"{base_slug}-{uuid.uuid4().hex[:6]}" if base_slug else uuid.uuid4().hex[:12]
 
-        from src.database.models.submission import Submission
-
-        await self._session.execute(
-            sql_delete(Submission)
-            .where(Submission.category_id == category_id)
-            .execution_options(synchronize_session=False)
+        category = Category(
+            title=title.strip(),
+            slug=unique_slug,
+            operator=operator.strip(),
+            sim_type=sim_type.strip(),
+            payout_rate=payout_rate,
+            is_active=is_active,
         )
-        await self._session.delete(category)
-        return "deleted"
+
+        self._session.add(category)           # ← без await!
+        await self._session.flush()
+        await self._session.refresh(category) # обновляем ID
+        return category
