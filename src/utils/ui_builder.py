@@ -24,7 +24,7 @@ HEADER_CATCON = "❖ <b>GDPX // ACADEMY</b> ─ CONFIGURATION"
 HEADER_ASSET = "❖ <b>GDPX // ACADEMY</b> ─ ASSET"
 
 DIVIDER = "▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰"
-DIVIDER_LIGHT = "▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱"
+DIVIDER_LIGHT = "▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱"
 PREFIX_ITEM = "└"
 
 STATUS_EMOJI: dict[str, str] = {

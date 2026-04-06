@@ -59,6 +59,69 @@ class SubmissionService:
         rows = (await self._session.execute(stmt)).all()
         return {int(cid): int(cnt) for cid, cnt in rows}
 
+    async def get_daily_assets_stats(self, user_id: int) -> dict:
+        """Статистика и сумма к выплате строго за сегодняшний день по МСК."""
+        from datetime import datetime, timedelta, timezone
+        from decimal import Decimal
+        from sqlalchemy import select, func, case
+        from src.database.models.enums import SubmissionStatus
+        from src.database.models.submission import Submission
+
+        msk_tz = timezone(timedelta(hours=3))
+        now_msk = datetime.now(msk_tz)
+        start_of_day = now_msk.replace(hour=0, minute=0, second=0, microsecond=0)
+        start_of_day_utc = start_of_day.astimezone(timezone.utc)
+
+        stmt = select(
+            func.count(case((Submission.status == SubmissionStatus.PENDING, 1))),
+            func.count(case((Submission.status == SubmissionStatus.IN_REVIEW, 1))),
+            func.count(case((Submission.status == SubmissionStatus.ACCEPTED, 1))),
+            func.count(case((Submission.status.in_([SubmissionStatus.REJECTED, SubmissionStatus.BLOCKED, SubmissionStatus.NOT_A_SCAN]), 1))),
+            func.coalesce(
+                func.sum(case((Submission.status == SubmissionStatus.ACCEPTED, Submission.fixed_payout_rate))), 
+                Decimal("0.00")
+            )
+        ).where(
+            Submission.user_id == user_id,
+            Submission.last_status_change >= start_of_day_utc
+        )
+
+        result = await self._session.execute(stmt)
+        pending, in_review, accepted, rejected, total_earned = result.one()
+
+        return {
+            "pending": int(pending or 0),
+            "in_review": int(in_review or 0),
+            "accepted": int(accepted or 0),
+            "rejected": int(rejected or 0),
+            "total_earned": Decimal(total_earned or "0.00")
+        }
+
+
+    async def get_best_category_for_user(self, user_id: int) -> int | None:
+        """Определяет самую ходовую категорию за последние 7 дней."""
+        from datetime import datetime, timedelta, timezone
+        from sqlalchemy import select, func, desc
+        from src.database.models.enums import SubmissionStatus
+        from src.database.models.submission import Submission
+
+        week_ago = datetime.now(timezone.utc) - timedelta(days=7)
+
+        stmt = (
+            select(Submission.category_id, func.count(Submission.id).label("cnt"))
+            .where(
+                Submission.user_id == user_id,
+                Submission.status == SubmissionStatus.ACCEPTED,
+                Submission.last_status_change >= week_ago
+            )
+            .group_by(Submission.category_id)
+            .order_by(desc("cnt"))
+            .limit(1)
+        )
+
+        row = (await self._session.execute(stmt)).first()
+        return row[0] if row else None
+
     async def is_duplicate_accepted(self, image_sha256: str) -> bool:
         # Проверка дубликатов отключена по требованию
         return False

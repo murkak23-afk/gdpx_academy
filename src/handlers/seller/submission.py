@@ -84,7 +84,7 @@ async def pick_category(callback: CallbackQuery, callback_data: SellerAssetCD, s
     text = (
         f"{_get_upload_header()}"
         f"🗂 <b>Выбран оператор:</b> <code>{escape(category.title)}</code>\n"
-        f"🪙 <b>Зафиксированная ставка:</b> <code>{category.payout_rate}</code> USDT\n"
+        f"🪙 <b>Стоимость выкупа:</b> <code>{category.payout_rate}</code> USDT\n"
         f"{DIVIDER_LIGHT}\n"
         f"📦 <b>БУФЕР СИМОК:</b> <code>0</code> шт.\n\n"
         f"💾 <b>Отправьте QR-Code, документы или ZIP-архивы.</b>\n"
@@ -100,7 +100,7 @@ async def pick_category(callback: CallbackQuery, callback_data: SellerAssetCD, s
 
 async def _update_status_msg(user_id: int, bot: Bot, state: FSMContext, chat_id: int) -> None:
     """Debounce: обновляет счётчик загруженных файлов в UI."""
-    await asyncio.sleep(1.5)
+    await asyncio.sleep(0.3)  # 600ms debounce
     _debounce_tasks.pop(user_id, None)
 
     data = await state.get_data()
@@ -230,8 +230,13 @@ async def finalize_upload(callback: CallbackQuery, state: FSMContext, session: A
             callback.message, success_text, reply_markup=get_seller_main_kb(), parse_mode="HTML"
         )
 
-        # Уведомление админам
-        asyncio.create_task(_notify_admins_about_upload(bot, user.telegram_id, len(pool), cat_title))
+            # Уведомление админам
+        try:
+            asyncio.create_task(
+                _notify_admins_about_upload(bot, user.telegram_id, len(pool), cat_title)
+        )
+        except Exception as e:
+                logger.error(f"Failed to create admin notification task: {e}")
 
     except Exception as e:
         logger.error(f"Critical error during bulk insert: {e}", exc_info=True)
@@ -259,16 +264,16 @@ async def cancel_upload(callback: CallbackQuery, state: FSMContext) -> None:
 
 
 async def _notify_admins_about_upload(bot: Bot, seller_tg_id: int, count: int, cat_title: str) -> None:
-    """Уведомление админов о новой загрузке."""
+    """Отправка алертов админам."""
     from src.core.config import get_settings
     admin_ids = get_settings().admin_telegram_ids
     if not admin_ids:
         return
 
     text = (
-        f"🔳 <b>НОВЫЙ ЗАЛИВ QR-Code</b>\n"
+        f"🔔 <b>НОВЫЙ ЗАЛИВ АКТИВОВ</b>\n"
         f"Селлер: <a href='tg://user?id={seller_tg_id}'>ID {seller_tg_id}</a>\n"
-        f"Оператор: <code>{escape(cat_title)}</code>\n"
+        f"Кластер: <code>{escape(cat_title)}</code>\n"
         f"Объём: <code>{count}</code> шт.\n\n"
         f"<i>Ожидают модерации.</i>"
     )
@@ -276,5 +281,5 @@ async def _notify_admins_about_upload(bot: Bot, seller_tg_id: int, count: int, c
     for admin_id in admin_ids:
         try:
             await bot.send_message(chat_id=admin_id, text=text, parse_mode="HTML")
-        except Exception:
-            pass
+        except Exception as e:
+            logger.error(f"Не удалось отправить уведомление админу {admin_id}: {e}")
