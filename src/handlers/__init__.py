@@ -8,12 +8,12 @@ from src.handlers.cat_constructor import router as cat_constructor_router
 from src.handlers.group_queue import router as group_queue_router
 from src.handlers.inline_query import router as inline_query_router
 from src.handlers.user_private import user_private_router
-from .search import router as moderation_search_router
 
 # Импорт роутеров модерации
 from src.handlers.moderation.entry import router as mod_entry_router
 from src.handlers.moderation.queue import router as mod_queue_router
 from src.handlers.moderation.inspector import router as mod_inspector_router
+from .moderation.search import router as moderation_search_router
 
 def setup_routers() -> Router:
     root_router = Router()
