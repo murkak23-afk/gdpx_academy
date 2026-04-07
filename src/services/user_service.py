@@ -24,12 +24,9 @@ class UserService:
         result = await self._session.execute(stmt)
         return result.scalar_one_or_none()
 
-    async def get_all_admins(self) -> list[User]:
-        """Возвращает список всех пользователей с ролью admin."""
-
-        stmt = select(User).where(User.role == UserRole.ADMIN, User.is_active.is_(True))
-        result = await self._session.execute(stmt)
-        return list(result.scalars().all())
+    async def get_by_id(self, user_id: int) -> User | None:
+        """Возвращает пользователя по ID."""
+        result = await self._session.get(User, user_id )
 
     async def get_all_active_users(self) -> list[User]:
         """Возвращает всех активных пользователей для рассылки."""
