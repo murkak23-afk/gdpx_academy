@@ -72,32 +72,13 @@ def get_back_to_info_kb(type: str) -> InlineKeyboardMarkup:
 
 # --- АДМИН ---
 def get_admin_main_kb() -> InlineKeyboardMarkup:
-    """Главное меню администратора (с рабочей кнопкой Модерации)"""
+    """Главное меню администратора (только новые разделы)"""
     builder = InlineKeyboardBuilder()
     
-    builder.button(text="🗂 БУФЕР ОСТАТКА", callback_data=AdminMenuCD(section="queue"))
-    builder.button(text="🛡 ОПЕРАЦИОННАЯ ЗОНА", callback_data=AdminMenuCD(section="inwork"))
-    builder.button(text="💼 РЕЕСТР ВЫПЛАТ", callback_data=AdminMenuCD(section="payouts"))
-    builder.button(text="📊 АНАЛИТИКА", callback_data=AdminMenuCD(section="stats"))
-    builder.button(text="📢 РАССЫЛКА", callback_data=AdminMenuCD(section="broadcast"))
-    builder.button(text="🔍 ПОИСК SIM", callback_data=AdminMenuCD(section="search"))
-    
-    # Правильная кнопка Модерации (с callback)
+    # Теперь только кнопка Модерации. Финансы — только через команды.
     builder.button(text="⚖️ МОДЕРАЦИЯ", callback_data=AdminMenuCD(section="moderation"))
     
-    builder.adjust(1, 1, 2, 2, 1)   # красивое расположение
-    return builder.as_markup()
-
-def get_admin_queue_lobby_kb() -> InlineKeyboardMarkup:
-    builder = InlineKeyboardBuilder()
-    builder.button(text="🚀 К ПРОВЕРКЕ", callback_data=AdminQueueCD(action="start"))
-    builder.button(text="❮ НАЗАД", callback_data=NavCD(to="admin_menu"))
     builder.adjust(1)
-    return builder.as_markup()
-
-def get_admin_back_kb(to: str = "admin_menu") -> InlineKeyboardMarkup:
-    builder = InlineKeyboardBuilder()
-    builder.button(text="❮ НАЗАД", callback_data=NavCD(to=to))
     return builder.as_markup()
 
 # --- КОНСТРУКТОР КАТЕГОРИЙ ---

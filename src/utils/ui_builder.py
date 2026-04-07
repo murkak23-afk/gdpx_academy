@@ -14,7 +14,7 @@ from typing import Any
 
 # ─── Визуальные константы (Premium / Terminal Style) ───────────────────
 HEADER_MAIN = "❖ <b>GDPX // ACADEMY</b>  ─ Terminal v2.5" 
-HEADER_ADMIN_MAIN = "❖ <b>GDPX // ACADEMY</b> ─ COMMAND NODE"
+HEADER_ADMIN_MAIN = "❖ <b>GDPX // ACADEMY</b> ─ ADMIN PANEL"
 HEADER_FINANCE = "❖ <b>GDPX // ACADEMY</b> ─ FINANCE"
 HEADER_PROFILE = "🀄️ <b>GDPX // ПРОФИЛЬ АГЕНТА</b>"
 HEADER_QUEUE = "❖ <b>GDPX // ACADEMY</b> ─ DEFECTATION BUFFER"
@@ -170,17 +170,16 @@ class GDPXRenderer:
         return "\n".join([
             HEADER_ADMIN_MAIN,
             DIVIDER,
-            "<b>Управление инфраструктурой Синдиката.</b>",
-            "",
-            f"{greeting}, <b>{escape(actor)}</b>.",
-            "Система функционирует в штатном режиме.",
-            "",
-            "<b>Состояние узлов:</b>",
-            f" ⏳ Ожидают аудита: <code>{pending}</code>",
-            f" 🟠 В работе: <code>{in_review}</code>",
-            f" 🟢 Выкуплено: <code>{approved}</code>",
-            f" 🔴 Отклонено: <code>{rejected}</code>",
+            f"👤 <b>Администратор:</b> {escape(actor)}",
+            f"📅 <b>{greeting}</b>",
+            DIVIDER_LIGHT,
+            "<b>СОСТОЯНИЕ СИСТЕМЫ:</b>",
+            f" ⏳ Ожидают: <code>{pending}</code> шт.",
+            f" 🟠 В работе: <code>{in_review}</code> шт.",
+            f" 🟢 Выкуплено: <code>{approved}</code> шт.",
+            f" 🔴 Брак/Блок: <code>{rejected}</code> шт.",
             DIVIDER,
+            "<i>Выберите раздел для управления:</i>"
         ])
     
 

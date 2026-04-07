@@ -1,66 +1,20 @@
-from src.keyboards.constants import (
-    ADMIN_MAIN_MENU_TEXTS,
-    BUTTON_ENTER_ADMIN_PANEL,
-    BUTTON_EXIT_ADMIN_PANEL,
-    CALLBACK_INLINE_BACK,
-    REPLY_BTN_BACK,
-    is_admin_main_menu_text,
-    is_sell_esim_button,
-    match_admin_menu_canonical,
-    normalize_reply_menu_text,
-)
-from src.keyboards.inline import (
-    admin_main_inline_keyboard,
-    grading_matrix_keyboard,
-    hold_condition_keyboard,
-    moderation_item_keyboard,
-    moderation_reject_template_keyboard,
-    moderation_review_keyboard,
-    moderation_seller_group_keyboard,
-    pagination_keyboard,
-    payout_confirm_keyboard,
-    payout_final_confirm_keyboard,
-    payout_mark_paid_keyboard,
-    search_report_keyboard,
-    seller_main_inline_keyboard,
-)
-from src.keyboards.reply import (
-    FORWARD_REQ_CHAT_CHANNEL,
-    FORWARD_REQ_CHAT_GROUP,
-    FORWARD_REQ_USER_DM,
-    forward_target_reply_keyboard,
-    language_choice_keyboard,
-    seller_main_menu_keyboard,
-)
+from src.keyboards.constants import DIVIDER, DIVIDER_LIGHT, PREFIX_ITEM
+from src.keyboards.base import PremiumBuilder
+from src.keyboards.moderation import get_mod_dashboard_kb, get_inspector_kb
+from src.keyboards.finance import get_paylist_kb, get_topup_kb
+from src.keyboards.seller import get_seller_main_kb, get_seller_profile_kb
+from src.keyboards.owner import get_admin_main_kb
 
 __all__ = [
-    "REPLY_BTN_BACK",
-    "BUTTON_ENTER_ADMIN_PANEL",
-    "BUTTON_EXIT_ADMIN_PANEL",
-    "ADMIN_MAIN_MENU_TEXTS",
-    "CALLBACK_INLINE_BACK",
-
-    "normalize_reply_menu_text",
-    "match_admin_menu_canonical",
-    "is_admin_main_menu_text",
-    "is_sell_esim_button",
-    "language_choice_keyboard",
-    "seller_main_menu_keyboard",
-    "seller_main_inline_keyboard",
-    "admin_main_inline_keyboard",
-    "moderation_item_keyboard",
-    "grading_matrix_keyboard",
-    "payout_confirm_keyboard",
-    "payout_final_confirm_keyboard",
-    "FORWARD_REQ_CHAT_GROUP",
-    "FORWARD_REQ_CHAT_CHANNEL",
-    "FORWARD_REQ_USER_DM",
-    "forward_target_reply_keyboard",
-    "moderation_seller_group_keyboard",
-    "moderation_review_keyboard",
-    "moderation_reject_template_keyboard",
-    "pagination_keyboard",
-    "payout_mark_paid_keyboard",
-    "search_report_keyboard",
-    "hold_condition_keyboard",
+    "DIVIDER",
+    "DIVIDER_LIGHT",
+    "PREFIX_ITEM",
+    "PremiumBuilder",
+    "get_mod_dashboard_kb",
+    "get_inspector_kb",
+    "get_paylist_kb",
+    "get_topup_kb",
+    "get_seller_main_kb",
+    "get_seller_profile_kb",
+    "get_admin_main_kb",
 ]

@@ -15,7 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.config import get_settings
 from src.faq import FAQ_CARDS, get_faq_by_id
-from src.keyboards import seller_main_inline_keyboard
+from src.keyboards.builders import get_seller_main_kb
 from src.keyboards.callbacks import (
     CB_SELLER_FAQ_OPEN,
     CB_SELLER_INFO_FAQ,
@@ -194,7 +194,7 @@ async def on_seller_menu_support(callback: CallbackQuery, session: AsyncSession)
             # Плавная замена на баннер саппорта
             msg = await callback.message.edit_media(
                 media=InputMediaPhoto(media=banner, caption=text, parse_mode="HTML"),
-                reply_markup=seller_main_inline_keyboard()
+                reply_markup=get_seller_main_kb()
             )
             # Кэшируем file_id для мгновенной работы в будущем
             if isinstance(banner, FSInputFile):
@@ -204,7 +204,7 @@ async def on_seller_menu_support(callback: CallbackQuery, session: AsyncSession)
             await edit_message_text_safe(
                 callback.message, 
                 text, 
-                reply_markup=seller_main_inline_keyboard(), 
+                reply_markup=get_seller_main_kb(), 
                 parse_mode="HTML"
             )
 

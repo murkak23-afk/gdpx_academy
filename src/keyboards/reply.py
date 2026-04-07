@@ -76,16 +76,18 @@ def seller_main_menu_keyboard(
     language: UserLanguage = UserLanguage.RU,
     role: UserRole | None = None,
 ) -> ReplyKeyboardMarkup:
-    """Главное меню селлера с быстрым входом в админ-панель для админских ролей."""
+    """Главное меню селлера."""
 
     rows: list[list[KeyboardButton]] = [[KeyboardButton(text="ПРОФИЛЬ")]]
     rows.append([KeyboardButton(text="Продать eSIM")])
     rows.append([KeyboardButton(text="Статистика"), KeyboardButton(text="Справка")])
     rows.append([KeyboardButton(text="Материал"), KeyboardButton(text="История выплат")])
     rows.append([KeyboardButton(text="Поддержка")])
+    
+    # Можно добавить кнопку модерации для админов
     role_value = str(getattr(role, "value", role or "")).strip().lower()
-    if role_value in {UserRole.ADMIN.value, "chief_admin"}:
-        rows.append([KeyboardButton(text="/admin"), KeyboardButton(text=BUTTON_ENTER_ADMIN_PANEL)])
+    if role_value == UserRole.ADMIN.value:
+        rows.append([KeyboardButton(text="⚖️ Модерация")])
 
     return ReplyKeyboardMarkup(
         keyboard=rows,

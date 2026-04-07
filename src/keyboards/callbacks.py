@@ -1,97 +1,9 @@
-"""Единые соглашения по callback_data.
-
-Формат: <scope>:<action>[:arg1[:arg2...]]
-- scope: mod | admin | req | cat | pay | nav | noop | captcha
-- разделители только ":" (кроме уже существующих query-параметров внутри значений)
-"""
+"""Единые соглашения по callback_data (Legacy Seller Support)."""
 
 from __future__ import annotations
 
 # Общие
 CB_NOOP = "noop"
-
-# Навигация
-CB_NAV_INLINE_BACK = "nav:inline_back"
-
-# Модерация
-CB_MOD_TAKE = "mod:take"
-CB_MOD_TAKE_PICK = "mod:take_pick"
-CB_MOD_PICK_CANCEL = "mod:pick_cancel"
-CB_MOD_FORWARD_CANCEL = "mod:forward_cancel"
-CB_MOD_BATCH_ACTION = "mod:batch_action"
-CB_MOD_BATCH_CONFIRM = "mod:batch_confirm"
-CB_MOD_BATCH_CANCEL = "mod:batch_cancel"
-CB_MOD_FORWARD_CONFIRM = "mod:forward_confirm"
-CB_MOD_FORWARD_CONFIRM_CANCEL = "mod:forward_confirm_cancel"
-CB_MOD_QUEUE_PAGE = "mod:queue_page"
-CB_MOD_BUFFER_SELLER = "mod:buf_seller"
-CB_MOD_BUFFER_PAGE = "mod:buf_page"
-CB_MOD_BUFFER_CARD_PAGE = "mod:buf_cp"
-CB_MOD_BUFFER_TOGGLE = "mod:buf_tg"
-CB_MOD_BUFFER_SEL_ALL = "mod:buf_sa"
-CB_MOD_BUFFER_ACT = "mod:buf_act"
-CB_MOD_BUFFER_SEARCH = "mod:buf_search"
-CB_MOD_BUFFER_PICK_QTY = "mod:buf_qty"
-CB_MOD_BUFFER_PICK_N = "mod:buf_n"
-CB_MOD_BUFFER_CFG_CAT = "mod:buf_cfg_cat"
-CB_MOD_BUFFER_CFG_BACK = "mod:buf_cfg_back"
-CB_MOD_BUFFER_CFG_CAT_PAGE = "mod:buf_cfg_cp"
-CB_MOD_BUFFER_CFG_CAT_PICK = "mod:buf_cfg_pick"
-CB_MOD_IN_REVIEW_PAGE = "mod:in_review_page"
-CB_MOD_REJECT = "mod:reject"
-CB_MOD_REJTPL = "mod:rejtpl"
-CB_MOD_REJTPL_BACK = "mod:rejtpl_back"
-CB_MOD_ACCEPT = "mod:accept"
-CB_MOD_DEBIT = "mod:debit"
-CB_MOD_HOLD_SELECT = "mod:hold_select"
-CB_MOD_HOLD_SKIP = "mod:hold_skip"
-
-# Админ отчеты/поиск/статистика
-CB_ADMIN_SEARCH_PAGE = "admin:search_page"
-CB_ADMIN_RESTRICT = "admin:restrict"
-CB_ADMIN_UNRESTRICT = "admin:unrestrict"
-CB_ADMIN_REPORT_SUBMISSION = "admin:report_submission"
-CB_ADMIN_INWORK_SEARCH = "admin:inwork_search"
-CB_ADMIN_INWORK_OPEN = "admin:inwork_open"
-CB_ADMIN_INWORK_SELLER = "admin:inwork_seller"
-CB_ADMIN_INWORK_SELLER_PAGE = "admin:inwork_sp"
-CB_ADMIN_INWORK_TOGGLE = "admin:inwork_tg"
-CB_ADMIN_INWORK_SEL_ALL = "admin:inwork_sa"
-CB_ADMIN_INWORK_BATCH_ACT = "admin:inwork_ba"
-CB_ADMIN_INWORK_CARD_SEARCH = "admin:inwork_cs"
-CB_ADMIN_INWORK_PICK_QTY = "admin:inwork_qty"
-CB_ADMIN_INWORK_PICK_N = "admin:inwork_n"
-CB_ADMIN_QUEUE = "admin:queue"
-CB_ADMIN_QUEUE_START = "admin:queue_start"
-CB_ADMIN_QUEUE_SEARCH = "admin:queue:search"
-CB_ADMIN_QUEUE_FILTER_CAT = "admin:queue:filter_cat"
-CB_ADMIN_QUEUE_PAGE = "admin:queue:page"
-CB_ADMIN_INWORK_HUB = "admin:inwork_hub"
-CB_ADMIN_PAYOUTS = "admin:payouts"
-CB_ADMIN_STATS_MONTH = "admin:stats_month"
-CB_ADMIN_STATS_EXPORT_MONTH = "admin:stats_export_month"
-CB_ADMIN_STATS_RESET = "admin:stats_reset"
-CB_ADMIN_STATS_RESET_CONFIRM = "admin:stats_reset_confirm"
-CB_ADMIN_DASHBOARD_RESET = "admin:dashboard_reset"
-CB_ADMIN_DASHBOARD_RESET_CONFIRM = "admin:dashboard_reset_confirm"
-CB_ADMIN_BROADCAST = "admin:broadcast"
-
-# Категории/выплаты/капча
-CB_PAY_MARK = "pay:mark"
-CB_PAY_CONFIRM = "pay:confirm"
-CB_PAY_FINAL_CONFIRM = "pay:final_confirm"
-CB_PAY_TOPUP = "pay:topup"
-CB_PAY_TOPUP_CHECK = "pay:topup_check"
-CB_PAY_CANCEL = "pay:cancel"
-CB_PAY_TRASH = "pay:trash"
-CB_PAY_HISTORY_PAGE = "pay:hist_page"
-CB_PAY_TRASH_PAGE = "pay:trash_page"
-CB_PAY_LEDGER_PAGE = "pay:ledger_page"
-CB_PAY_PENDING_PAGE = "pay:pending_page"
-CB_PAY_PENDING_DELETE = "pay:pending_delete"
-CB_ADMIN_INWORK_PAGE = "admin:inwork_page"
-CB_CAPTCHA_START = "captcha:start"
-CB_CAPTCHA_CANCEL = "captcha:cancel"
 
 # Seller: material and payouts history
 CB_SELLER_MAT_CAT = "seller:mat:cat"
@@ -128,27 +40,4 @@ CB_SELLER_BATCH_REJECT = "seller:batch:reject"
 CB_SELLER_BATCH_CSV_YES = "seller:batch:csv_yes"
 CB_SELLER_BATCH_CSV_NO = "seller:batch:csv_no"
 CB_SELLER_FSM_CAT = "seller:fsm:cat"
-
-# Поиск симки (админ)
-CB_ADMIN_SEARCH_SIM = "admin:search_sim"
-
-# Матрица оценки (Grading Matrix)
-CB_GRADE_TAKE = "grade:take"
-CB_GRADE_ACCEPT = "grade:accept"
-CB_GRADE_NOT_SCAN = "grade:not_scan"
-CB_GRADE_BLOCKED = "grade:blocked"
-CB_GRADE_OTHER = "grade:other"
-
-# Конструктор категорий
-CB_CATCON_OPERATOR = "catcon:op"
-CB_CATCON_TYPE = "catcon:type"
-CB_CATCON_HOLD = "catcon:hold"
-CB_CATCON_CONFIRM = "catcon:confirm"
-CB_CATCON_CANCEL = "catcon:cancel"
-CB_CATCON_LIST = "catcon:list"
-CB_CATCON_TOGGLE = "catcon:toggle"
-CB_CATCON_DETAIL = "catcon:detail"
-CB_CATCON_EDIT = "catcon:edit"
-CB_CATCON_DELETE = "catcon:del"
-CB_CATCON_DELETE_YES = "catcon:del_yes"
-CB_CATCON_FORCE_DELETE_YES = "catcon:del_force"
+CB_SELLER_DEPLOY_REPEAT = "seller:deploy:repeat"
