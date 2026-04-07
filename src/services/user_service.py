@@ -19,25 +19,28 @@ class UserService:
 
     async def get_by_telegram_id(self, telegram_id: int) -> User | None:
         """Возвращает пользователя по telegram_id."""
-
         stmt = select(User).where(User.telegram_id == telegram_id)
         result = await self._session.execute(stmt)
         return result.scalar_one_or_none()
 
     async def get_by_id(self, user_id: int) -> User | None:
-        """Возвращает пользователя по ID."""
-        result = await self._session.get(User, user_id )
+        """Возвращает пользователя по внутреннему ID."""
+        return await self._session.get(User, user_id)
+
+    async def get_all_admins(self) -> list[User]:
+        """Возвращает список всех пользователей с ролью admin."""
+        stmt = select(User).where(User.role == UserRole.ADMIN, User.is_active.is_(True))
+        result = await self._session.execute(stmt)
+        return list(result.scalars().all())
 
     async def get_all_active_users(self) -> list[User]:
         """Возвращает всех активных пользователей для рассылки."""
-
         stmt = select(User).where(User.is_active.is_(True))
         result = await self._session.execute(stmt)
         return list(result.scalars().all())
 
     async def list_active_sellers(self) -> list[User]:
         """Активные продавцы и админы (у кого может быть выгрузка) для «Запросов»."""
-
         stmt = (
             select(User)
             .where(

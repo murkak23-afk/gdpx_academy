@@ -41,10 +41,17 @@ async def show_seller_detail(callback: CallbackQuery, callback_data: AdminSeller
         await on_moderation_queue(callback, session)
         return
 
-    seller = await UserService(session=session).get_by_id(callback_data.user_id)
+    # Загружаем селлера напрямую из сессии
+    from src.database.models.user import User
+    seller = await session.get(User, callback_data.user_id)
+    
+    # Отказоустойчивая обработка: если селлер удален из БД, но активы остались
+    seller_name = "Удаленный агент"
+    if seller:
+        seller_name = f"@{seller.username}" if seller.username else f"ID:{seller.id}"
 
     lines = [
-        f"❖ <b>АКТИВЫ: @{seller.username or 'ID:'+str(seller.id)}</b>\n{DIVIDER}",
+        f"❖ <b>АКТИВЫ: {seller_name}</b>\n{DIVIDER}",
         "<i>Инвентарь в очереди:</i>\n"
     ]
 
