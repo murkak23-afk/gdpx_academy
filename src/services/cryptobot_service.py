@@ -50,7 +50,7 @@ class CryptoBotService:
         pass
 
     async def _get_client(self) -> CryptoPay:
-        """Возвращает (или создаёт) клиент CryptoPay с использованием глобальной сессии."""
+        """Возвращает (или создаёт) клиент CryptoPay."""
 
         settings = get_settings()
         token = settings.crypto_pay_token
@@ -59,8 +59,8 @@ class CryptoBotService:
 
         if token not in _client_cache:
             logger.info("CryptoBot init (token prefix=%s)", token[:5])
-            session = await get_http_session()
-            _client_cache[token] = CryptoPay(token, session=session)
+            # aiosend сам создаст сессию внутри, если не передавать параметр session
+            _client_cache[token] = CryptoPay(token)
 
         return _client_cache[token]
 
