@@ -8,6 +8,7 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 class Base(DeclarativeBase):
     """Базовый класс всех ORM-моделей."""
+    pass
 
 
 class TimestampMixin:

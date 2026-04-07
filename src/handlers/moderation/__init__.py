@@ -1,3 +1,10 @@
+
+from .entry import router as entry_router
+from .queue import router as queue_router
+from .inspector import router as inspector_router
+
+from .queue import on_moderation_queue
+
 from src.handlers.moderation.actions import (
     on_accept,
     on_debit,

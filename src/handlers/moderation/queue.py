@@ -14,7 +14,7 @@ router = Router(name="moderation-queue-router")
 
 @router.callback_query(AdminQueueCD.filter(F.action == "start"))
 @router.callback_query(F.data == "mod_q:refresh")
-async def show_sellers_list(callback: CallbackQuery, session: AsyncSession):
+async def on_moderation_queue(callback: CallbackQuery, session: AsyncSession):
     """Уровень 1: Список продавцов с ожидающими активами."""
     mod_service = ModerationService(session=session)
     sellers_data = await mod_service.get_pending_sellers()
@@ -38,7 +38,7 @@ async def show_seller_detail(callback: CallbackQuery, callback_data: AdminSeller
 
     if not items:
         await callback.answer("🔴 Очередь продавца уже разобрана!", show_alert=True)
-        await show_sellers_list(callback, session)
+        await on_moderation_queue(callback, session)
         return
 
     seller = await UserService(session=session).get_by_id(callback_data.user_id)
