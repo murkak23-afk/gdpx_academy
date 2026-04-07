@@ -34,34 +34,44 @@ _ACTION_PRESETS = {
 
 @router.message(Command("sim"), F.chat.type.in_({"group", "supergroup"}))
 async def cmd_sim_start(message: Message, session: AsyncSession):
-    """Показывает список категорий для выдачи в текущий топик."""
+    """Показывает список категорий для выдачи в текущий топик с учетом приоритетов."""
     if not await AdminService(session=session).is_admin(message.from_user.id): return
     
     mod_svc = ModerationService(session=session)
     queue = await mod_svc.get_pending_queue(limit=999)
-    
     if not queue:
         return await message.answer("📭 <b>Очередь абсолютно пуста.</b>", parse_mode="HTML")
         
-    # Группируем
+    # Группируем с сохранением статуса приоритета
     cats_data = {}
     for item in queue:
         cat_id = item.category_id
         if cat_id not in cats_data:
-            cats_data[cat_id] = {"title": getattr(item.category, "title", "Unknown"), "count": 0}
+            cats_data[cat_id] = {
+                "title": getattr(item.category, "title", "Unknown"), 
+                "count": 0,
+                "is_prio": getattr(item.category, "is_priority", False)
+            }
         cats_data[cat_id]["count"] += 1
         
     from aiogram.utils.keyboard import InlineKeyboardBuilder
     builder = InlineKeyboardBuilder()
     
-    for cid, data in sorted(cats_data.items(), key=lambda x: x[1]["count"], reverse=True):
-        btn_text = f"{data['title']} — {data['count']} шт."
+    text = "❖ <b>ДОСТУПНО ДЛЯ ВЫДАЧИ:</b>\n▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰\n"
+    
+    # Сортируем: сначала приоритетные, затем по количеству
+    for cid, data in sorted(cats_data.items(), key=lambda x: (x[1]["is_prio"], x[1]["count"]), reverse=True):
+        emoji = "🏮 " if data["is_prio"] else ""
+        text += f" ├ {emoji}📦 <b>{escape(data['title'])}:</b> <code>{data['count']}</code> шт.\n"
+        
+        btn_text = f"{emoji}{data['title']} — {data['count']} шт."
         builder.button(text=btn_text, callback_data=SimQueueCD(action="cat", cat_id=cid).pack())
         
     builder.adjust(1)
-    
-    text = "📋 <b>Очередь активов</b>\n\nВыберите категорию для выдачи в эту тему:"
+        
+    text += "\n<i>Для выдачи перейдите в нужный топик, введите <code>/sim</code>, выберите категорию и количество. Бот автоматически перешлёт фото в этот топик.</i>"
     await message.answer(text, reply_markup=builder.as_markup(), parse_mode="HTML")
+
 
 @router.callback_query(SimQueueCD.filter(F.action == "cat"))
 async def cmd_sim_cat_selected(callback: CallbackQuery, callback_data: SimQueueCD, session: AsyncSession):

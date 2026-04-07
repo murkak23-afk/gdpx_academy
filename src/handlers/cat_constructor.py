@@ -191,19 +191,38 @@ parse_mode="HTML")
 
 @router.callback_query(CatManageCD.filter(F.action == "toggle_priority"))
 async def cat_manage_toggle_priority(callback: CallbackQuery, callback_data: CatManageCD, session: AsyncSession) -> None:
-    """Изменение приоритета кластера (🏮)."""
+    """Изменение приоритета кластера (🏮) с СМС в общий чат."""
     cat = await CategoryService(session=session).get_by_id(callback_data.cat_id)
     if not cat: return
-          
+
     new_prio = not getattr(cat, "is_priority", False)
     await CategoryService(session=session).set_priority(cat.id, new_prio)
     await session.commit()
-         
+ 
     cat = await CategoryService(session=session).get_by_id(callback_data.cat_id)
     text = _r.render_category_manage(cat)
     await edit_message_text_or_caption_safe(callback.message, text, reply_markup=get_cat_manage_detail_kb(cat),
 parse_mode="HTML")
-    await callback.answer("Уровень изменен")
+    await callback.answer("Приоритет изменен")
+
+    # Если включили приоритет — кидаем СМС в общий чат модерации/ворка
+    if new_prio:
+        from src.core.config import get_settings
+        chat_id = get_settings().moderation_chat_id
+        if chat_id:
+            try:
+                alert_text = (
+                    f"🚨 <b>ВНИМАНИЕ! ГОРЯЩИЙ ЗАПРОС!</b>\n"
+                    f"▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰\n"
+                    f"Срочно нужен материал:\n"
+                    f"📦 <b>{cat.title}</b>\n"
+                    f"💰 Ставка выкупа: <b>{cat.payout_rate} USDT</b>\n\n"
+                    f"<i>Агенты, ждем загрузок!</i>"
+                )
+                await callback.bot.send_message(chat_id=chat_id, text=alert_text, parse_mode="HTML")
+            except Exception:
+                pass
+
 
 @router.callback_query(CatManageCD.filter(F.action == "confirm_delete"))
 async def cat_manage_confirm_delete(callback: CallbackQuery, callback_data: CatManageCD, session: AsyncSession) -> None:

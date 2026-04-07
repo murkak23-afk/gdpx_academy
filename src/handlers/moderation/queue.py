@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 from aiogram import Router, F
 from aiogram.types import CallbackQuery
 from sqlalchemy.ext.asyncio import AsyncSession
+from aiogram.fsm.context import FSMContext
 
 from src.services.moderation_service import ModerationService
 from src.services.user_service import UserService
@@ -14,8 +15,10 @@ router = Router(name="moderation-queue-router")
 
 @router.callback_query(AdminQueueCD.filter(F.action == "start"))
 @router.callback_query(F.data == "mod_q:refresh")
-async def on_moderation_queue(callback: CallbackQuery, session: AsyncSession):
+async def on_moderation_queue(callback: CallbackQuery, session: AsyncSession, state: FSMContext):
+    await state.clear() 
     """Уровень 1: Список продавцов с ожидающими активами."""
+
     mod_service = ModerationService(session=session)
     sellers_data = await mod_service.get_pending_sellers()
 
@@ -31,14 +34,16 @@ async def on_moderation_queue(callback: CallbackQuery, session: AsyncSession):
     await callback.message.edit_text(text, reply_markup=get_sellers_queue_kb(sellers_data), parse_mode="HTML")
 
 @router.callback_query(AdminSellerQueueCD.filter(F.action == "view"))
-async def show_seller_detail(callback: CallbackQuery, callback_data: AdminSellerQueueCD, session: AsyncSession):
+async def show_seller_detail(callback: CallbackQuery, callback_data: AdminSellerQueueCD, session: AsyncSession, state: FSMContext):
     """Уровень 2: Детализация по конкретному продавцу."""
-    mod_service = ModerationService(session=session)
-    items = await mod_service.get_pending_for_seller(callback_data.user_id, limit=10)
+    await state.clear()
 
+    mod_service = ModerationService(session=session)
+    items = await mod_service.get_pending_for_seller(callback_data.user_id, limit=100)
+    
     if not items:
         await callback.answer("🔴 Очередь продавца уже разобрана!", show_alert=True)
-        await on_moderation_queue(callback, session)
+        await on_moderation_queue(callback, session, state)
         return
 
     # Загружаем селлера напрямую из сессии

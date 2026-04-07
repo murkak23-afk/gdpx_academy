@@ -8,6 +8,7 @@ from src.handlers.cat_constructor import router as cat_constructor_router
 from src.handlers.group_queue import router as group_queue_router
 from src.handlers.inline_query import router as inline_query_router
 from src.handlers.user_private import user_private_router
+from src.handlers.finance.payouts import router as finance_payouts_router
 
 # Импорт роутеров модерации
 from src.handlers.moderation.entry import router as mod_entry_router
@@ -29,7 +30,7 @@ def setup_routers() -> Router:
 
     # 2. ПРИОРИТЕТ: Админка
     root_router.include_router(admin_router)
-    
+    root_router.include_router(finance_payouts_router)
     # Технические роутеры
     root_router.include_router(grading_router)
     root_router.include_router(cat_constructor_router)
