@@ -3,7 +3,7 @@ from src.services.admin_chat_forward_stats_service import AdminChatForwardStatsS
 from src.services.admin_service import AdminService
 from src.services.admin_stats_service import AdminStatsService
 from src.services.archive_service import ArchiveService
-from src.services.billing_service import BillingService
+from src.services.bill_service import BillingService
 from src.services.category_service import CategoryService
 from src.services.cryptobot_service import CryptoBotService, CryptoCheckResult
 from src.services.seller_quota_service import SellerQuotaService
