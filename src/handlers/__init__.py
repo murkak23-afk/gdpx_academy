@@ -13,7 +13,9 @@ from src.handlers.user_private import user_private_router
 from src.handlers.moderation.entry import router as mod_entry_router
 from src.handlers.moderation.queue import router as mod_queue_router
 from src.handlers.moderation.inspector import router as mod_inspector_router
-from .moderation.search import router as moderation_search_router
+from src.handlers.moderation.search import router as moderation_search_router
+from src.handlers.moderation.batch import router as batch_router
+
 
 def setup_routers() -> Router:
     root_router = Router()
@@ -23,6 +25,7 @@ def setup_routers() -> Router:
     root_router.include_router(mod_queue_router)
     root_router.include_router(mod_inspector_router)
     root_router.include_router(moderation_search_router)   # ←←← ДОБАВЬ ЭТУ СТРОКУ
+    root_router.include_router(batch_router)
 
     # 2. ПРИОРИТЕТ: Админка
     root_router.include_router(admin_router)
