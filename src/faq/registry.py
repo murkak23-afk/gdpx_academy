@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-DIVIDER = "━━━━━━━━━━━━━━━━━━━━"
+DIVIDER = "▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰"
 
 
 @dataclass(frozen=True)
@@ -222,7 +222,7 @@ _FAQ_CARDS: tuple[FaqCard, ...] = (
             f"{DIVIDER}\n"
             f"📡 <b>STATUS:</b> <code>UNDER ARCHITECT OVERWATCH</code>\n"
             f" ╰ <i>Архитектор мониторит фрод-алгоритм 24/7.</i>"
-        ), 
+        ),
     ),
 )
 

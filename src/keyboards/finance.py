@@ -23,6 +23,9 @@ def get_paylist_kb(sellers: list, page: int, total: int) -> InlineKeyboardMarkup
         builder.builder.button(text=f"{EMOJI_REFRESH} ОБНОВИТЬ", callback_data=FinancePayCD(action="list", page=page).pack()).button,
         builder.builder.button(text="📜 ИСТОРИЯ", callback_data=FinancePayCD(action="history").pack()).button
     )
+    builder.row(
+        builder.builder.button(text="❮ НАЗАД В МЕНЮ", callback_data="owner_back_main").button
+    )
     return builder.as_markup()
 
 def get_payout_confirm_kb(user_id: int, page: int) -> InlineKeyboardMarkup:
@@ -54,16 +57,16 @@ def get_payout_history_kb(payouts: list, page: int, total: int, filter_status: s
     
     builder.adjust(2, 2, 1)
     builder.pagination("fin_hist", page, total, 10, query=filter_status)
-    builder.back(FinancePayCD(action="list"), "К ВЫПЛАТАМ")
+    builder.back("owner_back_main", "❮ НАЗАД В МЕНЮ")
     return builder.as_markup()
 
-def get_payout_detail_kb(payout_id: int, page: int, status: str = "paid") -> InlineKeyboardMarkup:
+def get_payout_detail_kb(payout_id: int, status: str, page: int, filter_status: str) -> InlineKeyboardMarkup:
     """Детальный просмотр транзакции."""
     builder = PremiumBuilder()
     if status == "paid":
-        builder.button("↩️ ОТМЕНИТЬ ВЫПЛАТУ (UNDO)", FinancePayCD(action="undo_ask", payout_id=payout_id, page=page))
+        builder.button("↩️ ОТМЕНИТЬ ВЫПЛАТУ (UNDO)", FinancePayCD(action="undo_ask", payout_id=payout_id, page=page, filter_status=filter_status))
     
-    builder.back(FinancePayCD(action="history", page=page), "К СПИСКУ")
+    builder.back(FinancePayCD(action="history", page=page, filter_status=filter_status), "« К СПИСКУ")
     builder.adjust(1)
     return builder.as_markup()
 

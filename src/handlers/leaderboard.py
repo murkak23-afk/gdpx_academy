@@ -2,14 +2,13 @@ from __future__ import annotations
 
 from decimal import Decimal
 
-from sqlalchemy import select
-
 from aiogram import F, Router
 from aiogram.types import (
     CallbackQuery,
     InlineKeyboardButton,
     InlineKeyboardMarkup,
 )
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.database.models.user import User
@@ -30,7 +29,7 @@ from src.utils.text_format import edit_message_text_or_caption_safe as edit_mess
 router = Router(name="leaderboard-router")
 
 _MEDALS = ["🥇", "🥈", "🥉", "▪️", "▪️"]
-_DIVIDER = "▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰"
+_DIVIDER = "▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰"
 
 
 # ── Text / keyboard builders ───────────────────────────────────────────────
@@ -115,9 +114,7 @@ async def _resolve_internal_user_id(session: AsyncSession, telegram_id: int) -> 
 
 @router.callback_query(F.data == CB_LEADERBOARD_OPEN)
 @router.callback_query(F.data == CB_LEADERBOARD_REFRESH)
-async def on_leaderboard_open(
-    callback: CallbackQuery, session: AsyncSession
-) -> None:
+async def on_leaderboard_open(callback: CallbackQuery, session: AsyncSession) -> None:
     if callback.from_user is None or callback.message is None:
         return
 

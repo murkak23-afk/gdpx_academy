@@ -10,7 +10,7 @@ from src.core.stats_epoch import get_stats_epoch
 from src.database.models.category import Category
 from src.database.models.enums import SubmissionStatus
 from src.database.models.publication import Payout
-from src.database.models.submission import Submission
+from src.database.models.submission import Submission, ReviewAction
 from src.database.models.user import User
 
 
@@ -321,54 +321,77 @@ class AdminStatsService:
         rows = (await self._session.execute(stmt)).all()
         return [(str(t), int(c), Decimal(a)) for t, c, a in rows]
 
-    async def payout_rows_paginated(
-        self,
-        start: datetime,
-        end: datetime,
-        page: int,
-        page_size: int,
-    ) -> tuple[list[dict[str, int | str | Decimal]], int]:
-        """Продавцы с выплатами за период: сумма, число выплат."""
+    async def get_users_paginated(
+        self, 
+        page: int, 
+        page_size: int = 20, 
+        role: UserRole | None = None
+    ) -> tuple[list[User], int]:
+        """Получить список пользователей с пагинацией и фильтром по роли."""
+        stmt = select(User)
+        if role:
+            stmt = stmt.where(User.role == role)
+        
+        # Считаем общее количество
+        count_stmt = select(func.count(User.id))
+        if role:
+            count_stmt = count_stmt.where(User.role == role)
+        total = await self._session.scalar(count_stmt) or 0
+        
+        # Получаем данные
+        stmt = stmt.order_by(User.created_at.desc()).offset(page * page_size).limit(page_size)
+        res = await self._session.execute(stmt)
+        return res.scalars().all(), total
 
-        subq = (
-            select(
-                Payout.user_id,
-                func.coalesce(func.sum(Payout.amount), Decimal("0")).label("total_amt"),
-                func.count(Payout.id).label("cnt"),
-            )
-            .where(
-                Payout.created_at >= self._effective_start(start),
-                Payout.created_at <= end,
-            )
-            .group_by(Payout.user_id)
-            .subquery()
-        )
-        count_stmt = select(func.count()).select_from(subq)
-        total = int((await self._session.execute(count_stmt)).scalar_one() or 0)
+    async def get_user_detailed_info(self, user_id: int) -> User | None:
+        """Получить полную информацию о пользователе по его внутреннему ID."""
+        return await self._session.get(User, user_id)
 
+    async def get_online_moderators(self, minutes: int = 30) -> list[dict]:
+        """Список модераторов, активных за последние N минут."""
+        since = datetime.now(timezone.utc) - timedelta(minutes=minutes)
+        
+        # Получаем последних активных модераторов через ReviewAction
         stmt = (
-            select(User, subq.c.total_amt, subq.c.cnt)
-            .join(subq, User.id == subq.c.user_id)
-            .order_by(subq.c.total_amt.desc())
-            .offset(page * page_size)
-            .limit(page_size)
+            select(User.username, User.telegram_id, func.max(ReviewAction.created_at).label("last_act"))
+            .join(ReviewAction, ReviewAction.admin_id == User.id)
+            .where(ReviewAction.created_at >= since)
+            .group_by(User.id)
+            .order_by(func.max(ReviewAction.created_at).desc())
         )
+        
         rows = (await self._session.execute(stmt)).all()
-        out: list[dict[str, int | str | Decimal]] = []
-        for user, total_amt, cnt in rows:
-            out.append(
-                {
-                    "user_id": user.id,
-                    "telegram_id": user.telegram_id,
-                    "username": user.username or "",
-                    "label": f"@{user.username}" if user.username else f"@{user.telegram_id}",
-                    "total_paid": total_amt,
-                    "payout_count": int(cnt),
-                }
-            )
-        return out, total
+        return [
+            {
+                "username": r.username or str(r.telegram_id),
+                "last_active": r.last_act
+            }
+            for r in rows
+        ]
 
-    async def avg_accept_amount(self, start: datetime, end: datetime) -> Decimal:
+    async def get_recent_moderation_actions(self, limit: int = 10) -> list[dict]:
+        """Последние N действий модерации для лога в Командном центре."""
+        stmt = (
+            select(ReviewAction, User.username, Submission.phone_normalized, Submission.id)
+            .join(User, ReviewAction.admin_id == User.id)
+            .join(Submission, ReviewAction.submission_id == Submission.id)
+            .order_by(ReviewAction.created_at.desc())
+            .limit(limit)
+        )
+        
+        res = await self._session.execute(stmt)
+        out = []
+        for action, username, phone, sub_id in res.all():
+            out.append({
+                "admin": username or "Admin",
+                "phone": phone,
+                "sub_id": sub_id,
+                "to_status": action.to_status,
+                "time": action.created_at
+            })
+        return out
+
+    async def get_avg_accept_amount(self, start: datetime, end: datetime) -> Decimal:
         effective = self._effective_start(start)
         stmt = select(func.avg(Submission.accepted_amount)).where(
             Submission.status == SubmissionStatus.ACCEPTED,

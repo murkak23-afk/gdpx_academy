@@ -40,14 +40,22 @@ async def _render_dashboard_text(session: AsyncSession, user_id: int) -> tuple[s
         in_work = await mod_service.get_my_active_items(user.id)
         my_accepted, my_rejected = await mod_service.get_admin_daily_stats(user.id)
     
+    from src.core.config import get_settings
+    settings = get_settings()
+    
     total_processed = stats['processed_today']
     total_target = max(1, total_processed + stats['total_pending'])
     progress = _generate_progress_bar(total_processed, total_target)
     percent = min(100, int((total_processed / total_target) * 100)) if total_target > 0 else 0
 
+    status_warning = ""
+    if getattr(settings, "moderation_suspended", False):
+        status_warning = f"⚠️ <b>ВНИМАНИЕ: РАБОТА ПРИОСТАНОВЛЕНА ВЛАДЕЛЬЦЕМ</b>\n{DIVIDER_LIGHT}\n"
+
     text = (
         f"❖ <b>GDPX // ЦЕНТР УПРАВЛЕНИЯ МОДЕРАЦИЕЙ</b>\n"
         f"{DIVIDER}\n"
+        f"{status_warning}"
         f"📦 <b>Общая очередь:</b> <code>{stats['total_pending']}</code> активов\n"
         f"🏃 <b>У вас в работе:</b> <code>{in_work}</code> шт.\n"
         f"{DIVIDER_LIGHT}\n"
@@ -62,43 +70,34 @@ async def _render_dashboard_text(session: AsyncSession, user_id: int) -> tuple[s
     return text, stats['total_pending'], in_work
 
 
-@router.message(Command("a", "admin", prefix="/!"))
-@router.message(F.text.casefold().regexp(r"^[/!](a|admin)$"))
-@router.message(F.text.casefold().contains("модерация"))
-async def cmd_moderation_dashboard_msg(message: Message, session: AsyncSession):
-    from src.services.admin_service import AdminService
-    if not await AdminService(session=session).is_admin_strictly(message.from_user.id):
-        return
-    text, pending, in_work = await _render_dashboard_text(session, message.from_user.id)
-    await message.answer(text, reply_markup=get_mod_dashboard_kb(pending, in_work), parse_mode="HTML")
-
-
 @router.callback_query(AdminMenuCD.filter(F.section == "moderation"))
 @router.callback_query(F.data == "mod_back_dash")
 async def cmd_moderation_dashboard_cb(callback: CallbackQuery, session: AsyncSession, state: FSMContext):
     await state.clear()  # Чистим состояние при входе в дашборд
+    from src.handlers.admin import on_enter_moderator_panel
+    await on_enter_moderator_panel(callback, session)
+    await callback.answer()
 
+@router.callback_query(F.data == "mod_exit")
+async def cmd_moderation_exit(callback: CallbackQuery, session: AsyncSession, state: FSMContext):
+    """Выход из режима модерации: Овнер -> /o, Админ -> Главное меню."""
+    await state.clear()
     from src.services.admin_service import AdminService
-    if not await AdminService(session=session).is_admin_strictly(callback.from_user.id):
-        return
-    text, pending, in_work = await _render_dashboard_text(session, callback.from_user.id)
+    admin_svc = AdminService(session=session)
     
-    # ФИКС: Telegram API Error: message is not modified
-    # Если текст и клавиатура не изменились, просто отвечаем на колбэк
-    from src.keyboards.moderation import get_mod_dashboard_kb
-    new_kb = get_mod_dashboard_kb(pending, in_work)
-    
-    try:
-        await edit_message_text_or_caption_safe(
-            callback.message, 
-            text, 
-            reply_markup=new_kb,
-            parse_mode="HTML"
-        )
-    except Exception as e:
-        if "message is not modified" not in str(e):
-            raise e
-            
+    if await admin_svc.is_owner_strictly(callback.from_user.id):
+        from src.handlers.admin import on_enter_owner_panel
+        await on_enter_owner_panel(callback, session)
+    else:
+        # Для обычных админов - возврат в общее главное меню (селлерское)
+        from src.services.user_service import UserService
+        from src.handlers.start import _show_main_dashboard
+        user = await UserService(session=session).get_by_telegram_id(callback.from_user.id)
+        if user:
+            await _show_main_dashboard(callback, user, session)
+        else:
+            await callback.answer("🏠 Возврат в меню...")
+            # Fallback на /start
     await callback.answer()
 
 @router.callback_query(F.data == "mod_my_work_folder")

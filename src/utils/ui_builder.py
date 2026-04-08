@@ -1,7 +1,7 @@
 """GDPX — дизайн-система интерфейса бота.
 
 Все экраны отрисовываются в формате HTML (parse_mode='HTML').
-Единая визуальная тема: "Monochrome Blocks". Брутальная геометрия, 
+Единая визуальная тема: "Monochrome Blocks". Брутальная геометрия,
 крупные индикаторы, массивные разделители.
 """
 
@@ -14,7 +14,7 @@ from html import escape
 from typing import Any
 
 from src.keyboards.constants import (
-    HEADER_MAIN, HEADER_ADMIN_MAIN, HEADER_OWNER_MAIN, 
+    HEADER_MAIN, HEADER_ADMIN_MAIN, HEADER_OWNER_MAIN,
     HEADER_PROFILE, HEADER_HISTORY, HEADER_FINANCE,
     HEADER_QUEUE, HEADER_CATCON, HEADER_STATS, DIVIDER, DIVIDER_LIGHT,
     PREFIX_ITEM, PREFIX_LAST, STATUS_EMOJI
@@ -65,9 +65,9 @@ class GDPXRenderer:
         return "\n".join([f"<code>> {log}</code>" for log in selected])
 
     def render_seller_profile_premium(
-        self, 
-        user: Any, 
-        stats: Mapping[str, Any], 
+        self,
+        user: Any,
+        stats: Mapping[str, Any],
         recent_submissions: Sequence[Any]
     ) -> str:
         """Премиальный рендеринг профиля селлера (Silver Sakura)."""
@@ -78,7 +78,7 @@ class GDPXRenderer:
         username = user.nickname or user.pseudonym or user.username or str(user.telegram_id)
         if user.is_incognito:
             username = "🕶 INCOGNITO"
-        
+
         greeting = get_time_greeting()
         rank_name, rank_emoji, rank_desc, next_target = self._rank_info(approved)
         progress_bar = self._rank_progress_bar(approved, next_target)
@@ -154,7 +154,7 @@ class GDPXRenderer:
         """Отрисовка детальной статистики за период."""
         pos, total = rank_pos
         quality = stats.get("quality", 100.0)
-        
+
         return "\n".join([
             f"📈 <b>STATISTICS // [{period_label.upper()}]</b>",
             self._render_heartbeat(),
@@ -177,7 +177,7 @@ class GDPXRenderer:
         alias = user.nickname or user.pseudonym or "не установлен"
         incognito = "ВКЛЮЧЕН 🎭" if user.is_incognito else "ВЫКЛЮЧЕН ▫️"
         has_pin = "УСТАНОВЛЕН ✅" if user.pin_code else "НЕ УСТАНОВЛЕН ❌"
-        
+
         return "\n".join([
             "⚙️ <b>GDPX // CONFIGURATION</b>",
             self._render_heartbeat(),
@@ -240,7 +240,7 @@ class GDPXRenderer:
         total_cells = 12
         if next_target is None:
             return "▰" * total_cells
-        
+
         # Для корректного отображения прогресса внутри текущего ранга
         ranges = [0, 51, 301, 1001, 3001, 8001]
         current_base = 0
@@ -249,10 +249,10 @@ class GDPXRenderer:
                 current_base = r
             else:
                 break
-        
+
         needed = next_target - current_base
         current_progress = approved_count - current_base
-        
+
         ratio = min(max(current_progress / (needed or 1), 0), 1.0)
         filled = int(round(ratio * total_cells))
         return ("▰" * filled) + ("▱" * (total_cells - filled))
@@ -266,38 +266,11 @@ class GDPXRenderer:
             DIVIDER,
         ])
 
-    def render_admin_dashboard(self, stats: Mapping[str, Any]) -> str:
-        """Премиальный рендеринг дашборда модератора (Silver Sakura)."""
-        pending = int(stats.get("pending_count", 0) or 0)
-        in_review = int(stats.get("in_review_count", 0) or 0)
-        approved = int(stats.get("approved_count", 0) or 0)
-        rejected = int(stats.get("rejected_count", 0) or 0)
-        actor = str(stats.get("username") or "moderator")
-        
-        greeting = get_time_greeting()
-        return "\n".join([
-            HEADER_ADMIN_MAIN,
-            self._render_heartbeat(),
-            DIVIDER,
-            f"👤 <b>MODERATOR:</b> <code>{escape(actor)}</code>",
-            f"📅 <b>{greeting.upper()}</b>",
-            DIVIDER_LIGHT,  
-            "📊 <b>CURRENT QUEUE:</b>",
-            f" ⏳ Pending: <code>{pending}</code>",
-            f" 🟠 In review: <code>{in_review}</code>",
-            "",
-            "📈 <b>SESSION TOTALS:</b>",
-            f" ✅ Accepted: <code>{approved}</code>",
-            f" ❌ Rejected: <code>{rejected}</code>",
-            DIVIDER,
-            "<i>Выберите сектор для модерации ↴</i>"
-        ])
-
     def render_owner_dashboard(self, stats: Mapping[str, Any]) -> str:
         """Эксклюзивный Командный Центр (Silver Sakura Premium)."""
         actor = str(stats.get("username") or "Owner")
         greeting = get_time_greeting()
-        
+
         total_debt = float(stats.get("total_debt", 0))
         paid_today = float(stats.get("paid_today", 0))
         active_mods = int(stats.get("active_mods", 0))
@@ -356,7 +329,7 @@ class GDPXRenderer:
             "<i>Используйте кнопки для проведения выплат и просмотра истории ↴</i>"
         ])
         return "\n".join(lines)
-    
+
 
 
     def render_platform_analytics(self, stats: dict) -> str:
@@ -390,7 +363,7 @@ class GDPXRenderer:
         else:
             for m in mods[:10]:
                 lines.append(f"👤 {m['username']}: <code>{m['total']}</code> шт. | <code>{m['accept_rate']:.1f}%</code> OK")
-        
+
         lines.append(DIVIDER)
         return "\n".join(lines)
 
@@ -408,7 +381,7 @@ class GDPXRenderer:
         else:
             for i, s in enumerate(sellers[:10], 1):
                 lines.append(f"{i}. {s['username']}: <code>{s['total']}</code> шт. | <code>{s['earned']:.2f}</code> USDT")
-        
+
         lines.append(DIVIDER)
         return "\n".join(lines)
 
@@ -442,7 +415,7 @@ class GDPXRenderer:
             DIVIDER_LIGHT,
             "<i>Подтвердите интеграцию в базу данных</i> ↴",
         ])
-    
+
 
 
     def render_category_manage(self, category: Any) -> str:
@@ -450,7 +423,7 @@ class GDPXRenderer:
             from html import escape
             priority = "🏮 PRIORITY" if getattr(category, "is_priority", False) else "▫️ STANDARD"
             status = "🟢 ACTIVE" if category.is_active else "🔴 DISABLED"
-             
+
             return "\n".join([
                 HEADER_CATCON,
                 self._render_heartbeat(),

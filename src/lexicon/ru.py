@@ -53,18 +53,14 @@ class Lex:
     ERR_NO_RIGHTS_ALERT = "[ ROOT ACCESS DENIED ]"
 
     ERR_SESSION_EXPIRED = "✖ <b>SESSION EXPIRED</b>\nТокен сессии истек. Инициируйте операцию заново."
-    ERR_AMOUNT_CORRUPT  = "✖ <b>CALIBRATION ERROR</b>\nСбой калибрации: неверный формат суммы."
+    ERR_AMOUNT_CORRUPT = "✖ <b>CALIBRATION ERROR</b>\nСбой калибрации: неверный формат суммы."
     ERR_WITHDRAW_FAILED = "✖ <b>GATEWAY REJECTED</b>\nCryptoBot отклонил запрос. Повторите цикл позже."
 
     # ══════════════════════════════════════════════════════════════════════
     # РЕГИСТРАЦИЯ / ОНБОРДИНГ
     # ══════════════════════════════════════════════════════════════════════
 
-    ASK_LANGUAGE = (
-        "❖ <b>GDPX // INITIALIZATION</b>\n"
-        "▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰\n"
-        "Установите языковой пакет интерфейса:"
-    )
+    ASK_LANGUAGE = "❖ <b>GDPX // INITIALIZATION</b>\n▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰\nУстановите языковой пакет интерфейса:"
 
     # {requirements} подставляется в шаблон, чтобы правила можно было изменить отдельно
     ASK_PSEUDONYM = (
@@ -89,13 +85,13 @@ class Lex:
     # ВЫВОД СРЕДСТВ (/withdraw)
     # ══════════════════════════════════════════════════════════════════════
 
-    ERR_WITHDRAW_USAGE   = "✖ <b>SYNTAX ERROR</b>\nФормат ввода: <code>/withdraw 10.5</code>"
-    ERR_WITHDRAW_ZERO    = "✖ <b>LIQUIDITY ERROR</b>\nСумма вывода должна быть больше нуля."
+    ERR_WITHDRAW_USAGE = "✖ <b>SYNTAX ERROR</b>\nФормат ввода: <code>/withdraw 10.5</code>"
+    ERR_WITHDRAW_ZERO = "✖ <b>LIQUIDITY ERROR</b>\nСумма вывода должна быть больше нуля."
 
     # {amount} — строковое представление Decimal
     ASK_WITHDRAW_CONFIRM = "💠 <b>CONFIRMATION // CLEARING</b>\nПодтвердить транзакцию: <b>{amount} USDT</b>?"
 
-    OK_WITHDRAW_DONE  = "📡 <code>PROCESSING TRANSACTION...</code>"
+    OK_WITHDRAW_DONE = "📡 <code>PROCESSING TRANSACTION...</code>"
     # {check_url} — ссылка CryptoBot
     OK_WITHDRAW_CHECK = (
         "💠 <b>CLEARING // SUCCESS</b>\n"
@@ -112,24 +108,24 @@ class Lex:
     # ══════════════════════════════════════════════════════════════════════
 
     # {week} — номер недели
-    LEAD_HEADER           = "🏆 <b>LEADERBOARD // WEEK #{week}</b>\n▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰"
+    LEAD_HEADER = "🏆 <b>LEADERBOARD // WEEK #{week}</b>\n▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰"
     LEAD_ACTIVE_BONUS_HDR = "🏮 <b>PRIORITY PROTOCOL // BONUS:</b>"
-    LEAD_TOP_DEFAULT      = "<code>[ VANGUARD // TOP-5 OPERATORS ]</code>"
-    LEAD_EMPTY            = "🌑 <b>NO DATA // LOGS EMPTY</b>\n<i>Трафик за текущий цикл не зафиксирован.</i>"
+    LEAD_TOP_DEFAULT = "<code>[ VANGUARD // TOP-5 OPERATORS ]</code>"
+    LEAD_EMPTY = "🌑 <b>NO DATA // LOGS EMPTY</b>\n<i>Трафик за текущий цикл не зафиксирован.</i>"
 
     # {rank} {score}
-    LEAD_USER_RANK  = "🎯 <b>YOUR POSITION: #{rank}</b> (Score: {score})"
+    LEAD_USER_RANK = "🎯 <b>YOUR POSITION: #{rank}</b> (Score: {score})"
     LEAD_USER_NORANK = "🎯 <b>STATUS:</b> <code>IDLE</code> (0 assets)\n<i>Система ожидает твой первый трафик.</i>"
 
     # ══════════════════════════════════════════════════════════════════════
     # ЛЕАДЕРБОРД — админ (/alead)
     # ══════════════════════════════════════════════════════════════════════
 
-    ALEAD_HEADER     = "⚙️ <b>ARCHITECT // L-BOARD CONFIG</b>\n▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰"
-    ALEAD_STATUS_ON  = "🟢 ACTIVE"
+    ALEAD_HEADER = "⚙️ <b>ARCHITECT // L-BOARD CONFIG</b>\n▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰"
+    ALEAD_STATUS_ON = "🟢 ACTIVE"
     ALEAD_STATUS_OFF = "🔴 DISABLED"
     ALEAD_NO_PRIZE_TEXT = "<code>[ EMPTY ]</code>"
-    ALEAD_HINT       = "<i>Интерфейс управления стимулами:</i>"
+    ALEAD_HINT = "<i>Интерфейс управления стимулами:</i>"
 
     # {state} — "ВКЛЮЧЁН" или "ВЫКЛЮЧЕН"
     ALEAD_TOGGLED = "Protocol Bonus: <b>{state}</b>"
@@ -147,14 +143,14 @@ class Lex:
     # КНОПКИ (дублируются в keyboards.inline, чтобы хендлеры могли взять из lexicon)
     # ══════════════════════════════════════════════════════════════════════
 
-    BTN_CONFIRM      = "❖ ACCEPT"
-    BTN_CANCEL       = "✖ ABORT"
-    BTN_BACK         = "◂ RETURN"
-    BTN_REFRESH      = "↻ RELOAD"
-    BTN_PRIZE_TOGGLE_ON  = "🟢 ACTIVATE"
+    BTN_CONFIRM = "❖ ACCEPT"
+    BTN_CANCEL = "✖ ABORT"
+    BTN_BACK = "◂ RETURN"
+    BTN_REFRESH = "↻ RELOAD"
+    BTN_PRIZE_TOGGLE_ON = "🟢 ACTIVATE"
     BTN_PRIZE_TOGGLE_OFF = "🔴 FREEZE"
-    BTN_PRIZE_EDIT   = "⚙️ EDIT DIRECTIVE"
-    BTN_WDR_CONFIRM  = "❖ EXECUTE CLEARING"
+    BTN_PRIZE_EDIT = "⚙️ EDIT DIRECTIVE"
+    BTN_WDR_CONFIRM = "❖ EXECUTE CLEARING"
 
     BTN_TERMINATE_SESSION = "⊗ TERMINATE SESSION"
     BTN_TERMINATE_CONFIRM = "◾ CONFIRM CLEANUP"
@@ -171,9 +167,7 @@ class Lex:
         "⚠️ <b>ОПЕРАЦИЯ НЕОБРАТИМА.</b> Исполнить?"
     )
 
-    INFO_SESSION_TERMINATED = (
-        "🌑 <code>[ SESSION TERMINATED // LOGS WIPED ]</code>"
-    )
+    INFO_SESSION_TERMINATED = "🌑 <code>[ SESSION TERMINATED // LOGS WIPED ]</code>"
 
     # ══════════════════════════════════════════════════════════════════════
     # ПРАВА / МОДЕРАЦИЯ (общие)
@@ -188,9 +182,9 @@ class Lex:
     class Support:
         """SUPPORT CENTER — экран поддержки продавца."""
 
-        HEADER  = "🛡 <b>SUPPORT // CENTER</b>"
-        DIVIDER = "▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰"
-        STATUS  = "📡 [🟢 <b>ONLINE</b>] ── <i>Ping: 15m.</i>"
+        HEADER = "🛡 <b>SUPPORT // CENTER</b>"
+        DIVIDER = "▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰"
+        STATUS = "📡 [🟢 <b>ONLINE</b>] ── <i>Ping: 15m.</i>"
 
         # Плейсхолдеры: {divider} {founder} {helper_1} {helper_2} {architect} {status}
         BODY = (
@@ -220,20 +214,12 @@ class Lex:
         )
         # {until} — datetime строкой
         ERR_TIMEOUT = (
-            "✖ <b>FLOOD TIMEOUT</b>\n"
-            "▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱\n"
-            "Обнаружены дубликаты. Тайм-аут до: <code>{until}</code>"
+            "✖ <b>FLOOD TIMEOUT</b>\n▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱\nОбнаружены дубликаты. Тайм-аут до: <code>{until}</code>"
         )
-        ERR_NO_CATEGORY = (
-            "✖ <b>CATEGORY ERROR</b>\nСначала выберите кластер (подтип оператора)."
-        )
-        ERR_NO_QUOTA = (
-            "✖ <b>QUOTA ERROR</b>\nНа сегодня в этом кластере лимит выгрузок не назначен."
-        )
+        ERR_NO_CATEGORY = "✖ <b>CATEGORY ERROR</b>\nСначала выберите кластер (подтип оператора)."
+        ERR_NO_QUOTA = "✖ <b>QUOTA ERROR</b>\nНа сегодня в этом кластере лимит выгрузок не назначен."
         # {limit} — int, дневной лимит
-        ERR_QUOTA_EXCEEDED = (
-            "✖ <b>LIMIT EXCEEDED</b>\nДневная квота кластера исчерпана: <code>{limit}</code>."
-        )
+        ERR_QUOTA_EXCEEDED = "✖ <b>LIMIT EXCEEDED</b>\nДневная квота кластера исчерпана: <code>{limit}</code>."
 
     # ══════════════════════════════════════════════════════════════════════
     # NAMESPACE: Lex.Pay  —  handlers/admin/payouts.py
@@ -242,41 +228,41 @@ class Lex:
     class Pay:
         """Тексты раздела выплат (admin/payouts.py)."""
 
-        LEDGER_HEADER  = "💸 <b>LEDGER // PAYOUTS</b>\n▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰"
-        LEDGER_EMPTY   = "🌑 <b>EMPTY</b>\nПользователи с ожидающими выплатами отсутствуют."
+        LEDGER_HEADER = "💸 <b>LEDGER // PAYOUTS</b>\n▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰"
+        LEDGER_EMPTY = "🌑 <b>EMPTY</b>\nПользователи с ожидающими выплатами отсутствуют."
 
         HISTORY_HEADER = "📜 <b>HISTORY // ARCHIVE</b>\n▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰"
-        HISTORY_EMPTY  = "🌑 <b>EMPTY</b>"
+        HISTORY_EMPTY = "🌑 <b>EMPTY</b>"
 
-        TRASH_HEADER   = "🗑 <b>RECYCLE BIN // PAYOUTS</b>\n▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰"
-        TRASH_EMPTY    = "🌑 <b>EMPTY</b>"
+        TRASH_HEADER = "🗑 <b>RECYCLE BIN // PAYOUTS</b>\n▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰"
+        TRASH_EMPTY = "🌑 <b>EMPTY</b>"
 
         PENDING_HEADER = "⚙️ <b>CONTROL // PAYOUTS</b>\n▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰"
-        PENDING_EMPTY  = "🔴 <b>NO PENDING DATA</b>"
+        PENDING_EMPTY = "🔴 <b>NO PENDING DATA</b>"
 
         # Кнопки навигации ведомости
-        BTN_TOPUP          = "💳 TOPUP USDT"
-        BTN_HISTORY        = "📜 HISTORY"
-        BTN_TRASH          = "🗑 RECYCLE BIN"
+        BTN_TOPUP = "💳 TOPUP USDT"
+        BTN_HISTORY = "📜 HISTORY"
+        BTN_TRASH = "🗑 RECYCLE BIN"
         BTN_PENDING_MANAGE = "⚙️ MANAGE PAYOUT"
-        BTN_TO_LEDGER      = "💸 TO LEDGER"
+        BTN_TO_LEDGER = "💸 TO LEDGER"
 
         ERR_NO_EXPORT_DATA = "✖ <b>EXPORT ERROR</b>\nНет данных для выгрузки."
-        ERR_NO_RIGHTS      = "✖ <b>ACCESS DENIED</b>"
+        ERR_NO_RIGHTS = "✖ <b>ACCESS DENIED</b>"
 
         # Alert-сообщения (show_alert=True)
-        ALERT_NO_RIGHTS         = "[ ACCESS DENIED ]"
-        ALERT_BAD_DATA          = "[ CORRUPT DATA ]"
-        ALERT_USER_NOT_FOUND    = "[ AGENT NOT FOUND ]"
-        ALERT_NO_PENDING        = "[ NO PENDING ASSETS ]"
-        ALERT_INVOICE_BAD_ID    = "[ INVALID INVOICE ID ]"
-        ALERT_INVOICE_NOT_PAID  = "[ NOT PAID ]"
-        ALERT_SESSION_LOST      = "[ SESSION LOST ]"
-        ALERT_INVOICE_FAILED    = "[ GATEWAY ERROR ]"
+        ALERT_NO_RIGHTS = "[ ACCESS DENIED ]"
+        ALERT_BAD_DATA = "[ CORRUPT DATA ]"
+        ALERT_USER_NOT_FOUND = "[ AGENT NOT FOUND ]"
+        ALERT_NO_PENDING = "[ NO PENDING ASSETS ]"
+        ALERT_INVOICE_BAD_ID = "[ INVALID INVOICE ID ]"
+        ALERT_INVOICE_NOT_PAID = "[ NOT PAID ]"
+        ALERT_SESSION_LOST = "[ SESSION LOST ]"
+        ALERT_INVOICE_FAILED = "[ GATEWAY ERROR ]"
         # {amount} {asset}
-        ALERT_TOPUP_OK          = "✅ <b>TOPUP SUCCESS:</b> +{amount} {asset}"
+        ALERT_TOPUP_OK = "✅ <b>TOPUP SUCCESS:</b> +{amount} {asset}"
 
-        PAID_CANCEL_ALERT       = "ABORTED"
+        PAID_CANCEL_ALERT = "ABORTED"
 
         # {username} {total_accepted} {rejected} {total_amount}
         CONFIRM_STEP1 = (
@@ -304,11 +290,11 @@ class Lex:
             "⚠️ <i>[CRITICAL] IRREVERSIBLE ACTION.</i>\n"
             "<b>❖ FIX HASH?</b>"
         )
-        CONFIRM_STEP2_BALANCE_OK   = "  └ 🟢 <b>[SECURE]:</b> RESERVE CONFIRMED."
-        CONFIRM_STEP2_BALANCE_LOW  = "  └ 🔴 <b>[FAIL]:</b> LIQUIDITY DEPLETED."
-        
+        CONFIRM_STEP2_BALANCE_OK = "  └ 🟢 <b>[SECURE]:</b> RESERVE CONFIRMED."
+        CONFIRM_STEP2_BALANCE_LOW = "  └ 🔴 <b>[FAIL]:</b> LIQUIDITY DEPLETED."
+
         CONFIRM_STEP2_BALANCE_LINE = "  ├ <b>LIQUIDITY:</b> <code>{balance} USDT</code>"
-        CONFIRM_STEP2_BALANCE_ERR  = "  └ 🔴 <b>[GATEWAY FAIL]:</b> ({error})"
+        CONFIRM_STEP2_BALANCE_ERR = "  └ 🔴 <b>[GATEWAY FAIL]:</b> ({error})"
 
         TOPUP_ASK = (
             "💸 <b>APP // TOPUP</b>\n"
@@ -344,7 +330,7 @@ class Lex:
             "<b>❖ START BROADCAST?</b>"
         )
         PREVIEW_PHOTO_YES = "YES"
-        PREVIEW_PHOTO_NO  = "NO"
+        PREVIEW_PHOTO_NO = "NO"
 
         # {ok} {blocked} {failed}
         REPORT = (
@@ -354,7 +340,7 @@ class Lex:
             "🚫 BLOCKED: <b>{blocked}</b>\n"
             "⚠️ FAILED: <b>{failed}</b>"
         )
-        ERR_NO_RIGHTS   = "✖ <b>ACCESS DENIED</b>"
+        ERR_NO_RIGHTS = "✖ <b>ACCESS DENIED</b>"
         ALERT_NO_RIGHTS = "[ ACCESS DENIED ]"
 
         BTN_LAUNCH = "◉ LAUNCH"
@@ -368,9 +354,9 @@ class Lex:
         """Тексты раздела статистики (admin/stats.py)."""
 
         # {month:02d} {year}
-        HEADER       = "📊 <b>LOGS // SIM STATS {month:02d}.{year}</b>\n▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰"
+        HEADER = "📊 <b>LOGS // SIM STATS {month:02d}.{year}</b>\n▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰"
         TABLE_HEADER = "<code>DAY | IN | ✔️ | ❌ | 🚫 | ⛔</code>"
-        TOTAL_LABEL  = "<b>MONTHLY SUMMARY</b>"
+        TOTAL_LABEL = "<b>MONTHLY SUMMARY</b>"
 
         # {total_incoming} {total_accepted} {total_failed} {rejected} {blocked} {not_scan}
         TOTAL_ROW = (
@@ -379,8 +365,8 @@ class Lex:
             "▫ FAILED: <b>{total_failed}</b>\n"
             "<i>(REJECTED={rejected}, BLOCKED={blocked}, NOT_SCAN={not_scan})</i>"
         )
-        BTN_EXPORT  = "🌸 EXPORT EXCEL"
-        BTN_RESET   = "🗑 WIPE STATS"
+        BTN_EXPORT = "🌸 EXPORT EXCEL"
+        BTN_RESET = "🗑 WIPE STATS"
 
         CONFIRM_RESET = (
             "🚨 <b>DANGER // DATA WIPE</b>\n"
@@ -391,12 +377,12 @@ class Lex:
         RESET_DONE = "✅ <b>WIPED</b>"
 
         # Excel sheet/column titles
-        XLS_SHEET_DAILY   = "SIM DAILY"
+        XLS_SHEET_DAILY = "SIM DAILY"
         XLS_SHEET_SUMMARY = "SUMMARY"
-        XLS_COLS          = ["DATE", "IN", "OK", "REJ", "BLO", "NOS", "FAIL TOTAL"]
-        XLS_TOTAL_LABEL   = "TOTAL"
-        XLS_PERIOD_LABEL  = "PERIOD"
-        XLS_FILENAME      = "SIM_STATS_{month:02d}_{year}.xlsx"
+        XLS_COLS = ["DATE", "IN", "OK", "REJ", "BLO", "NOS", "FAIL TOTAL"]
+        XLS_TOTAL_LABEL = "TOTAL"
+        XLS_PERIOD_LABEL = "PERIOD"
+        XLS_FILENAME = "SIM_STATS_{month:02d}_{year}.xlsx"
 
     # ══════════════════════════════════════════════════════════════════════
     # NAMESPACE: Lex.Users  —  handlers/admin/users.py
@@ -405,21 +391,13 @@ class Lex:
     class Users:
         """Тексты управления агентами (admin/users.py)."""
 
-        SEARCH_PROMPT = (
-            "🔍 <b>AGENT // SEARCH</b>\n"
-            "▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰\n"
-            "Отправьте Telegram ID пользователя:"
-        )
+        SEARCH_PROMPT = "🔍 <b>AGENT // SEARCH</b>\n▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰\nОтправьте Telegram ID пользователя:"
         ERR_INVALID_ID = "✖ <b>SYNTAX ERROR:</b> Числовой ID."
-        ERR_SESSION    = "✖ <b>SESSION ERROR</b>"
-        ERR_BAD_DELTA  = (
-            "✖ <b>INVALID DELTA:</b> <code>+15.50</code> / <code>-5.00</code>."
-        )
+        ERR_SESSION = "✖ <b>SESSION ERROR</b>"
+        ERR_BAD_DELTA = "✖ <b>INVALID DELTA:</b> <code>+15.50</code> / <code>-5.00</code>."
 
         # {tg_id}
-        NOT_FOUND = (
-            "✖ <b>AGENT NOT FOUND</b>\nID: <code>{tg_id}</code>"
-        )
+        NOT_FOUND = "✖ <b>AGENT NOT FOUND</b>\nID: <code>{tg_id}</code>"
         # {tg_id} {pending_balance:.2f} {total_paid:.2f}
         BALANCE_PROMPT = (
             "💸 <b>CLEARING // CALIBRATION</b>\n"
@@ -431,19 +409,18 @@ class Lex:
         )
         # {delta_sign} {delta_abs} {new_balance:.2f}
         BALANCE_UPDATED = (
-            "✅ <b>CALIBRATED:</b> {delta_sign}{delta_abs} USDT.\n"
-            "NEW BALANCE: <code>{new_balance:.2f}</code> USDT."
+            "✅ <b>CALIBRATED:</b> {delta_sign}{delta_abs} USDT.\nNEW BALANCE: <code>{new_balance:.2f}</code> USDT."
         )
 
-        ALERT_NO_RIGHTS    = "[ ACCESS DENIED ]"
-        ALERT_NOT_FOUND    = "[ NOT FOUND ]"
-        ALERT_ERROR        = "[ ERROR ]"
-        ALERT_DM_SENT      = "[ DM DELIVERED ]"
-        ALERT_DM_FAILED    = "[ DM FAILED ]"
+        ALERT_NO_RIGHTS = "[ ACCESS DENIED ]"
+        ALERT_NOT_FOUND = "[ NOT FOUND ]"
+        ALERT_ERROR = "[ ERROR ]"
+        ALERT_DM_SENT = "[ DM DELIVERED ]"
+        ALERT_DM_FAILED = "[ DM FAILED ]"
 
         # {label} = "РАЗБАНЕН" / "ЗАБАНЕН"
-        ALERT_BAN_TOGGLED  = "[ AGENT {label} ]"
-        BAN_LABEL_BANNED   = "BANNED"
+        ALERT_BAN_TOGGLED = "[ AGENT {label} ]"
+        BAN_LABEL_BANNED = "BANNED"
         BAN_LABEL_UNBANNED = "RESTORED"
 
         BTN_BACK_TO_DOSSIER = "◀ DOSSIER"
@@ -455,17 +432,17 @@ class Lex:
     class Archive:
         """Тексты поиска и архива (admin/archive.py)."""
 
-        SEARCH_USAGE    = "Format: /s 1234 or /s +79999999999"
-        SEARCH_MIN      = "Min 3 digits required."
-        SEARCH_NAV      = "▫ <b>SEARCH NAVIGATION</b>"
-        SEARCH_EMPTY    = "🌑 <b>NOT FOUND</b>"
+        SEARCH_USAGE = "Format: /s 1234 or /s +79999999999"
+        SEARCH_MIN = "Min 3 digits required."
+        SEARCH_NAV = "▫ <b>SEARCH NAVIGATION</b>"
+        SEARCH_EMPTY = "🌑 <b>NOT FOUND</b>"
 
-        RESTRICT_DONE   = "✅ Restricted"
+        RESTRICT_DONE = "✅ Restricted"
         UNRESTRICT_DONE = "✅ Restored"
 
-        ALERT_NO_RIGHTS   = "[ ACCESS DENIED ]"
-        ALERT_NOT_FOUND   = "[ NOT FOUND ]"
-        ERR_NO_RIGHTS     = "✖ <b>ACCESS DENIED</b>"
+        ALERT_NO_RIGHTS = "[ ACCESS DENIED ]"
+        ALERT_NOT_FOUND = "[ NOT FOUND ]"
+        ERR_NO_RIGHTS = "✖ <b>ACCESS DENIED</b>"
 
     # ══════════════════════════════════════════════════════════════════════
     # NAMESPACE: Lex.Sys  —  handlers/admin/system.py
@@ -474,12 +451,12 @@ class Lex:
     class Sys:
         """Тексты системной диагностики (admin/system.py)."""
 
-        SPINNER  = "🛡 <b>SYSTEM INTEGRITY</b>\n\n📡 <code>RUNNING DIAGNOSTICS...</code>"
-        DIVIDER  = "▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰"
+        SPINNER = "🛡 <b>SYSTEM INTEGRITY</b>\n\n📡 <code>RUNNING DIAGNOSTICS...</code>"
+        DIVIDER = "▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰"
 
-        STATUS_DB_OK      = "ONLINE [OK]"
-        STATUS_DB_FAIL    = "⚠️ OFFLINE"
-        STATUS_REDIS_OK   = "ONLINE [OK]"
+        STATUS_DB_OK = "ONLINE [OK]"
+        STATUS_DB_FAIL = "⚠️ OFFLINE"
+        STATUS_REDIS_OK = "ONLINE [OK]"
         STATUS_REDIS_FAIL = "⚠️ OFFLINE"
 
         # {db_line} {redis_line} {nodes} {uptime}
@@ -492,12 +469,12 @@ class Lex:
             "┕ UPTIME: <code>{uptime}</code>"
         )
 
-        BTN_REFRESH   = "↻ RELOAD"
+        BTN_REFRESH = "↻ RELOAD"
         BTN_CLEAR_FSM = "🧹 WIPE FSM CACHE"
-        BTN_BACK      = "◀ RETURN"
+        BTN_BACK = "◀ RETURN"
 
         # {deleted} — кол-во удалённых ключей
-        FSM_CLEARED    = "✅ <b>CLEARED:</b> <code>{deleted}</code> items."
+        FSM_CLEARED = "✅ <b>CLEARED:</b> <code>{deleted}</code> items."
         ALERT_NO_REDIS = "[ CACHE OFFLINE ]"
         ALERT_NO_RIGHTS = "[ ACCESS DENIED ]"
 
@@ -509,7 +486,7 @@ class Lex:
         """Тексты глобальной аналитики (admin/analytics.py)."""
 
         SPINNER = "👁️‍🗨️ <b>SYNDICATE EYE</b>\n\n📡 <code>COLLECTING DATA...</code>"
-        DIVIDER = "▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰"
+        DIVIDER = "▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰"
 
         # {total_turnover} {turnover_24h} {esim_accepted} {esim_rejected}
         # {pending_payouts_sum} {ts}
@@ -524,7 +501,7 @@ class Lex:
             "{divider}\n"
             "<i>Sync: {ts}</i>"
         )
-        BTN_REFRESH   = "↻ RELOAD"
+        BTN_REFRESH = "↻ RELOAD"
         ALERT_NO_RIGHTS = "[ ACCESS DENIED ]"
 
     # ══════════════════════════════════════════════════════════════════════
@@ -534,15 +511,15 @@ class Lex:
     class Mod:
         """Тексты модерационного потока."""
 
-        QUEUE_EMPTY    = "🌑 <b>NO PENDING DATA</b>\n<i>Очередь верификации пуста.</i>"
-        TAKEN_TO_WORK  = "✅ <b>LOCK ACQUIRED</b>\nКарточка взята в работу."
-        FORWARD_DONE   = "👁️‍🗨️ <b>DATA FORWARDED</b>"
+        QUEUE_EMPTY = "🌑 <b>NO PENDING DATA</b>\n<i>Очередь верификации пуста.</i>"
+        TAKEN_TO_WORK = "✅ <b>LOCK ACQUIRED</b>\nКарточка взята в работу."
+        FORWARD_DONE = "👁️‍🗨️ <b>DATA FORWARDED</b>"
         IN_REVIEW_ONLY = "✖ <b>STATUS ERROR</b>"
 
         # {count}
-        BATCH_CONFIRM  = "<b>BATCH // CONFIRM</b>\nОтправить <b>{count}</b> карточек?"
+        BATCH_CONFIRM = "<b>BATCH // CONFIRM</b>\nОтправить <b>{count}</b> карточек?"
         # {ok} {failed}
-        BATCH_DONE     = "✅ <b>BATCH COMPLETE</b>\nSENT: {ok} | FAIL: {failed}."
+        BATCH_DONE = "✅ <b>BATCH COMPLETE</b>\nSENT: {ok} | FAIL: {failed}."
 
         ALERT_NO_RIGHTS = "[ ACCESS DENIED ]"
         ALERT_NOT_FOUND = "[ NOT FOUND ]"
@@ -551,14 +528,10 @@ class Lex:
     # NAMESPACE: Lex.Academy —  handlers/admin/academy.py
     # ══════════════════════════════════════════════════════════════════════
 
-
     class Academy:
         """Тексты раздела академии (admin/academy.py)."""
 
-        CODEX_HEADER = (
-            "🏯 <b>GDPX // ACADEMY: CODEX</b>\n"
-            "▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰"
-        )
+        CODEX_HEADER = "🏯 <b>GDPX // ACADEMY: CODEX</b>\n▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰"
 
         CODEX_TEXT = (
             "Агент.\n\n"

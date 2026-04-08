@@ -74,3 +74,10 @@ class CatConCD(CallbackData, prefix="catcon"):
 class CatManageCD(CallbackData, prefix="cat_manage"):
      action: str # view, toggle_active, toggle_priority, edit_price, confirm_delete, delete
      cat_id: int
+
+# --- ВЛАДЕЛЕЦ (Управление пользователями) ---
+class OwnerUserCD(CallbackData, prefix="ow_user"):
+    action: str # list, view, role, status, balance, history, main
+    user_id: int = 0
+    role: str = "all" # all, seller, admin
+    page: int = 0

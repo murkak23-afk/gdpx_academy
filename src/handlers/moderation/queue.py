@@ -14,6 +14,7 @@ from src.utils.ui_builder import DIVIDER, DIVIDER_LIGHT
 router = Router(name="moderation-queue-router")
 
 @router.callback_query(AdminQueueCD.filter(F.action == "start"))
+@router.callback_query(AdminSellerQueueCD.filter(F.action == "list"))
 @router.callback_query(F.data == "mod_q:refresh")
 async def on_moderation_queue(callback: CallbackQuery, session: AsyncSession, state: FSMContext):
     await state.clear() 

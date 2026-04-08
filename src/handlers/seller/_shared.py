@@ -24,10 +24,10 @@ from src.database.models.enums import SubmissionStatus
 from src.keyboards.callbacks import (
     CB_CAPTCHA_CANCEL,
     CB_CAPTCHA_START,
-    CB_SELLER_BATCH_REJECT,
-    CB_SELLER_BATCH_SEND,
     CB_SELLER_BATCH_CSV_NO,
     CB_SELLER_BATCH_CSV_YES,
+    CB_SELLER_BATCH_REJECT,
+    CB_SELLER_BATCH_SEND,
     CB_SELLER_CANCEL_FSM,
     CB_SELLER_FSM_CAT,
 )
@@ -37,7 +37,7 @@ from src.utils.ui_builder import GDPXRenderer
 
 SELLER_PAGE_SIZE = 5
 DEFAULT_INFO_CHAT_URL = "https://t.me/+cFWhTnl_iew1ZjZi"
-DIVIDER = "━━━━━━━━━━━━━━━━━━━━"
+DIVIDER = "▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰"
 
 MATERIAL_FILTER_ALL = "all"
 MATERIAL_FILTER_ACTIVE = "active"
@@ -174,8 +174,7 @@ def _batch_csv_choice_keyboard() -> InlineKeyboardMarkup:
 
 def _seller_fsm_categories_keyboard(categories) -> InlineKeyboardMarkup:
     rows = [
-        [InlineKeyboardButton(text=str(cat.title), callback_data=f"{CB_SELLER_FSM_CAT}:{cat.id}")]
-        for cat in categories
+        [InlineKeyboardButton(text=str(cat.title), callback_data=f"{CB_SELLER_FSM_CAT}:{cat.id}")] for cat in categories
     ]
     rows.append([InlineKeyboardButton(text="❌ Отменить операцию", callback_data=CB_SELLER_CANCEL_FSM)])
     return InlineKeyboardMarkup(inline_keyboard=rows)
@@ -208,9 +207,7 @@ async def _send_fsm_step_message(
     await state.update_data(last_msg_id=sent.message_id)
     if prev_last_msg_id:
         try:
-            await message.bot.delete_message(
-                chat_id=message.chat.id, message_id=int(prev_last_msg_id)
-            )
+            await message.bot.delete_message(chat_id=message.chat.id, message_id=int(prev_last_msg_id))
         except Exception:
             pass
     return sent
@@ -228,9 +225,7 @@ def _batch_status_text(*, accepted: int, rejected: int) -> str:
     return f"Добавлено: {accepted} шт. | Отклонено: {rejected} шт."
 
 
-async def _show_batch_action_menu_after_idle(
-    message: Message, state: FSMContext, user_id: int
-) -> None:
+async def _show_batch_action_menu_after_idle(message: Message, state: FSMContext, user_id: int) -> None:
     await asyncio.sleep(3)
     data = await state.get_data()
     status_msg_id = data.get("batch_status_msg_id")
@@ -250,14 +245,10 @@ def _schedule_batch_idle_menu(message: Message, state: FSMContext, user_id: int)
     prev = _batch_idle_tasks.get(user_id)
     if prev is not None and not prev.done():
         prev.cancel()
-    _batch_idle_tasks[user_id] = asyncio.create_task(
-        _show_batch_action_menu_after_idle(message, state, user_id)
-    )
+    _batch_idle_tasks[user_id] = asyncio.create_task(_show_batch_action_menu_after_idle(message, state, user_id))
 
 
-async def _refresh_batch_status_message(
-    message: Message, state: FSMContext, *, show_actions: bool = False
-) -> None:
+async def _refresh_batch_status_message(message: Message, state: FSMContext, *, show_actions: bool = False) -> None:
     data = await state.get_data()
     accepted = int(data.get("batch_accepted", 0))
     rejected = int(data.get("batch_rejected", 0))
@@ -305,9 +296,7 @@ def _normalize_phone_batch(raw: str | None) -> str | None:
     return None
 
 
-async def _batch_add_row(
-    state: FSMContext, *, status: str, phone: str | None, reason: str
-) -> None:
+async def _batch_add_row(state: FSMContext, *, status: str, phone: str | None, reason: str) -> None:
     data = await state.get_data()
     rows = list(data.get("batch_rows", []))
     rows.append(
@@ -321,9 +310,7 @@ async def _batch_add_row(
     await state.update_data(batch_rows=rows)
 
 
-async def _batch_reject(
-    state: FSMContext, *, reason_code: str, phone: str | None = None
-) -> None:
+async def _batch_reject(state: FSMContext, *, reason_code: str, phone: str | None = None) -> None:
     await _batch_inc(state, "batch_rejected", 1)
     data = await state.get_data()
     reasons = dict(data.get("batch_reject_reasons", {}))
@@ -342,9 +329,7 @@ async def _batch_accept(state: FSMContext, *, phone: str) -> None:
     await _batch_add_row(state, status="accepted", phone=phone, reason="")
 
 
-async def _batch_mark_seen_or_duplicate(
-    state: FSMContext, *, phone: str, file_unique_id: str
-) -> bool:
+async def _batch_mark_seen_or_duplicate(state: FSMContext, *, phone: str, file_unique_id: str) -> bool:
     data = await state.get_data()
     seen_numbers = set(str(x) for x in data.get("batch_seen_numbers", []))
     seen_files = set(str(x) for x in data.get("batch_seen_file_uids", []))
@@ -359,9 +344,7 @@ async def _batch_mark_seen_or_duplicate(
     return False
 
 
-def _batch_report_text(
-    accepted: int, rejected: int, reasons: dict[str, int] | None = None
-) -> str:
+def _batch_report_text(accepted: int, rejected: int, reasons: dict[str, int] | None = None) -> str:
     total = accepted + rejected
     lines = [
         "📦 Загрузка завершена.\n\n"

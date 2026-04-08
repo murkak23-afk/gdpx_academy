@@ -11,22 +11,14 @@ from src.handlers.user_private import user_private_router
 from src.handlers.finance.payouts import router as finance_payouts_router
 
 # Импорт роутеров модерации
-from src.handlers.moderation.entry import router as mod_entry_router
-from src.handlers.moderation.queue import router as mod_queue_router
-from src.handlers.moderation.inspector import router as mod_inspector_router
-from src.handlers.moderation.search import router as moderation_search_router
-from src.handlers.moderation.batch import router as batch_router
+from src.handlers.moderation import router as moderation_root_router
 
 
 def setup_routers() -> Router:
     root_router = Router()
 
-    # 1. ПРИОРИТЕТ: Модерация (все новые премиум-хендлеры)
-    root_router.include_router(mod_entry_router)
-    root_router.include_router(mod_queue_router)
-    root_router.include_router(mod_inspector_router)
-    root_router.include_router(moderation_search_router)
-    root_router.include_router(batch_router)
+    # 1. ПРИОРИТЕТ: Модерация (единый роутер со всеми под-модулями /a)
+    root_router.include_router(moderation_root_router)
 
     # 2. ПРИОРИТЕТ: Админка
     root_router.include_router(admin_router)

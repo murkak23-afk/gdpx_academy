@@ -24,7 +24,7 @@ from src.keyboards.seller import (
     get_favorite_categories_kb
 )
 from src.keyboards.owner import (
-    get_admin_main_kb, get_moderator_main_kb, get_owner_main_kb,
+    get_owner_main_kb,
     get_catcon_main_kb, get_catcon_options_kb, get_catcon_confirm_kb,
     get_cat_manage_list_kb, get_cat_manage_detail_kb, get_cat_manage_confirm_delete_kb
 )
@@ -74,8 +74,6 @@ __all__ = [
     "get_pin_pad_kb",
     "get_notification_settings_kb",
     "get_favorite_categories_kb",
-    "get_admin_main_kb",
-    "get_moderator_main_kb",
     "get_owner_main_kb",
     "get_catcon_main_kb",
     "get_catcon_options_kb",

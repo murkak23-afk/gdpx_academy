@@ -4,9 +4,13 @@ from typing import Optional, List
 from sqlalchemy import select, func, update, or_
 from sqlalchemy.orm import joinedload
 from sqlalchemy.ext.asyncio import AsyncSession
-from src.database.models.submission import Submission
+from src.database.models.submission import Submission, ReviewAction
 from src.database.models.category import Category
 from src.database.models.enums import SubmissionStatus
+from src.database.models.user import User
+from decimal import Decimal
+
+from src.core.logger import logger
 
 class ModerationService:
     def __init__(self, session: AsyncSession):
@@ -213,30 +217,46 @@ class ModerationService:
         
         # Разрешаем финализацию только если статус PENDING или IN_REVIEW
         if not sub or sub.status not in (SubmissionStatus.PENDING, SubmissionStatus.IN_REVIEW):
+            logger.warning(f"Submission {submission_id} not reviewable. Status: {sub.status if sub else 'None'}")
             return False
             
+        old_status = sub.status
         # Устанавливаем статус и время проверки
         sub.status = status
-        sub.reject_reason = reason
-        sub.admin_comment = comment
+        sub.rejection_reason = reason
+        sub.rejection_comment = comment
         sub.reviewed_at = datetime.now(timezone.utc)
         
-        # Если ЗАЧЁТ - начисляем выплату селлеру
-        if status == SubmissionStatus.ACCEPTED:
-            from src.database.models.user import User
-            # Используем fixed_payout_rate из самой заявки (сохраняется при создании)
-            # или из текущей категории, если в заявке 0
-            amount = sub.accepted_amount or sub.fixed_payout_rate
-            
-            # Начисляем на баланс
-            user_stmt = select(User).where(User.id == sub.user_id)
-            user_res = await self._session.execute(user_stmt)
-            seller = user_res.scalar_one_or_none()
-            if seller:
-                seller.pending_balance += amount
-                sub.accepted_amount = amount # Фиксируем выплаченную сумму
+        try:
+            # Если ЗАЧЁТ - начисляем выплату селлеру
+            if status == SubmissionStatus.ACCEPTED:
+                amount = sub.accepted_amount or sub.fixed_payout_rate
                 
-        return True
+                # Начисляем на баланс
+                user_stmt = select(User).where(User.id == sub.user_id)
+                user_res = await self._session.execute(user_stmt)
+                seller = user_res.scalar_one_or_none()
+                if seller:
+                    seller.pending_balance += amount
+                    sub.accepted_amount = amount 
+                    logger.info(f"Admin {sub.admin_id} accepted sub {submission_id}. Credited {amount}")
+            
+            # Добавляем запись в аудит
+            self._session.add(
+                ReviewAction(
+                    submission_id=sub.id,
+                    admin_id=sub.admin_id,
+                    from_status=old_status,
+                    to_status=status,
+                    comment=comment or reason
+                )
+            )
+            await self._session.commit()
+            return True
+        except Exception as e:
+            await self._session.rollback()
+            logger.exception(f"Critical error in finalize_submission({submission_id}): {e}")
+            return False
 
     async def get_pending_sellers(self) -> List[dict]:
         """Группировка очереди по продавцам."""
@@ -379,49 +399,51 @@ class ModerationService:
         Откатывает последнее действие модератора, если прошло не более 60 секунд.
         Возвращает (Успех, Сообщение_для_UI).
         """
-        from src.database.models.user import User
-        from src.database.models.submission import ReviewAction
+        try:
+            sub = await self._session.get(Submission, submission_id)
+            if not sub or sub.status == SubmissionStatus.PENDING:
+                return False, "Карточка не найдена или уже в очереди."
 
-        sub = await self._session.get(Submission, submission_id)
-        if not sub or sub.status == SubmissionStatus.PENDING:
-            return False, "Карточка не найдена или уже в очереди."
+            if sub.admin_id != admin_id:
+                return False, "Вы не можете откатить чужую проверку."
 
-        if sub.admin_id != admin_id:
-            return False, "Вы не можете откатить чужую проверку."
+            now = datetime.now(timezone.utc)
+            if sub.reviewed_at and (now - sub.reviewed_at).total_seconds() > 60:
+                return False, "⏳ Время вышло! Откат возможен только в течение 60 секунд."
 
-        now = datetime.now(timezone.utc)
-        if sub.reviewed_at and (now - sub.reviewed_at).total_seconds() > 60:
-            return False, "⏳ Время вышло! Откат возможен только в течение 60 секунд."
+            # Ищем последнюю запись в аудите
+            action_stmt = (
+                select(ReviewAction)
+                .where(ReviewAction.submission_id == submission_id)
+                .order_by(ReviewAction.created_at.desc())
+                .limit(1)
+            )
+            last_action = (await self._session.execute(action_stmt)).scalar_one_or_none()
 
-        # Ищем последнюю запись в аудите
-        action_stmt = (
-            select(ReviewAction)
-            .where(ReviewAction.submission_id == submission_id)
-            .order_by(ReviewAction.created_at.desc())
-            .limit(1)
-        )
-        last_action = (await self._session.execute(action_stmt)).scalar_one_or_none()
+            if not last_action:
+                return False, "История действий не найдена."
 
-        if not last_action:
-            return False, "История действий не найдена."
+            # Финансовый откат
+            if sub.status == SubmissionStatus.ACCEPTED:
+                seller = await self._session.get(User, sub.user_id)
+                if seller:
+                    seller.pending_balance = (seller.pending_balance or Decimal("0.0")) - (sub.accepted_amount or Decimal("0.0"))
+                    logger.info(f"Admin {admin_id} reverted sub {submission_id}. Seller {seller.id} balance adjusted.")
+                sub.accepted_amount = None
 
-        # Финансовый откат
-        if sub.status == SubmissionStatus.ACCEPTED:
-            seller = await self._session.get(User, sub.user_id)
-        if seller:
-            from decimal import Decimal
-            seller.pending_balance = (seller.pending_balance or Decimal("0.0")) - (sub.accepted_amount or Decimal("0.0"))
-            sub.accepted_amount = None
+            # Возвращаем карточку в работу
+            sub.status = SubmissionStatus.IN_REVIEW
+            sub.reviewed_at = None
+            sub.rejection_reason = None
+            sub.rejection_comment = None
 
+            # Удаляем запись об ошибочном действии
+            await self._session.delete(last_action)
+            await self._session.commit()
 
-        # Возвращаем карточку в работу
-        sub.status = SubmissionStatus.IN_REVIEW
-        sub.reviewed_at = None
-        sub.rejection_reason = None
-        sub.rejection_comment = None
-
-        # Удаляем запись об ошибочном действии
-        await self._session.delete(last_action)
-        await self._session.flush()
-
-        return True, "↩️ Действие успешно отменено. Карточка возвращена вам в работу."
+            logger.info(f"Undo success: Sub {submission_id} by admin {admin_id}")
+            return True, "↩️ Действие успешно отменено. Карточка возвращена вам в работу."
+        except Exception as e:
+            await self._session.rollback()
+            logger.exception(f"Critical error in undo_submission_action({submission_id}): {e}")
+            return False, "❌ Ошибка при отмене действия."

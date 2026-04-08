@@ -85,6 +85,13 @@ async def start_batch_mode(callback: CallbackQuery, callback_data: AdminBatchCD,
 
 
 
+@router.callback_query(F.data.startswith("mod_batch_pg:"))
+async def process_batch_pagination(callback: CallbackQuery, state: FSMContext, session: AsyncSession):
+    """Обработка переключения страниц в Batch-режиме."""
+    page = int(callback.data.split(":")[1])
+    await start_batch_mode(callback, AdminBatchCD(action="start", val=str(page)), session, state)
+
+
 @router.callback_query(AdminBatchCD.filter(F.action == "toggle"))
 async def toggle_batch_item(callback: CallbackQuery, callback_data: AdminBatchCD, state: FSMContext, session: AsyncSession):
     """Ставит / снимает галочку с актива."""

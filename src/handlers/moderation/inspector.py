@@ -15,10 +15,26 @@ from src.callbacks.moderation import AdminGradeCD, AdminSellerQueueCD, AdminQueu
 from src.keyboards.moderation import get_mod_inspector_kb, get_mod_reasons_kb, get_mod_dashboard_kb
 from src.utils.ui_builder import DIVIDER, DIVIDER_LIGHT
 
+from src.core.logger import logger
+
 router = Router(name="moderation-inspector-router")
 
 async def _render_next_item(bot: Bot, chat_id: int, session: AsyncSession, state: FSMContext):
     """Автоматическая выдача следующей карточки из ЛИЧНОЙ очереди админа."""
+    from src.core.config import get_settings
+    settings = get_settings()
+    
+    if getattr(settings, "moderation_suspended", False):
+        text = (
+            f"⚠️ <b>РАБОТА ПРИОСТАНОВЛЕНА</b>\n"
+            f"{DIVIDER}\n"
+            f"Владелец временно ограничил работу модераторов.\n\n"
+            f"<i>Пожалуйста, подождите или свяжитесь с руководством.</i>"
+        )
+        await bot.send_message(chat_id, text, parse_mode="HTML")
+        await state.clear()
+        return
+
     mod_svc = ModerationService(session=session)
     from src.services.user_service import UserService
     admin = await UserService(session=session).get_by_telegram_id(chat_id)
@@ -68,6 +84,14 @@ async def _render_next_item(bot: Bot, chat_id: int, session: AsyncSession, state
     )
     await state.set_state(ModerationStates.conveyor_active)
 
+@router.callback_query(AdminQueueCD.filter(F.action == "next"))
+async def mod_next_card(callback: CallbackQuery, session: AsyncSession, state: FSMContext, bot: Bot):
+    """Переход к следующей карточке (из очереди или списка 'в работе')."""
+    if callback.message.photo:
+        await callback.message.delete()
+    await _render_next_item(bot, callback.from_user.id, session, state)
+
+
 @router.callback_query(F.data == "mod_continue_work")
 async def handle_continue(callback: CallbackQuery, state: FSMContext, session: AsyncSession, bot: Bot):
     """Продолжить работу с сохраненными активами."""
@@ -90,27 +114,30 @@ async def handle_take_batch(callback: CallbackQuery, callback_data: AdminSellerQ
     if actual_taken > 0:
         await callback.message.delete()
         await _render_next_item(bot, callback.from_user.id, session, state)
+        await callback.answer(f"✅ Взято в работу: {actual_taken}")
     else:
         await callback.answer("🔴 Ошибка: Активы уже забрали!", show_alert=True)
 
 @router.callback_query(AdminGradeCD.filter(F.action == "accept"))
 async def mod_approve(callback: CallbackQuery, callback_data: AdminGradeCD, session: AsyncSession, state: FSMContext, bot: Bot):
     """Мгновенный ЗАЧЕТ актива + плашка отката."""
-    mod_svc = ModerationService(session=session)
-    # Пытаемся зачесть актив
-    success = await mod_svc.finalize_submission(callback_data.item_id, SubmissionStatus.ACCEPTED)
-    if not success:
-        await callback.answer("⚠️ Ошибка: актив уже обработан или не найден", show_alert=True)
-        return
+    try:
+        mod_svc = ModerationService(session=session)
+        success = await mod_svc.finalize_submission(callback_data.item_id, SubmissionStatus.ACCEPTED)
+        if not success:
+            await callback.answer("⚠️ Ошибка: актив уже обработан или не найден", show_alert=True)
+            return
+            
+        logger.info(f"Admin {callback.from_user.id} ACCEPTED sub {callback_data.item_id}")
         
-    await session.commit()
-    await callback.answer("✅ ЗАЧЁТ", show_alert=False)
-    
-    # Вместо удаления - показываем плашку успеха
-    await _show_success_with_undo(bot, callback.message.chat.id, callback.message.message_id, callback_data.item_id, "ЗАЧЁТ")
-    
-    # И сразу присылаем НОВЫМ сообщением следующую карточку
-    await _render_next_item(bot, callback.from_user.id, session, state)
+        # Показываем плашку успеха
+        await _show_success_with_undo(bot, callback.message.chat.id, callback.message.message_id, callback_data.item_id, "ЗАЧЁТ")
+        
+        # И сразу присылаем НОВЫМ сообщением следующую карточку
+        await _render_next_item(bot, callback.from_user.id, session, state)
+    except Exception as e:
+        logger.exception(f"Error in mod_approve: {e}")
+        await callback.answer("❌ Ошибка при одобрении", show_alert=True)
 
 
 # =====================================================================
@@ -127,36 +154,52 @@ async def mod_defect_menu(callback: CallbackQuery, callback_data: AdminGradeCD):
 @router.callback_query(F.data.startswith("mod_rf:"))
 async def mod_finalize_defect(callback: CallbackQuery, session: AsyncSession, state: FSMContext, bot: Bot):
     """Завершение с выбранной причиной отказа + плашка отката."""
-    parts = callback.data.split(":", 3)
-    if len(parts) < 4:
-        await callback.answer("❌ Ошибка данных колбэка", show_alert=True)
-        return
+    try:
+        # Безопасный парсинг: mod_rf:ITEM_ID:TYPE:REASON (причина может содержать двоеточия)
+        parts = callback.data.split(":", 3)
+        if len(parts) < 4:
+            logger.error(f"Invalid callback data format: {callback.data}")
+            await callback.answer("❌ Ошибка данных колбэка", show_alert=True)
+            return
+            
+        item_id = int(parts[1])
+        type_key = parts[2]
+        reason = parts[3]
         
-    item_id = int(parts[1])
-    type_key = parts[2]
-    reason = parts[3]
-    
-    status_map = {
-        "not_scan": SubmissionStatus.NOT_A_SCAN, 
-        "reject": SubmissionStatus.REJECTED, 
-        "block": SubmissionStatus.BLOCKED
-    }
+        status_map = {
+            "not_scan": SubmissionStatus.NOT_A_SCAN, 
+            "reject": SubmissionStatus.REJECTED, 
+            "block": SubmissionStatus.BLOCKED
+        }
 
-    mod_svc = ModerationService(session=session)
-    success = await mod_svc.finalize_submission(item_id, status_map[type_key], reason=reason)
-    if not success:
-        await callback.answer("⚠️ Ошибка: актив уже обработан или не найден", show_alert=True)
-        return
+        if type_key not in status_map:
+            logger.error(f"Unknown defect type: {type_key}")
+            return
+
+        mod_svc = ModerationService(session=session)
+        success = await mod_svc.finalize_submission(item_id, status_map[type_key], reason=reason)
         
-    await session.commit()
-    await callback.answer("❌ ОТКЛОНЕНО", show_alert=False)
-    
-    # Показываем плашку отката
-    action_label = "БРАК" if type_key == "reject" else "НЕ СКАН" if type_key == "not_scan" else "БЛОК"
-    await _show_success_with_undo(bot, callback.message.chat.id, callback.message.message_id, item_id, action_label)
-    
-    # Следующая карточка
-    await _render_next_item(bot, callback.from_user.id, session, state)
+        if not success:
+            await callback.answer("⚠️ Ошибка: актив уже обработан или не найден", show_alert=True)
+            return
+            
+        logger.info(f"Admin {callback.from_user.id} finalized sub {item_id} as {type_key} (Reason: {reason})")
+        
+        # Визуальное подтверждение
+        action_label = "БРАК" if type_key == "reject" else "НЕ СКАН" if type_key == "not_scan" else "БЛОК"
+        
+        # 1. Показываем плашку отката (редактируем текущее сообщение)
+        try:
+            await _show_success_with_undo(bot, callback.message.chat.id, callback.message.message_id, item_id, action_label)
+        except Exception as e:
+            logger.warning(f"Could not show undo plate: {e}")
+
+        # 2. Переходим к следующей карточке
+        await _render_next_item(bot, callback.from_user.id, session, state)
+        
+    except Exception as e:
+        logger.exception(f"Critical error in mod_finalize_defect: {e}")
+        await callback.answer("❌ Произошла ошибка при финализации", show_alert=True)
 
 @router.callback_query(F.data == "mod_pause")
 async def mod_pause(callback: CallbackQuery, state: FSMContext):
@@ -164,7 +207,6 @@ async def mod_pause(callback: CallbackQuery, state: FSMContext):
     await state.clear()
     await callback.message.delete()
     await callback.message.answer("⏸ <b>Конвейер приостановлен.</b>\nВаши взятые активы сохранены в разделе «В работе».", parse_mode="HTML")
-    await callback.answer()
 
 # =====================================================================
 
@@ -176,7 +218,6 @@ async def mod_custom_comment_start(callback: CallbackQuery, state: FSMContext):
     await state.set_state(ModerationStates.waiting_for_custom_comment)
 
     await callback.message.answer("✍️ <b>Введите ваш комментарий для селлера:</b>\n<i>(Причина будет установлена как 'Другое')</i>", parse_mode="HTML")
-    await callback.answer()
 
 @router.message(ModerationStates.waiting_for_custom_comment, F.text)
 async def process_custom_comment(message: Message, state: FSMContext, session: AsyncSession, bot: Bot):
@@ -211,7 +252,6 @@ async def mod_cancel_defect(callback: CallbackQuery, callback_data: AdminGradeCD
     await callback.message.edit_reply_markup(
         reply_markup=get_mod_inspector_kb(callback_data.item_id, remaining)
     )
-    await callback.answer()
 
 async def _show_success_with_undo(bot: Bot, chat_id: int, message_id: int, item_id: int, action_text: str):
     """Превращает проверенную карточку в плашку успеха с кнопкой отката."""

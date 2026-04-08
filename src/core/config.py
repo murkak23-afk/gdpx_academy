@@ -79,6 +79,11 @@ class Settings(BaseSettings):
         alias="HEALTH_READY_INCLUDE_CRYPTOBOT",
         description="Включать ли проверку Crypto Pay API в GET /health/ready (если задан CRYPTO_PAY_TOKEN).",
     )
+    moderation_suspended: bool = Field(
+        default=False,
+        description="Глобальная приостановка работы всех модераторов.",
+    )
+
 
     brand_channel_url: str | None = Field(
         default=None,
