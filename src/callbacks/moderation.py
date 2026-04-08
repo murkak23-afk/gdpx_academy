@@ -14,8 +14,8 @@ class AdminBatchCD(CallbackData, prefix="mod_b"):
     val: str = "" # Универсальное поле (ID, страница, статус и т.д.)
 
 class AdminSellerQueueCD(CallbackData, prefix="mod_sel"):
-    user_id: int
-    action: str  # view, take_all, take_5, take_10 и т.д.    
+    user_id: str = "0"
+    action: str  # list, view, take_all, take_5, take_10 и т.д.
 
 class AdminSearchCD(CallbackData, prefix="mod_src"):
     action: str                    # filter, take_all

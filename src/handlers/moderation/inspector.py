@@ -97,12 +97,16 @@ async def handle_take_batch(callback: CallbackQuery, callback_data: AdminSellerQ
 async def mod_approve(callback: CallbackQuery, callback_data: AdminGradeCD, session: AsyncSession, state: FSMContext, bot: Bot):
     """Мгновенный ЗАЧЕТ актива + плашка отката."""
     mod_svc = ModerationService(session=session)
-    await mod_svc.finalize_submission(callback_data.item_id, SubmissionStatus.ACCEPTED)
+    # Пытаемся зачесть актив
+    success = await mod_svc.finalize_submission(callback_data.item_id, SubmissionStatus.ACCEPTED)
+    if not success:
+        await callback.answer("⚠️ Ошибка: актив уже обработан или не найден", show_alert=True)
+        return
+        
     await session.commit()
-    
     await callback.answer("✅ ЗАЧЁТ", show_alert=False)
     
-    # Вместо удаления - показываем плашку отката
+    # Вместо удаления - показываем плашку успеха
     await _show_success_with_undo(bot, callback.message.chat.id, callback.message.message_id, callback_data.item_id, "ЗАЧЁТ")
     
     # И сразу присылаем НОВЫМ сообщением следующую карточку
@@ -124,17 +128,27 @@ async def mod_defect_menu(callback: CallbackQuery, callback_data: AdminGradeCD):
 async def mod_finalize_defect(callback: CallbackQuery, session: AsyncSession, state: FSMContext, bot: Bot):
     """Завершение с выбранной причиной отказа + плашка отката."""
     parts = callback.data.split(":", 3)
+    if len(parts) < 4:
+        await callback.answer("❌ Ошибка данных колбэка", show_alert=True)
+        return
+        
     item_id = int(parts[1])
     type_key = parts[2]
     reason = parts[3]
     
-    status_map = {"not_scan": SubmissionStatus.NOT_A_SCAN, "reject": SubmissionStatus.REJECTED, "block":
-    SubmissionStatus.BLOCKED}
+    status_map = {
+        "not_scan": SubmissionStatus.NOT_A_SCAN, 
+        "reject": SubmissionStatus.REJECTED, 
+        "block": SubmissionStatus.BLOCKED
+    }
 
     mod_svc = ModerationService(session=session)
-    await mod_svc.finalize_submission(item_id, status_map[type_key], reason=reason)
+    success = await mod_svc.finalize_submission(item_id, status_map[type_key], reason=reason)
+    if not success:
+        await callback.answer("⚠️ Ошибка: актив уже обработан или не найден", show_alert=True)
+        return
+        
     await session.commit()
-    
     await callback.answer("❌ ОТКЛОНЕНО", show_alert=False)
     
     # Показываем плашку отката
@@ -241,12 +255,10 @@ async def mod_undo_action(callback: CallbackQuery, callback_data: AdminGradeCD, 
     
     mod_svc = ModerationService(session=session)
     success, msg = await mod_svc.undo_submission_action(callback_data.item_id, admin.id)
-    await session.commit()
     
     if success:
+        await session.commit()
         await callback.answer("✅ Откат успешен! Оцени актив заново.", show_alert=True)
-        
-        # Заново получаем данные карточки
         from src.database.models.submission import Submission
         item = await mod_svc._session.get(Submission, callback_data.item_id)
         seller = await UserService(session=session).get_by_id(item.user_id)
@@ -280,7 +292,6 @@ async def mod_undo_action(callback: CallbackQuery, callback_data: AdminGradeCD, 
             )
         except Exception:
             pass
-            
     else:
         await callback.answer(msg, show_alert=True)
         await callback.message.edit_reply_markup(reply_markup=None) # Убираем кнопку, если время вышло по БД

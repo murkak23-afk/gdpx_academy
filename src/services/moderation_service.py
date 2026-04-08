@@ -199,24 +199,43 @@ class ModerationService:
         res = await self._session.execute(stmt)
         return res.scalar_one_or_none()
 
-    async def finalize_submission(self, submission_id: int, status: SubmissionStatus, reason: str = None, comment: str = None) -> bool:
-        """Закрывает заявку и начисляет баланс при зачёте."""
-        from src.database.models.user import User
-        sub = await self._session.get(Submission, submission_id)
-        if not sub: return False
+    async def finalize_submission(
+        self, 
+        submission_id: int, 
+        status: SubmissionStatus, 
+        reason: str | None = None, 
+        comment: str | None = None
+    ) -> bool:
+        """Финальное решение по активу (Зачёт/Брак/Блок). Возвращает True при успехе."""
+        stmt = select(Submission).where(Submission.id == submission_id)
+        res = await self._session.execute(stmt)
+        sub = res.scalar_one_or_none()
         
+        # Разрешаем финализацию только если статус PENDING или IN_REVIEW
+        if not sub or sub.status not in (SubmissionStatus.PENDING, SubmissionStatus.IN_REVIEW):
+            return False
+            
+        # Устанавливаем статус и время проверки
         sub.status = status
+        sub.reject_reason = reason
+        sub.admin_comment = comment
         sub.reviewed_at = datetime.now(timezone.utc)
-        sub.rejection_reason = reason
-        sub.rejection_comment = comment
         
+        # Если ЗАЧЁТ - начисляем выплату селлеру
         if status == SubmissionStatus.ACCEPTED:
-            sub.accepted_amount = sub.fixed_payout_rate
-            seller = await self._session.get(User, sub.user_id)
+            from src.database.models.user import User
+            # Используем fixed_payout_rate из самой заявки (сохраняется при создании)
+            # или из текущей категории, если в заявке 0
+            amount = sub.accepted_amount or sub.fixed_payout_rate
+            
+            # Начисляем на баланс
+            user_stmt = select(User).where(User.id == sub.user_id)
+            user_res = await self._session.execute(user_stmt)
+            seller = user_res.scalar_one_or_none()
             if seller:
-                seller.pending_balance = (seller.pending_balance or 0) + sub.fixed_payout_rate
-        
-        await self._session.flush()
+                seller.pending_balance += amount
+                sub.accepted_amount = amount # Фиксируем выплаченную сумму
+                
         return True
 
     async def get_pending_sellers(self) -> List[dict]:
@@ -229,7 +248,7 @@ class ModerationService:
             .group_by(User.id).order_by(func.min(Submission.created_at).asc())
         )
         res = await self._session.execute(stmt)
-        return [{"user": r[0], "count": r[1], "oldest": r[2]} for r in res.all()]
+        return [{"user_id": r[0].id, "username": r[0].username, "count": r[1], "oldest": r[2]} for r in res.all()]
 
     async def get_pending_for_seller(self, user_id: int, limit: int = 50) -> List[Submission]:
         """Список PENDING активов конкретного продавца."""
@@ -248,29 +267,29 @@ class ModerationService:
         
         stmt = (
             select(Submission)
-            .options(joinedload(Submission.category)) # ФИКС MissingGreenlet
+            .options(joinedload(Submission.category), joinedload(Submission.seller))
             .join(Category, Submission.category_id == Category.id)
             .join(User, Submission.user_id == User.id)
             .where(Submission.status == SubmissionStatus.PENDING)
         )
-
-        q = query.strip()
-        or_conditions = []
         
-        if q.isdigit():
-            or_conditions.append(Submission.id == int(q))
-            or_conditions.append(User.telegram_id == int(q))
-            or_conditions.append(User.id == int(q))
-            or_conditions.append(Submission.phone_normalized.like(f"%{q}"))
-            
-        if q.startswith("@"):
-            or_conditions.append(User.username.ilike(f"%{q[1:]}%"))
-        elif not q.isdigit():
-            or_conditions.append(User.username.ilike(f"%{q}%"))
-
-        if or_conditions:
-            stmt = stmt.where(or_(*or_conditions))
-
+        # Очищаем запрос от лишних символов
+        clean_query = query.strip().replace("+", "").replace(" ", "")
+        
+        if clean_query:
+            # Если запрос похож на окончание номера (4-5 цифр)
+            if clean_query.isdigit() and 4 <= len(clean_query) <= 6:
+                stmt = stmt.where(Submission.phone_normalized.like(f"%{clean_query}"))
+            else:
+                # Поиск по полному вхождению номера, ID или юзернейму
+                stmt = stmt.where(
+                    or_(
+                        Submission.phone_normalized.contains(clean_query),
+                        Submission.id.cast(func.text).contains(clean_query),
+                        User.username.ilike(f"%{clean_query}%")
+                    )
+                )
+        
         now = datetime.now(timezone.utc)
         if filter_type == "prio":
             stmt = stmt.where(Category.is_priority == True)
@@ -278,8 +297,9 @@ class ModerationService:
             stmt = stmt.where(Submission.created_at <= now - timedelta(minutes=8))
         elif filter_type == "sla15":
             stmt = stmt.where(Submission.created_at <= now - timedelta(minutes=15))
-
-        stmt = stmt.order_by(Submission.created_at.asc()).limit(limit)
+            
+        stmt = stmt.order_by(Submission.created_at.desc()).limit(limit)
+        
         res = await self._session.execute(stmt)
         return list(res.scalars().all())
     

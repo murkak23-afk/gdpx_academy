@@ -31,7 +31,18 @@ async def start_batch_my(callback: CallbackQuery, state: FSMContext, session: As
 @router.callback_query(AdminBatchCD.filter(F.action == "start"))
 async def start_batch_mode(callback: CallbackQuery, callback_data: AdminBatchCD, session: AsyncSession, state: FSMContext):
     """Открытие списка галочек для Batch-мастера."""
-    page = int(callback_data.val) if callback_data.val else 0
+    # Если val='my' или '0', обрабатываем это
+    val = callback_data.val or "0"
+    
+    if val == "my":
+        await state.update_data(batch_mode="my_work", batch_selected=[])
+        page = 0
+    else:
+        try:
+            page = int(val)
+        except ValueError:
+            page = 0
+            
     await state.set_state(ModerationStates.batch_processing)
 
     data = await state.get_data()
@@ -196,8 +207,8 @@ async def _finalize_batch_job(
     data = await state.get_data()
     selected_ids = data.get("batch_selected", [])
 
-    from src.services.admin_service import AdminService
-    admin = await AdminService(session=session).get_by_telegram_id(message_obj.from_user.id)
+    from src.services.user_service import UserService
+    admin = await UserService(session=session).get_by_telegram_id(message_obj.from_user.id)
 
     mod_svc = ModerationService(session=session)
     count = await mod_svc.bulk_finalize_submissions(selected_ids, status, admin.id, reason, comment)

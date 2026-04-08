@@ -1,5 +1,7 @@
 from __future__ import annotations
 from aiogram import Router, F
+from aiogram.filters import Command
+from aiogram.fsm.context import FSMContext
 from aiogram.types import Message, CallbackQuery
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -60,8 +62,11 @@ async def _render_dashboard_text(session: AsyncSession, user_id: int) -> tuple[s
     return text, stats['total_pending'], in_work
 
 
+@router.message(Command("a", "admin", prefix="/!"))
+@router.message(F.text.casefold().regexp(r"^[/!](a|admin)$"))
 @router.message(F.text.casefold().contains("модерация"))
 async def cmd_moderation_dashboard_msg(message: Message, session: AsyncSession):
+    from src.services.admin_service import AdminService
     if not await AdminService(session=session).is_admin_strictly(message.from_user.id):
         return
     text, pending, in_work = await _render_dashboard_text(session, message.from_user.id)
@@ -73,23 +78,40 @@ async def cmd_moderation_dashboard_msg(message: Message, session: AsyncSession):
 async def cmd_moderation_dashboard_cb(callback: CallbackQuery, session: AsyncSession, state: FSMContext):
     await state.clear()  # Чистим состояние при входе в дашборд
 
+    from src.services.admin_service import AdminService
     if not await AdminService(session=session).is_admin_strictly(callback.from_user.id):
         return
     text, pending, in_work = await _render_dashboard_text(session, callback.from_user.id)
-    await edit_message_text_or_caption_safe(
-        callback.message, 
-        text, 
-        reply_markup=get_mod_dashboard_kb(pending, in_work),
-        parse_mode="HTML"
-    )
+    
+    # ФИКС: Telegram API Error: message is not modified
+    # Если текст и клавиатура не изменились, просто отвечаем на колбэк
+    from src.keyboards.moderation import get_mod_dashboard_kb
+    new_kb = get_mod_dashboard_kb(pending, in_work)
+    
+    try:
+        await edit_message_text_or_caption_safe(
+            callback.message, 
+            text, 
+            reply_markup=new_kb,
+            parse_mode="HTML"
+        )
+    except Exception as e:
+        if "message is not modified" not in str(e):
+            raise e
+            
     await callback.answer()
 
 @router.callback_query(F.data == "mod_my_work_folder")
 async def open_my_work_folder(callback: CallbackQuery, session: AsyncSession):
     """Открывает папку действий с личными активами."""
+    from src.services.moderation_service import ModerationService
+    mod_service = ModerationService(session=session)
+    count = await mod_service.get_my_active_items(callback.from_user.id)
+    
     text = (
         f"❖ <b>GDPX // ВАШИ АКТИВЫ</b>\n"
         f"{DIVIDER}\n"
+        f"У вас в работе: <code>{count}</code> активов.\n\n"
         f"Здесь находятся активы, которые вы уже взяли в работу, но еще не приняли по ним решение.\n\n"
         f"<i>Выберите режим работы:</i>"
     )
@@ -101,9 +123,14 @@ async def open_my_work_folder(callback: CallbackQuery, session: AsyncSession):
 @router.callback_query(F.data == "mod_queue_folder")
 async def open_queue_folder(callback: CallbackQuery, session: AsyncSession):
     """Открывает папку действий с общей очередью."""
+    from src.services.moderation_service import ModerationService
+    mod_service = ModerationService(session=session)
+    stats = await mod_service.get_queue_stats()
+    
     text = (
         f"❖ <b>GDPX // ОБЩАЯ ОЧЕРЕДЬ</b>\n"
         f"{DIVIDER}\n"
+        f"В очереди ожидает: <code>{stats['total_pending']}</code> новых активов.\n\n"
         f"Здесь находятся новые заявки от всех агентов, ожидающие проверки.\n\n"
         f"<i>Выберите, как вы хотите с ними работать:</i>"
     )

@@ -47,11 +47,13 @@ async def on_enter_moderator_panel(event: Message | CallbackQuery, session: Asyn
     else:
         await edit_message_text_or_caption_safe(event.message, text, reply_markup=kb, parse_mode="HTML")
 
-@router.message(Command("a", "admin"), IsAdminFilter())
+@router.message(Command("a", "admin", prefix="/!"))
+@router.message(F.text.casefold().regexp(r"^[/!](a|admin)$"))
 @router.message(F.text.casefold().contains("модерация"))
 async def cmd_moderator_panel(message: Message, session: AsyncSession) -> None:
     from src.services.admin_service import AdminService
-    if not await AdminService(session=session).is_admin_strictly(message.from_user.id):
+    admin_svc = AdminService(session=session)
+    if not await admin_svc.is_admin_strictly(message.from_user.id):
         return
     await on_enter_moderator_panel(message, session)
 
@@ -92,10 +94,21 @@ from src.keyboards.factory import NavCD
 @router.callback_query(NavCD.filter(F.to == "admin_menu"))
 async def back_to_admin_menu(callback: CallbackQuery, session: AsyncSession, state: FSMContext) -> None:
     await state.clear()
-    # Определяем, куда возвращать пользователя
+    from src.services.admin_service import AdminService
     admin_svc = AdminService(session=session)
+    
+    # Если это владелец и он пришел из раздела /o (проверяем по тексту сообщения или состоянию)
+    # Но надежнее просто проверять роль и предлагать выбор или возвращать в /o по умолчанию для владельца
     if await admin_svc.is_owner_strictly(callback.from_user.id):
-        await on_enter_owner_panel(callback, session)
+        msg_text = (callback.message.text or callback.message.caption or "").upper()
+        # Если в тексте сообщения есть "КОМАНДНЫЙ ЦЕНТР" или другие маркеры владельца
+        if "КОМАНДНЫЙ ЦЕНТР" in msg_text or "GDPX EXPORT" in msg_text or "ЛИДЕРОВ" in msg_text:
+             await on_enter_owner_panel(callback, session)
+        elif "ИНСПЕКТОР" in msg_text or "ОЧЕРЕДЬ" in msg_text or "МОДЕРАТОР" in msg_text:
+             await on_enter_moderator_panel(callback, session)
+        else:
+             # По умолчанию для владельца - в его кабинет
+             await on_enter_owner_panel(callback, session)
     elif await admin_svc.is_admin_strictly(callback.from_user.id):
         await on_enter_moderator_panel(callback, session)
     else:
