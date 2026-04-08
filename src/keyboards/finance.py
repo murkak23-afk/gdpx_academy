@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from aiogram.types import InlineKeyboardMarkup
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from src.keyboards.base import PremiumBuilder
 from src.keyboards.constants import *
 from src.callbacks.finance import FinancePayCD, FinanceTopupCD
@@ -19,12 +19,13 @@ def get_paylist_kb(sellers: list, page: int, total: int) -> InlineKeyboardMarkup
     builder.adjust(1)
     builder.pagination("fin_pay", page, total, 10)
     
+    # Исправляем передачу bound methods в row()
     builder.row(
-        builder.builder.button(text=f"{EMOJI_REFRESH} ОБНОВИТЬ", callback_data=FinancePayCD(action="list", page=page).pack()).button,
-        builder.builder.button(text="📜 ИСТОРИЯ", callback_data=FinancePayCD(action="history").pack()).button
+        InlineKeyboardButton(text=f"{EMOJI_REFRESH} ОБНОВИТЬ", callback_data=FinancePayCD(action="list", page=page).pack()),
+        InlineKeyboardButton(text="📜 ИСТОРИЯ", callback_data=FinancePayCD(action="history").pack())
     )
     builder.row(
-        builder.builder.button(text="❮ НАЗАД В МЕНЮ", callback_data="owner_back_main").button
+        InlineKeyboardButton(text="❮ НАЗАД В МЕНЮ", callback_data="owner_back_main")
     )
     return builder.as_markup()
 

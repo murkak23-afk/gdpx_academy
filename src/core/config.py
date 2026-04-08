@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 from functools import lru_cache
+from typing import Any
 
 from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -34,7 +35,7 @@ class Settings(BaseSettings):
     http_host: str = Field(default="0.0.0.0", alias="HTTP_HOST")
     http_port: int = Field(default=8000, alias="HTTP_PORT")
 
-    admin_telegram_ids: list[int] = Field(
+    admin_telegram_ids: Any = Field(
         default_factory=list,
         validation_alias="ADMIN_TELEGRAM_IDS",
         description="Список ID администраторов (через запятую).",
@@ -62,7 +63,7 @@ class Settings(BaseSettings):
         alias="MAINTENANCE_MODE",
         description="Режим обслуживания: бот доступен только владельцам.",
     )
-    owner_telegram_ids: list[int] = Field(
+    owner_telegram_ids: Any = Field(
         default_factory=list,
         validation_alias="OWNER_TELEGRAM_IDS",
         description="ID владельцев, которые могут пользоваться ботом в Maintenance Mode.",
@@ -106,6 +107,21 @@ class Settings(BaseSettings):
     support_contact_helper_1: str | None = Field(default=None, alias="SUPPORT_CONTACT_HELPER_1")
     support_contact_helper_2: str | None = Field(default=None, alias="SUPPORT_CONTACT_HELPER_2")
     chats: str | None = Field(default=None, alias="CHATS")
+
+    @field_validator("maintenance_mode", "health_ready_include_cryptobot", "moderation_suspended", mode="before")
+    @classmethod
+    def _normalize_bool(cls, value: object) -> bool:
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, str):
+            val = value.strip().lower()
+            if val in ("true", "1", "yes", "on"):
+                return True
+            if val in ("false", "0", "no", "off"):
+                return False
+            # Если в строке есть 'true' (даже с опечатками типа 'trueq'), считаем за True
+            return "true" in val
+        return bool(value)
 
     @field_validator("admin_telegram_ids", "owner_telegram_ids", mode="before")
     @classmethod

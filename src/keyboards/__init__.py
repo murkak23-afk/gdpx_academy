@@ -21,7 +21,7 @@ from src.keyboards.seller import (
     get_seller_item_view_kb, get_upload_finish_kb,
     get_seller_stats_kb, get_seller_settings_kb, get_seller_payout_history_kb,
     get_pin_pad_kb, get_notification_settings_kb,
-    get_favorite_categories_kb
+    get_favorite_categories_kb, get_language_settings_kb
 )
 from src.keyboards.owner import (
     get_owner_main_kb,
@@ -75,6 +75,7 @@ __all__ = [
     "get_pin_pad_kb",
     "get_notification_settings_kb",
     "get_favorite_categories_kb",
+    "get_language_settings_kb",
     "get_owner_main_kb",
     "get_catcon_main_kb",
     "get_catcon_options_kb",
