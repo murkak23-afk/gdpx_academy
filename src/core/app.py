@@ -52,11 +52,16 @@ async def run_application() -> None:
 
     try:
         bot = create_bot()
-        await setup_bot_commands(bot)  # 🆕 Устанавливаем красивое меню команд
+        await setup_bot_commands(bot)
         dispatcher = create_dispatcher()
-        # Anti-flood middleware
-        from middlewares.antiflood_middleware import AntiFloodMiddleware
-        dispatcher.message.middleware(AntiFloodMiddleware(rate_limit=1.0))
+        
+        from src.services.notification_service import NotificationService
+        from src.core.logger import setup_logger
+        notification_service = NotificationService(bot, settings)
+        dispatcher["notification_service"] = notification_service
+        
+        # Переключаем логирование на loguru с отправкой ошибок в Telegram
+        setup_logger(notification_service)
 
         fastapi_app = create_fastapi_app()
         uvicorn_config = uvicorn.Config(

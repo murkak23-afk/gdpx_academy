@@ -28,7 +28,7 @@ class UserService:
         return await self._session.get(User, user_id)
 
     async def get_all_admins(self) -> list[User]:
-        """Возвращает список всех пользователей с ролью admin."""
+        """Возвращает список только ADMIN, исключая OWNER (Ghost-mode)."""
         stmt = select(User).where(User.role == UserRole.ADMIN, User.is_active.is_(True))
         result = await self._session.execute(stmt)
         return list(result.scalars().all())
@@ -40,7 +40,7 @@ class UserService:
         return list(result.scalars().all())
 
     async def list_active_sellers(self) -> list[User]:
-        """Активные продавцы и админы (у кого может быть выгрузка) для «Запросов»."""
+        """Активные продавцы и админы (у кого может быть выгрузка) для «Запросов». OWNER исключен (Ghost-mode)."""
         stmt = (
             select(User)
             .where(
@@ -68,7 +68,6 @@ class UserService:
             existing.language = language
             if existing.role is None:
                 existing.role = UserRole.SELLER
-            await self._session.refresh(existing)
             return existing
 
         user = User(
@@ -80,7 +79,6 @@ class UserService:
             is_active=True,
         )
         self._session.add(user)
-        await self._session.refresh(user)
         return user
 
     async def set_restricted(self, user_id: int, value: bool) -> User | None:
@@ -93,7 +91,6 @@ class UserService:
         if not value:
             user.captcha_answer = None
             user.captcha_attempts = 0
-        await self._session.refresh(user)
         return user
 
     async def create_captcha(self, user_id: int) -> str | None:

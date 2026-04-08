@@ -202,6 +202,112 @@ class SubmissionService:
         await self._session.flush()
         return submissions
 
+    async def export_user_submissions_excel(self, user_id: int) -> bytes:
+        """Генерирует Excel файл с историей всех активов пользователя."""
+        import io
+        from openpyxl import Workbook
+        from sqlalchemy import select
+        from src.database.models.submission import Submission
+        from src.database.models.category import Category
+
+        stmt = (
+            select(Submission, Category.title)
+            .join(Category, Submission.category_id == Category.id)
+            .where(Submission.user_id == user_id)
+            .order_by(Submission.created_at.desc())
+        )
+        result = await self._session.execute(stmt)
+        rows = result.all()
+
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "GDPX Assets"
+
+        # Заголовки
+        headers = ["ID", "Дата", "Категория", "Телефон", "Статус", "Выплата (USDT)"]
+        ws.append(headers)
+
+        for sub, cat_title in rows:
+            ws.append([
+                sub.id,
+                sub.created_at.strftime("%Y-%m-%d %H:%M"),
+                cat_title,
+                sub.phone_normalized or sub.description_text[:20],
+                sub.status.value.upper(),
+                float(sub.accepted_amount or 0)
+            ])
+
+        # Автоматическая ширина колонок
+        for col in ws.columns:
+            max_length = 0
+            column = col[0].column_letter
+            for cell in col:
+                try:
+                    if len(str(cell.value)) > max_length:
+                        max_length = len(str(cell.value))
+                except: pass
+            ws.column_dimensions[column].width = max_length + 2
+
+        out = io.BytesIO()
+        wb.save(out)
+        return out.getvalue()
+
+    async def get_user_rank_position(self, user_id: int) -> tuple[int, int]:
+        """Возвращает позицию пользователя в рейтинге и общее количество селлеров."""
+        from sqlalchemy import select, func, desc
+        from src.database.models.user import User
+        from src.database.models.enums import UserRole
+
+        # Считаем количество принятых симок для всех селлеров
+        stmt = (
+            select(User.id, func.count(Submission.id).label("cnt"))
+            .join(Submission, Submission.user_id == User.id)
+            .where(User.role == UserRole.SELLER, Submission.status == SubmissionStatus.ACCEPTED)
+            .group_by(User.id)
+            .order_by(desc("cnt"))
+        )
+        result = await self._session.execute(stmt)
+        rows = result.all()
+        
+        total_sellers = len(rows)
+        for i, (uid, cnt) in enumerate(rows, 1):
+            if uid == user_id:
+                return i, total_sellers
+        return total_sellers, total_sellers
+
+    async def get_detailed_stats_for_period(self, user_id: int, days: int | None = None) -> dict:
+        """Статистика за период (в днях). Если None — за все время."""
+        from datetime import datetime, timedelta, timezone
+        from sqlalchemy import select, func, case
+        
+        conds = [Submission.user_id == user_id]
+        if days is not None:
+            since = datetime.now(timezone.utc) - timedelta(days=days)
+            conds.append(Submission.created_at >= since)
+            
+        stmt = select(
+            func.count(case((Submission.status == SubmissionStatus.ACCEPTED, 1))),
+            func.count(case((Submission.status == SubmissionStatus.REJECTED, 1))),
+            func.count(case((Submission.status == SubmissionStatus.BLOCKED, 1))),
+            func.count(case((Submission.status == SubmissionStatus.NOT_A_SCAN, 1))),
+            func.coalesce(func.sum(case((Submission.status == SubmissionStatus.ACCEPTED, Submission.accepted_amount))), Decimal("0.00"))
+        ).where(*conds)
+        
+        result = await self._session.execute(stmt)
+        accepted, rejected, blocked, not_scan, total_earned = result.one()
+        
+        total_processed = accepted + rejected + blocked + not_scan
+        quality_rate = (accepted / total_processed * 100) if total_processed > 0 else 100.0
+        
+        return {
+            "accepted": int(accepted or 0),
+            "rejected": int(rejected or 0),
+            "blocked": int(blocked or 0),
+            "not_scan": int(not_scan or 0),
+            "earned": Decimal(total_earned or "0.00"),
+            "quality": float(quality_rate)
+        }
+
     async def get_user_dashboard_stats(self, user_id: int) -> dict[str, int | Decimal]:
         """Возвращает агрегированную статистику для дашборда пользователя за один запрос."""
 

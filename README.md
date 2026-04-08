@@ -197,7 +197,7 @@ pip-compile --upgrade requirements.in -o requirements.txt --strip-extras
 Все скрипты запускаются из корня репозитория; берут настройки из `.env` (или `ENV_FILE`).
 
 ```bash
-# Назначить роль (admin / sim_root)
+# Назначить роль (admin / owner)
 python scripts/make_admin.py --telegram-id 123456789 --role admin
 
 # Сбросить флаг is_duplicate у заявок

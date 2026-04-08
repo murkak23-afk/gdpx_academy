@@ -27,7 +27,8 @@ from aiogram import F, Router
 from aiogram.enums import ChatType
 
 from src.handlers.seller import router as _seller_router
-from src.handlers.start import router as _start_router
+from src.handlers.registration import router as _registration_router
+from src.handlers.academy import router as _academy_router
 from src.handlers.withdrawal import router as _withdrawal_router
 
 # Корневой роутер для всего private-флоу пользователя.
@@ -36,7 +37,8 @@ user_private_router = Router(name="user-private-router")
 user_private_router.message.filter(F.chat.type == ChatType.PRIVATE)
 user_private_router.callback_query.filter(F.message.chat.type == ChatType.PRIVATE)
 
-# Порядок важен: start — первым, чтобы /start перехватывался раньше seller-меню
-user_private_router.include_router(_start_router)
+# Порядок важен: registration — первым, чтобы /start и процесс регистрации перехватывались раньше seller-меню
+user_private_router.include_router(_registration_router)
+user_private_router.include_router(_academy_router)
 user_private_router.include_router(_seller_router)
 user_private_router.include_router(_withdrawal_router)

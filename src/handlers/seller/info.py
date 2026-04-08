@@ -15,7 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.config import get_settings
 from src.faq import FAQ_CARDS, get_faq_by_id
-from src.keyboards.builders import get_seller_main_kb
+from src.keyboards import get_seller_main_kb
 from src.keyboards.callbacks import (
     CB_SELLER_FAQ_OPEN,
     CB_SELLER_INFO_FAQ,

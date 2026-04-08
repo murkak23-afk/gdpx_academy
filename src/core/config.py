@@ -36,7 +36,7 @@ class Settings(BaseSettings):
 
     admin_telegram_ids: list[int] = Field(
         default_factory=list,
-        alias="ADMIN_TELEGRAM_IDS",
+        validation_alias="ADMIN_TELEGRAM_IDS",
         description="Список ID администраторов (через запятую).",
     )
 
@@ -51,6 +51,21 @@ class Settings(BaseSettings):
         default=None,
         alias="ALERT_TELEGRAM_CHAT_ID",
         description="Чат для служебных алертов (CryptoBot и т.д.). Пусто — не слать.",
+    )
+    admin_error_chat_id: int | None = Field(
+        default=None,
+        alias="ADMIN_ERROR_CHAT_ID",
+        description="Чат для уведомлений о критических ошибках кода.",
+    )
+    maintenance_mode: bool = Field(
+        default=False,
+        alias="MAINTENANCE_MODE",
+        description="Режим обслуживания: бот доступен только владельцам.",
+    )
+    owner_telegram_ids: list[int] = Field(
+        default_factory=list,
+        validation_alias="OWNER_TELEGRAM_IDS",
+        description="ID владельцев, которые могут пользоваться ботом в Maintenance Mode.",
     )
     alert_cryptobot_cooldown_sec: int = Field(
         default=900,
@@ -87,11 +102,13 @@ class Settings(BaseSettings):
     support_contact_helper_2: str | None = Field(default=None, alias="SUPPORT_CONTACT_HELPER_2")
     chats: str | None = Field(default=None, alias="CHATS")
 
-    @field_validator("admin_telegram_ids", mode="before")
+    @field_validator("admin_telegram_ids", "owner_telegram_ids", mode="before")
     @classmethod
     def _normalize_admin_ids(cls, value: object) -> list[int]:
         if value is None or value == "":
             return []
+        if isinstance(value, (int, float)):
+            return [int(value)]
         if isinstance(value, list):
             return [int(v) for v in value if str(v).strip()]
         if isinstance(value, str):

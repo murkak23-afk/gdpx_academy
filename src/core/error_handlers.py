@@ -46,90 +46,56 @@ def _user_id_from_update(event: ErrorEvent) -> int | None:
 
 async def _maybe_notify_admin_critical(
     *,
-    bot: Bot | None,
+    notification_service: NotificationService | None,
     exc: BaseException,
     update_id: int | None,
     user_id: int | None,
 ) -> None:
-    """Шлёт алерты в чат (временный хардкод для теста)."""
-    if bot is None:
-        return
+    """Шлёт алерты в чат администраторов через NotificationService. (ОТКЛЮЧЕНО ПО ПРОСЬБЕ ПОЛЬЗОВАТЕЛЯ)"""
+    # if notification_service is None:
+    #     logger.warning("NotificationService не найден в диспетчере.")
+    #     return
 
-    # ←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←
-    chat_id = -1003859937194  # ←←← СЮДА ВСТАВЬ РЕАЛЬНЫЙ ID ТВОЕЙ ГРУППЫ
-    # ←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←
-
-    from html import escape
-    import traceback
-    from datetime import datetime
-
-    error_type = type(exc).__name__
-    error_msg = escape(str(exc))
-
-    tb_str = "".join(traceback.format_exception(type(exc), exc, exc.__traceback__, limit=5))
-    tb_escaped = escape(tb_str)
-
-    text = (
-        f"🚨 <b>#КРИТИЧЕСКА_ОШИБКА</b> {datetime.utcnow():%Y-%m-%d %H:%M:%S} UTC\n\n"
-        f"<b>Тип:</b> {error_type}\n"
-        f"<b>Update ID:</b> <code>{update_id}</code>\n"
-        f"<b>User ID:</b> <code>{user_id}</code>\n\n"
-        f"<b>Сообщение:</b>\n<pre>{error_msg[:500]}</pre>\n\n"
-        f"<b>Traceback:</b>\n<pre><code class='language-python'>{tb_escaped[:2000]}</code></pre>"
-    )
-
-    try:
-        await bot.send_message(
-            chat_id=chat_id,
-            text=text,
-            parse_mode="HTML",
-            disable_web_page_preview=True,
-        )
-        logger.info(f"✅ Алерт отправлен в чат {chat_id}")
-    except Exception as e:
-        logger.error(f"❌ Ошибка отправки в чат {chat_id}: {e}", exc_info=True)
+    # await notification_service.notify_critical_error(
+    #     exc=exc,
+    #     update_id=update_id,
+    #     user_id=user_id
+    # )
+    pass
 
 
 def register_error_handlers(dispatcher: Dispatcher) -> None:
     """Регистрирует обработчик @dispatcher.errors() с разделением ожидаемых API-ошибок и багов."""
 
     @dispatcher.errors()
-    async def on_error(event: ErrorEvent, bot: Bot | None = None) -> None:
+    async def on_error(event: ErrorEvent, notification_service: NotificationService | None = None) -> None:
         exc = event.exception
         update_id = event.update.update_id
         user_id = _user_id_from_update(event)
-        ctx_extra = f" update_id={update_id} user_id={user_id}"
 
+        # 1. Специфические ошибки Telegram (не баги кода)
         if isinstance(exc, TelegramRetryAfter):
-            logger.warning(
-                "Telegram flood control%s: %s (retry_after=%s)",
-                ctx_extra,
-                exc,
-                getattr(exc, "retry_after", "?"),
-            )
+            logger.warning(f"Flood limit: засыпаем на {exc.retry_after}с (user {user_id})")
+            return
+        if isinstance(exc, (TelegramNetworkError, TelegramAPIError)):
+            logger.error(f"Telegram API Error: {exc} (user {user_id})")
             return
 
-        if isinstance(exc, TelegramNetworkError):
-            logger.warning("Telegram network error%s: %s", ctx_extra, exc)
-            return
-
-        if isinstance(exc, TelegramAPIError):
-            logger.warning("Telegram API error%s: %s", ctx_extra, exc)
-            return
-
+        # 2. Ошибки БД
         if isinstance(exc, SQLAlchemyError):
-            logger.error("Ошибка БД%s: %s", ctx_extra, exc, exc_info=True)
+            logger.critical(f"Database Error: {exc} (user {user_id})", exc_info=True)
             await _maybe_notify_admin_critical(
-                bot=bot,
+                notification_service=notification_service,
                 exc=exc,
                 update_id=update_id,
                 user_id=user_id,
             )
             return
 
-        logger.error("Необработанное исключение%s: %s", ctx_extra, exc, exc_info=True)
+        # 3. Непредвиденные исключения (реальные баги)
+        logger.exception(f"Unhandled Exception: {exc} (user {user_id})")
         await _maybe_notify_admin_critical(
-            bot=bot,
+            notification_service=notification_service,
             exc=exc,
             update_id=update_id,
             user_id=user_id,

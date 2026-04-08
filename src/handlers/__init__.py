@@ -2,6 +2,7 @@ from aiogram import Router
 
 # Импорт основных роутеров
 from src.handlers.admin import router as admin_router
+from src.handlers.admin.health import router as admin_health_router
 from src.handlers.admin_delete_all_submissions import router as admin_delete_all_submissions_router
 from src.handlers.cat_constructor import router as cat_constructor_router
 from src.handlers.group_queue import router as group_queue_router
@@ -29,6 +30,7 @@ def setup_routers() -> Router:
 
     # 2. ПРИОРИТЕТ: Админка
     root_router.include_router(admin_router)
+    root_router.include_router(admin_health_router)
     root_router.include_router(finance_payouts_router)
     # Технические роутеры
     root_router.include_router(cat_constructor_router)

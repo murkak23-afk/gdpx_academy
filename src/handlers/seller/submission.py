@@ -22,7 +22,7 @@ from src.services.user_service import UserService
 from src.utils.media import media
 from src.states.submission_state import SubmissionState
 from src.keyboards.factory import SellerMenuCD, SellerAssetCD
-from src.keyboards.builders import get_seller_main_kb, get_categories_kb, get_upload_finish_kb
+from src.keyboards import get_seller_main_kb, get_categories_kb, get_upload_finish_kb
 from src.utils.ui_builder import DIVIDER, DIVIDER_LIGHT
 from src.utils.text_format import edit_message_text_or_caption_safe
 
@@ -48,6 +48,9 @@ async def start_submission(callback: CallbackQuery, state: FSMContext, session: 
         await callback.answer("🔴 Нет активных операторов для загрузки", show_alert=True)
         return
 
+    user = await UserService(session=session).get_by_telegram_id(callback.from_user.id)
+    fav_ids = user.favorite_categories or []
+
     await state.set_state(SubmissionState.waiting_for_category)
     banner = media.get("esim.jpg")
 
@@ -60,7 +63,7 @@ async def start_submission(callback: CallbackQuery, state: FSMContext, session: 
 
     await callback.message.edit_media(
         media=InputMediaPhoto(media=banner, caption=text, parse_mode="HTML"),
-        reply_markup=get_categories_kb(categories)
+        reply_markup=get_categories_kb(categories, fav_ids)
     )
     await callback.answer()
 

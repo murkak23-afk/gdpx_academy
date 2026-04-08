@@ -64,6 +64,11 @@ class CryptoBotService:
 
         return _client_cache[token]
 
+    async def get_me(self):
+        """Возвращает информацию о текущем приложении CryptoPay."""
+        client = await self._get_client()
+        return await client.get_me()
+
     async def get_balance(self):
         client = await self._get_client()
         return await client.get_balance()

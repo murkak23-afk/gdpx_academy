@@ -54,6 +54,169 @@ class AdminStatsService:
             end = datetime(year=year, month=month + 1, day=1, tzinfo=timezone.utc)
         return start, end
 
+    async def get_owner_summary_stats(self) -> dict:
+        """Сводная статистика для Командного центра владельца (Расширенная)."""
+        # 1. Общий долг селлерам
+        debt_stmt = select(func.sum(User.pending_balance))
+        total_debt = await self._session.scalar(debt_stmt) or Decimal("0.00")
+
+        # 2. Сегодня выплачено
+        today_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+        paid_stmt = select(func.sum(Payout.amount)).where(
+            Payout.status == "paid",
+            Payout.created_at >= today_start
+        )
+        paid_today = await self._session.scalar(paid_stmt) or Decimal("0.00")
+
+        # 3. Активных модераторов сегодня
+        mod_stmt = select(func.count(func.distinct(Submission.admin_id))).where(
+            Submission.reviewed_at >= today_start,
+            Submission.admin_id.is_not(None)
+        )
+        active_mods = await self._session.scalar(mod_stmt) or 0
+
+        # 4. Всего ожидающих в очереди
+        pending_stmt = select(func.count(Submission.id)).where(Submission.status == SubmissionStatus.PENDING)
+        total_pending = await self._session.scalar(pending_stmt) or 0
+
+        # 5. Оборот за 24 часа (сумма принятых активов)
+        volume_stmt = select(func.sum(Submission.accepted_amount)).where(
+            Submission.status == SubmissionStatus.ACCEPTED,
+            Submission.reviewed_at >= today_start
+        )
+        volume_24h = await self._session.scalar(volume_stmt) or Decimal("0.00")
+
+        # 6. Топ оператор за сегодня
+        top_op_stmt = (
+            select(Category.operator)
+            .join(Submission, Submission.category_id == Category.id)
+            .where(Submission.reviewed_at >= today_start)
+            .group_by(Category.operator)
+            .order_by(func.count(Submission.id).desc())
+            .limit(1)
+        )
+        top_operator = await self._session.scalar(top_op_stmt) or "N/A"
+
+        return {
+            "total_debt": total_debt,
+            "paid_today": paid_today,
+            "active_mods": active_mods,
+            "total_pending": total_pending,
+            "volume_24h": volume_24h,
+            "top_operator": top_operator,
+        }
+
+    async def get_platform_stats(self, start: datetime, end: datetime) -> dict:
+        """Общая статистика по платформе."""
+        effective = self._effective_start(start)
+        
+        # Кол-во симок
+        total_stmt = select(func.count(Submission.id)).where(
+            Submission.created_at >= effective,
+            Submission.created_at <= end
+        )
+        total_count = await self._session.scalar(total_stmt) or 0
+        
+        # Кол-во принятых
+        accepted_stmt = select(func.count(Submission.id)).where(
+            Submission.status == SubmissionStatus.ACCEPTED,
+            Submission.reviewed_at >= effective,
+            Submission.reviewed_at <= end
+        )
+        accepted_count = await self._session.scalar(accepted_stmt) or 0
+        
+        # Процент брака
+        rejected_statuses = [SubmissionStatus.REJECTED, SubmissionStatus.BLOCKED, SubmissionStatus.NOT_A_SCAN]
+        rejected_stmt = select(func.count(Submission.id)).where(
+            Submission.status.in_(rejected_statuses),
+            Submission.reviewed_at >= effective,
+            Submission.reviewed_at <= end
+        )
+        rejected_count = await self._session.scalar(rejected_stmt) or 0
+        
+        reject_rate = (rejected_count / (accepted_count + rejected_count) * 100) if (accepted_count + rejected_count) > 0 else 0
+        
+        # Средняя ставка
+        avg_rate_stmt = select(func.avg(Submission.accepted_amount)).where(
+            Submission.status == SubmissionStatus.ACCEPTED,
+            Submission.reviewed_at >= effective,
+            Submission.reviewed_at <= end
+        )
+        avg_rate = await self._session.scalar(avg_rate_stmt) or Decimal("0.00")
+        
+        return {
+            "total_count": total_count,
+            "accepted_count": accepted_count,
+            "rejected_count": rejected_count,
+            "reject_rate": reject_rate,
+            "avg_rate": Decimal(avg_rate).quantize(Decimal("0.01")),
+        }
+
+    async def get_moderators_performance(self, start: datetime, end: datetime) -> list[dict]:
+        """Статистика по модераторам."""
+        effective = self._effective_start(start)
+        
+        stmt = (
+            select(
+                User.username,
+                User.telegram_id,
+                func.count(Submission.id).label("total"),
+                func.count(Submission.id).filter(Submission.status == SubmissionStatus.ACCEPTED).label("accepted")
+            )
+            .join(Submission, Submission.admin_id == User.id)
+            .where(
+                Submission.reviewed_at >= effective,
+                Submission.reviewed_at <= end
+            )
+            .group_by(User.id)
+            .order_by(func.count(Submission.id).desc())
+        )
+        
+        rows = (await self._session.execute(stmt)).all()
+        return [
+            {
+                "username": r.username or str(r.telegram_id),
+                "total": r.total,
+                "accepted": r.accepted,
+                "accept_rate": (r.accepted / r.total * 100) if r.total > 0 else 0
+            }
+            for r in rows
+        ]
+
+    async def get_top_sellers_extended(self, start: datetime, end: datetime, limit: int = 10) -> list[dict]:
+        """Расширенная статистика по селлерам (топ по объему и качеству)."""
+        effective = self._effective_start(start)
+        
+        stmt = (
+            select(
+                User.username,
+                User.telegram_id,
+                func.count(Submission.id).label("total"),
+                func.count(Submission.id).filter(Submission.status == SubmissionStatus.ACCEPTED).label("accepted"),
+                func.sum(Submission.accepted_amount).label("earned")
+            )
+            .join(Submission, Submission.user_id == User.id)
+            .where(
+                Submission.created_at >= effective,
+                Submission.created_at <= end
+            )
+            .group_by(User.id)
+            .order_by(func.count(Submission.id).desc())
+            .limit(limit)
+        )
+        
+        rows = (await self._session.execute(stmt)).all()
+        return [
+            {
+                "username": r.username or str(r.telegram_id),
+                "total": r.total,
+                "accepted": r.accepted,
+                "quality": (r.accepted / r.total * 100) if r.total > 0 else 0,
+                "earned": Decimal(r.earned or 0).quantize(Decimal("0.01"))
+            }
+            for r in rows
+        ]
+
     async def daily_sim_stats_for_month(self, year: int, month: int) -> list[dict[str, int | date]]:
         """Дневная статистика за месяц по SIM: вход, зачёт и виды брака."""
 

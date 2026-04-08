@@ -25,6 +25,21 @@ class SellerItemCD(CallbackData, prefix="sel_item"):
     item_id: int
     action: str  # view, edit, delete, delete_confirm
 
+class SellerStatsCD(CallbackData, prefix="sel_stats"):
+    period: str  # day, week, month, all
+
+class SellerSettingsCD(CallbackData, prefix="sel_sett"):
+    action: str  # main, pin, alias, incognito, prefs, lang, export, notif
+    value: str = ""
+
+class SellerNotifCD(CallbackData, prefix="sel_notif"):
+    preference: str # full, summary, none
+
+class PinPadCD(CallbackData, prefix="pin_pad"):
+    action: str # digit, backspace, confirm, cancel
+    value: str = ""
+    context: str = "" # Например, 'payout', 'details'
+
 class SellerSubmissionCD(CallbackData, prefix="sel_sub"):
     category_id: int
     action: str = "pick" # pick, cancel, finish

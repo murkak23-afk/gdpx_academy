@@ -62,7 +62,7 @@ async def _render_dashboard_text(session: AsyncSession, user_id: int) -> tuple[s
 
 @router.message(F.text.casefold().contains("модерация"))
 async def cmd_moderation_dashboard_msg(message: Message, session: AsyncSession):
-    if not await AdminService(session=session).is_admin(message.from_user.id):
+    if not await AdminService(session=session).is_admin_strictly(message.from_user.id):
         return
     text, pending, in_work = await _render_dashboard_text(session, message.from_user.id)
     await message.answer(text, reply_markup=get_mod_dashboard_kb(pending, in_work), parse_mode="HTML")
@@ -73,7 +73,7 @@ async def cmd_moderation_dashboard_msg(message: Message, session: AsyncSession):
 async def cmd_moderation_dashboard_cb(callback: CallbackQuery, session: AsyncSession, state: FSMContext):
     await state.clear()  # Чистим состояние при входе в дашборд
 
-    if not await AdminService(session=session).is_admin(callback.from_user.id):
+    if not await AdminService(session=session).is_admin_strictly(callback.from_user.id):
         return
     text, pending, in_work = await _render_dashboard_text(session, callback.from_user.id)
     await edit_message_text_or_caption_safe(

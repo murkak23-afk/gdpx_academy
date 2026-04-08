@@ -84,9 +84,9 @@ def seller_main_menu_keyboard(
     rows.append([KeyboardButton(text="Материал"), KeyboardButton(text="История выплат")])
     rows.append([KeyboardButton(text="Поддержка")])
     
-    # Можно добавить кнопку модерации для админов
+    # Можно добавить кнопку модерации для админов/владельцев
     role_value = str(getattr(role, "value", role or "")).strip().lower()
-    if role_value == UserRole.ADMIN.value:
+    if role_value in (UserRole.ADMIN.value, UserRole.OWNER.value):
         rows.append([KeyboardButton(text="⚖️ Модерация")])
 
     return ReplyKeyboardMarkup(

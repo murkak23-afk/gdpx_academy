@@ -8,6 +8,7 @@ from src.keyboards.constants import *
 from src.callbacks.finance import FinancePayCD, FinanceTopupCD
 
 def get_paylist_kb(sellers: list, page: int, total: int) -> InlineKeyboardMarkup:
+    """Список селлеров, ожидающих выплаты."""
     builder = PremiumBuilder()
     
     for seller in sellers:
@@ -24,7 +25,64 @@ def get_paylist_kb(sellers: list, page: int, total: int) -> InlineKeyboardMarkup
     )
     return builder.as_markup()
 
+def get_payout_confirm_kb(user_id: int, page: int) -> InlineKeyboardMarkup:
+    """Подтверждение отправки выплаты."""
+    return (PremiumBuilder()
+            .primary("✅ ПОДТВЕРДИТЬ И ОТПРАВИТЬ", FinancePayCD(action="confirm", user_id=user_id, page=page))
+            .cancel(FinancePayCD(action="list", page=page), "ОТМЕНИТЬ")
+            .adjust(1)
+            .as_markup())
+
+def get_payout_history_kb(payouts: list, page: int, total: int, filter_status: str = "all") -> InlineKeyboardMarkup:
+    """История всех транзакций/выплат."""
+    builder = PremiumBuilder()
+    
+    # Фильтры
+    statuses = [("ВСЕ", "all"), ("⏳ ОЖИДАЮТ", "pending"), ("✅ ВЫПЛАЧЕНО", "paid"), ("❌ ОТМЕНА", "cancelled")]
+    for label, key in statuses:
+        text = f"✨ {label}" if key == filter_status else label
+        builder.button(text, FinancePayCD(action="history", filter_status=key, page=0))
+    
+    builder.adjust(2, 2)
+    
+    # Транзакции
+    for p in payouts:
+        icon = "🟢" if p.status.value == "paid" else "⏳" if p.status.value == "pending" else "🔴"
+        date_str = p.created_at.strftime("%d.%m %H:%M")
+        text = f"{icon} #{p.id} | {date_str} | {p.amount} USDT"
+        builder.button(text, FinancePayCD(action="hist_detail", payout_id=p.id, page=page))
+    
+    builder.adjust(2, 2, 1)
+    builder.pagination("fin_hist", page, total, 10, query=filter_status)
+    builder.back(FinancePayCD(action="list"), "К ВЫПЛАТАМ")
+    return builder.as_markup()
+
+def get_payout_detail_kb(payout_id: int, page: int, status: str = "paid") -> InlineKeyboardMarkup:
+    """Детальный просмотр транзакции."""
+    builder = PremiumBuilder()
+    if status == "paid":
+        builder.button("↩️ ОТМЕНИТЬ ВЫПЛАТУ (UNDO)", FinancePayCD(action="undo_ask", payout_id=payout_id, page=page))
+    
+    builder.back(FinancePayCD(action="history", page=page), "К СПИСКУ")
+    builder.adjust(1)
+    return builder.as_markup()
+
+def get_payout_confirm_undo_kb(payout_id: int) -> InlineKeyboardMarkup:
+    """Подтверждение отмены уже выплаченной транзакции."""
+    return (PremiumBuilder()
+            .danger("⚠️ ДА, ВЕРНУТЬ НА БАЛАНС", FinancePayCD(action="undo_confirm", payout_id=payout_id))
+            .cancel(FinancePayCD(action="hist_detail", payout_id=payout_id), "ОТМЕНИТЬ")
+            .adjust(1)
+            .as_markup())
+
+def get_finance_stats_kb() -> InlineKeyboardMarkup:
+    """Кнопка возврата из статистики финансов."""
+    return (PremiumBuilder()
+            .back(FinancePayCD(action="list"))
+            .as_markup())
+
 def get_topup_kb() -> InlineKeyboardMarkup:
+    """Меню пополнения баланса (админское)."""
     builder = PremiumBuilder()
     amounts = [10, 50, 100, 250, 500]
     for amt in amounts:

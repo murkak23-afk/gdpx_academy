@@ -8,19 +8,20 @@ from src.services import AdminService
 
 
 class IsAdminFilter(BaseFilter):
-    """Пропускает апдейт только для админа (проверка по конфигу + БД)."""
+    """Пропускает апдейт только для Модератора (роль 'admin')."""
 
     async def __call__(self, message: Message, session: AsyncSession) -> bool:
         if message.from_user is None:
             return False
 
-        uid = message.from_user.id
+        return await AdminService(session=session).is_admin_strictly(message.from_user.id)
 
-        # 1. Быстрая проверка по статическому списку (конфиг)
-        from src.core.config import get_settings
-        settings = get_settings()
-        if uid in settings.admin_telegram_ids:
-            return True
 
-        # 2. Проверка роли в базе данных
-        return await AdminService(session=session).is_admin(uid)
+class IsOwnerFilter(BaseFilter):
+    """Пропускает апдейт только для Владельца (роль 'owner' или ID из .env)."""
+
+    async def __call__(self, message: Message, session: AsyncSession) -> bool:
+        if message.from_user is None:
+            return False
+
+        return await AdminService(session=session).is_owner_strictly(message.from_user.id)

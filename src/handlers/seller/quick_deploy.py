@@ -19,7 +19,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.keyboards.builders import get_seller_main_kb
+from src.keyboards import get_seller_main_kb
 from src.keyboards.callbacks import CB_SELLER_DEPLOY_REPEAT
 from src.services import CategoryService, UserService
 from src.states.submission_state import SubmissionState

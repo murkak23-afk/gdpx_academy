@@ -7,3 +7,4 @@ class RegistrationState(StatesGroup):
     """Состояния быстрой регистрации пользователя."""
 
     waiting_for_language = State()
+    waiting_for_pseudonym = State()

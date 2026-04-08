@@ -4,7 +4,7 @@ from datetime import datetime
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
-from sqlalchemy import BigInteger, Boolean, DateTime, Enum, ForeignKey, Numeric, String, Text
+from sqlalchemy import BigInteger, Boolean, DateTime, Enum, ForeignKey, Index, Numeric, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.database.models.base import Base, TimestampMixin
@@ -25,6 +25,9 @@ class Submission(Base, TimestampMixin):
     """Карточка материала: фото, описание, статус и ответственный админ."""
 
     __tablename__ = "submissions"
+    __table_args__ = (
+        Index("ix_submissions_status_created_at", "status", "created_at"),
+    )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("users.id", ondelete="CASCADE"), index=True)

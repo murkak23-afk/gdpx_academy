@@ -11,15 +11,19 @@ from src.middlewares import (
     UpdateLoggingMiddleware,
     UserThrottlingMiddleware,
 )
+from src.middlewares.maintenance import MaintenanceMiddleware
+from src.core.config import get_settings
 
 
 def create_dispatcher() -> Dispatcher:
     """Создаёт диспетчер и подключает middleware/роутеры/обработчик ошибок."""
 
     dispatcher = Dispatcher(storage=build_fsm_storage())
+    settings = get_settings()
 
-    # Порядок: сначала throttling, затем логирование, затем сессия БД (первый зарегистрированный — внешний).
+    # Порядок: сначала throttling, затем обслуживание, затем логирование, затем сессия БД.
     dispatcher.update.middleware(UserThrottlingMiddleware(interval_sec=1.0))
+    dispatcher.update.middleware(MaintenanceMiddleware(settings=settings))
     dispatcher.update.middleware(UpdateLoggingMiddleware())
     dispatcher.update.middleware(DbSessionMiddleware(session_factory=SessionFactory))
 

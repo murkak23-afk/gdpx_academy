@@ -16,8 +16,10 @@ from src.services.admin_service import AdminService
 from src.states.admin_state import CatConstructorState
 from src.keyboards.factory import CatConCD
 from src.keyboards.factory import CatManageCD
-from src.keyboards.builders import get_catcon_main_kb, get_catcon_options_kb, get_catcon_confirm_kb
-from src.keyboards.builders import get_cat_manage_list_kb, get_cat_manage_detail_kb, get_cat_manage_confirm_delete_kb
+from src.keyboards import (
+    get_catcon_main_kb, get_catcon_options_kb, get_catcon_confirm_kb,
+    get_cat_manage_list_kb, get_cat_manage_detail_kb, get_cat_manage_confirm_delete_kb
+)
 from src.utils.ui_builder import GDPXRenderer
 from src.utils.text_format import edit_message_text_or_caption_safe
 

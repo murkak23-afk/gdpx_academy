@@ -8,6 +8,7 @@ class UserRole(StrEnum):
 
     SELLER = "seller"
     ADMIN = "admin"
+    OWNER = "owner"
     SIM_ROOT = "sim_root"
 
 
@@ -43,3 +44,11 @@ class PayoutStatus(StrEnum):
     PENDING = "pending"
     PAID = "paid"
     CANCELLED = "cancelled"
+
+
+class NotificationPreference(StrEnum):
+    """Предпочтения по уведомлениям."""
+
+    FULL = "full"        # О каждой проверке
+    SUMMARY = "summary"  # Итог за день
+    NONE = "none"        # Без уведомлений

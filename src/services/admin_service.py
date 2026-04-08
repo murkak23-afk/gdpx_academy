@@ -21,26 +21,57 @@ class AdminService:
     def _role_value(role: object | None) -> str:
         return str(getattr(role, "value", role or "")).strip().lower()
 
-    async def is_owner(self, telegram_id: int) -> bool:
-        """Проверяет, является ли пользователь Владельцем (из .env)."""
+    async def is_owner_strictly(self, telegram_id: int) -> bool:
+        """Строгая проверка: только Владелец (ID в OWNER_TELEGRAM_IDS или ADMIN_TELEGRAM_IDS или роль в БД)."""
         from src.core.config import get_settings
-        return telegram_id in get_settings().admin_telegram_ids
+        settings = get_settings()
+        if telegram_id in settings.owner_telegram_ids or telegram_id in settings.admin_telegram_ids:
+            return True
+        
+        stmt = select(User.role).where(User.telegram_id == telegram_id)
+        role = (await self._session.execute(stmt)).scalar_one_or_none()
+        val = self._role_value(role)
+        return val in (UserRole.OWNER, UserRole.SIM_ROOT)
+
+    async def is_admin_strictly(self, telegram_id: int) -> bool:
+        """Проверка на Админа или Владельца."""
+        from src.core.config import get_settings
+        settings = get_settings()
+        if telegram_id in settings.admin_telegram_ids or telegram_id in settings.owner_telegram_ids:
+            return True
+        
+        stmt = select(User.role).where(User.telegram_id == telegram_id)
+        role = (await self._session.execute(stmt)).scalar_one_or_none()
+        val = self._role_value(role)
+        return val in (UserRole.ADMIN, UserRole.OWNER, UserRole.SIM_ROOT)
+
+    async def is_owner(self, telegram_id: int) -> bool:
+        """Проверка на владельца: ID в .env ИЛИ роль 'owner' в БД."""
+        from src.core.config import get_settings
+        settings = get_settings()
+        if telegram_id in settings.owner_telegram_ids or telegram_id in settings.admin_telegram_ids:
+            return True
+        
+        stmt = select(User.role).where(User.telegram_id == telegram_id)
+        role = (await self._session.execute(stmt)).scalar_one_or_none()
+        val = self._role_value(role)
+        return val in (UserRole.OWNER, UserRole.SIM_ROOT)
 
     async def is_admin(self, telegram_id: int) -> bool:
-        """Владелец или любой админ из БД."""
+        """Владелец или Администратор."""
         if await self.is_owner(telegram_id):
             return True
         
         stmt = select(User.role).where(User.telegram_id == telegram_id)
         role = (await self._session.execute(stmt)).scalar_one_or_none()
-        return self._role_value(role) in {"admin", "chief_admin"}
+        return self._role_value(role) == UserRole.ADMIN
 
     async def can_manage_payouts(self, telegram_id: int) -> bool:
         """Выплаты доступны ТОЛЬКО Владельцу."""
         return await self.is_owner(telegram_id)
 
     async def can_use_sim_groups(self, telegram_id: int) -> bool:
-        """Доступ к /sim доступен любому админу/саппорту."""
+        """Доступ к /sim доступен любому админу/владельцу."""
         return await self.is_admin(telegram_id)
 
     async def can_edit_categories(self, telegram_id: int) -> bool:

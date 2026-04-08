@@ -12,7 +12,7 @@ from src.services.user_service import UserService
 from src.services.submission_service import SubmissionService
 from src.utils.media import media
 from src.keyboards.factory import SellerMenuCD, SellerAssetCD, SellerItemCD
-from src.keyboards.builders import get_seller_assets_folders_kb, get_seller_assets_items_kb, get_seller_item_view_kb
+from src.keyboards import get_seller_assets_folders_kb, get_seller_assets_items_kb, get_seller_item_view_kb
 from src.utils.ui_builder import DIVIDER, DIVIDER_LIGHT
 from src.utils.text_format import edit_message_text_or_caption_safe
 

@@ -11,7 +11,7 @@ from src.services.user_service import UserService
 from src.services.submission_service import SubmissionService
 from src.utils.media import media
 from src.utils.ui_builder import GDPXRenderer
-from src.keyboards.builders import get_seller_main_kb
+from src.keyboards import get_seller_main_kb
 from src.keyboards.factory import NavCD
 from src.database.models.enums import UserLanguage
 

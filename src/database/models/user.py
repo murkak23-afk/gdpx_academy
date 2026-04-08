@@ -3,14 +3,14 @@ from __future__ import annotations
 from datetime import datetime
 from decimal import Decimal
 
-from sqlalchemy import BigInteger, DateTime, Enum, Numeric, String, UniqueConstraint
+from sqlalchemy import BigInteger, DateTime, Enum, Numeric, String, UniqueConstraint, JSON
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.database.models.base import Base, TimestampMixin
-from src.database.models.enums import UserLanguage, UserRole
+from src.database.models.enums import UserLanguage, UserRole, NotificationPreference
 
 
-def _enum_values(enum_cls: type[UserLanguage] | type[UserRole]) -> list[str]:
+def _enum_values(enum_cls: type[UserLanguage] | type[UserRole] | type[NotificationPreference]) -> list[str]:
     """Возвращает список строковых значений enum для SQLAlchemy."""
 
     return [item.value for item in enum_cls]
@@ -49,9 +49,29 @@ class User(Base, TimestampMixin):
     )
     is_active: Mapped[bool] = mapped_column(nullable=False, default=True)
     is_restricted: Mapped[bool] = mapped_column(nullable=False, default=False, index=True)
+    has_accepted_codex: Mapped[bool] = mapped_column(nullable=False, default=False)
     duplicate_timeout_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     captcha_answer: Mapped[str | None] = mapped_column(String(16), nullable=True)
     captcha_attempts: Mapped[int] = mapped_column(nullable=False, default=0)
+
+    # --- Премиум-поля (Silver Sakura) ---
+    nickname: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    pseudonym: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    pin_code: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    is_pin_enabled: Mapped[bool] = mapped_column(nullable=False, default=False)
+    is_incognito: Mapped[bool] = mapped_column(nullable=False, default=False)
+    notification_preference: Mapped[NotificationPreference] = mapped_column(
+        Enum(
+            NotificationPreference,
+            name="notification_preference_enum",
+            values_callable=_enum_values,
+            validate_strings=True,
+        ),
+        nullable=False,
+        default=NotificationPreference.FULL,
+    )
+    favorite_categories: Mapped[list[int]] = mapped_column(JSON, nullable=False, default=list)
+    badges: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
 
     payout_details: Mapped[str | None] = mapped_column(String(512), nullable=True)
     pending_balance: Mapped[Decimal] = mapped_column(

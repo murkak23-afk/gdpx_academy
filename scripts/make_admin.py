@@ -53,7 +53,7 @@ def parse_args() -> argparse.Namespace:
         choices=[
             UserRole.SELLER.value,
             UserRole.ADMIN.value,
-            UserRole.SIM_ROOT.value,
+            UserRole.OWNER.value,
         ],
         help="Роль: seller — обычный продавец (снять права админа)",
     )

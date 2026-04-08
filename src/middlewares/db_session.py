@@ -23,6 +23,7 @@ class DbSessionMiddleware(BaseMiddleware):
             data["session"] = session
             try:
                 result = await handler(event, data)
+                await session.commit()
                 return result
             except Exception:
                 await session.rollback()
