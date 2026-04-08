@@ -111,7 +111,7 @@ class BillingService:
         if user_id:
             stmt = stmt.where(Payout.user_id == user_id)
         
-        if days > 0:
+        if days is not None and days > 0:
             since = datetime.now(timezone.utc) - timedelta(days=days)
             stmt = stmt.where(Payout.created_at >= since)
 

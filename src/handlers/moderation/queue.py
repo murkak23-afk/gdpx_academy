@@ -17,8 +17,8 @@ router = Router(name="moderation-queue-router")
 @router.callback_query(AdminSellerQueueCD.filter(F.action == "list"))
 @router.callback_query(F.data == "mod_q:refresh")
 async def on_moderation_queue(callback: CallbackQuery, session: AsyncSession, state: FSMContext):
-    await state.clear() 
     """Уровень 1: Список продавцов с ожидающими активами."""
+    await state.clear() 
 
     mod_service = ModerationService(session=session)
     sellers_data = await mod_service.get_pending_sellers()

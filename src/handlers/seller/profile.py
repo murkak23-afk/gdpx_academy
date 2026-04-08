@@ -15,13 +15,15 @@ from src.services.badge_service import BadgeService
 from src.services.category_service import CategoryService
 from src.database.models.enums import NotificationPreference
 from src.utils.media import media
-from src.utils.ui_builder import GDPXRenderer, DIVIDER
+from src.utils.ui_builder import GDPXRenderer, DIVIDER, DIVIDER_LIGHT
 from src.keyboards.factory import SellerMenuCD, NavCD, SellerStatsCD, SellerSettingsCD, PinPadCD, SellerNotifCD
+from src.services.bill_service import BillingService
 from src.keyboards import (
     get_seller_main_kb as get_premium_seller_kb, 
     get_back_to_main_kb, 
     get_seller_profile_kb,
     get_seller_stats_kb,
+    get_seller_payout_history_kb,
     get_seller_settings_kb,
     get_pin_pad_kb,
     get_notification_settings_kb,
@@ -32,6 +34,103 @@ from src.utils.text_format import edit_message_text_or_caption_safe
 router = Router(name="seller-profile-premium-router")
 logger = logging.getLogger(__name__)
 _renderer = GDPXRenderer()
+
+from src.core.logger import logger
+
+@router.callback_query(SellerMenuCD.filter(F.action == "payouts"))
+async def show_payout_history(callback: CallbackQuery, session: AsyncSession) -> None:
+    """Отображение истории выплат селлера."""
+    try:
+        await _render_payout_history(callback, session, period="all")
+    except Exception as e:
+        logger.exception(f"Error in show_payout_history: {e}")
+        await callback.answer("⚠️ Ошибка при загрузке выплат", show_alert=True)
+
+async def _render_payout_history(callback: CallbackQuery, session: AsyncSession, period: str = "all") -> None:
+    """Вспомогательная функция для рендеринга истории выплат."""
+    try:
+        user = await UserService(session=session).get_by_telegram_id(callback.from_user.id)
+        bill_svc = BillingService(session=session)
+        
+        days_map = {"7": 7, "30": 30, "90": 90, "all": None}
+        history, total = await bill_svc.get_payout_history(user_id=user.id, days=days_map.get(period))
+        
+        filename = "payouts.jpg"
+        banner = media.get(filename)
+        
+        lines = [
+            f"❖ <b>GDPX // PAYOUT HISTORY</b>",
+            f"{DIVIDER}",
+            f"👤 <b>АГЕНТ:</b> @{user.username or user.telegram_id}",
+            f"📊 <b>ПЕРИОД:</b> <code>{period.upper()}</code>",
+            f"{DIVIDER_LIGHT}"
+        ]
+        
+        if not history:
+            lines.append("<i>Транзакции за выбранный период не найдены.</i>")
+        else:
+            for p in history[:15]:
+                date_str = p.created_at.strftime("%d.%m.%y %H:%M")
+                status_icon = "✅" if p.status == "paid" else "⏳" if p.status == "pending" else "❌"
+                lines.append(f"• <code>{date_str}</code> | <b>{p.amount} USDT</b> {status_icon}")
+                
+        lines.append(f"{DIVIDER_LIGHT}")
+        lines.append(f"💰 <b>ВСЕГО ВЫПЛАЧЕНО:</b> <code>{user.total_paid}</code> USDT")
+        
+        text = "\n".join(lines)
+        
+        try:
+            await callback.message.edit_media(
+                media=InputMediaPhoto(media=banner, caption=text, parse_mode="HTML"),
+                reply_markup=get_seller_payout_history_kb(period)
+            )
+        except Exception:
+            await edit_message_text_or_caption_safe(callback.message, text, reply_markup=get_seller_payout_history_kb(period))
+        await callback.answer()
+    except Exception as e:
+        logger.exception(f"Error in _render_payout_history: {e}")
+        raise e
+
+@router.callback_query(F.data == "payout_export_csv")
+async def export_payouts_csv(callback: CallbackQuery, session: AsyncSession) -> None:
+    """Экспорт истории выплат в CSV."""
+    try:
+        import csv
+        import io
+        
+        user = await UserService(session=session).get_by_telegram_id(callback.from_user.id)
+        bill_svc = BillingService(session=session)
+        history, total = await bill_svc.get_payout_history(user_id=user.id)
+        
+        if not history:
+            return await callback.answer("❌ Нет данных для экспорта", show_alert=True)
+            
+        await callback.answer("⏳ Формирую CSV...")
+        
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerow(["ID", "Date", "Amount_USDT", "Status", "Wallet"])
+        
+        for p in history:
+            writer.writerow([
+                p.id, 
+                p.created_at.strftime("%Y-%m-%d %H:%M"), 
+                p.amount, 
+                p.status,
+                p.wallet_address or "N/A"
+            ])
+            
+        csv_data = output.getvalue().encode("utf-8")
+        filename = f"Payouts_{user.telegram_id}_{datetime.now().strftime('%Y%m%d')}.csv"
+        
+        await callback.message.answer_document(
+            document=BufferedInputFile(csv_data, filename=filename),
+            caption=f"📋 <b>История ваших выплат</b>\n{DIVIDER}\nПолная выгрузка транзакций в формате CSV.",
+            parse_mode="HTML"
+        )
+    except Exception as e:
+        logger.exception(f"Error in export_payouts_csv: {e}")
+        await callback.answer("⚠️ Ошибка при экспорте CSV", show_alert=True)
 
 @router.callback_query(SellerMenuCD.filter(F.action == "profile"))
 @router.callback_query(NavCD.filter(F.to == "menu"))
@@ -122,10 +221,32 @@ async def toggle_incognito(callback: CallbackQuery, session: AsyncSession) -> No
 @router.callback_query(SellerSettingsCD.filter(F.action == "notif"))
 async def show_notif_settings(callback: CallbackQuery, session: AsyncSession) -> None:
     user = await UserService(session=session).get_by_telegram_id(callback.from_user.id)
-    text = _renderer.render_notification_settings(user.notification_preference.value)
-    kb = get_notification_settings_kb()
+    text = (
+        "🔔 <b>НАСТРОЙКИ УВЕДОМЛЕНИЙ</b>\n\n"
+        "Выберите, как часто вы хотите получать оповещения о проверке ваших eSIM модераторами.\n\n"
+        f"Текущий режим: <code>{user.notification_preference.value.upper()}</code>"
+    )
+    from src.keyboards.seller import get_notification_settings_kb
+    kb = get_notification_settings_kb(user.notification_preference.value)
     await callback.message.edit_caption(caption=text, reply_markup=kb, parse_mode="HTML")
     await callback.answer()
+
+@router.callback_query(SellerSettingsCD.filter(F.action == "lang"))
+async def show_language_settings(callback: CallbackQuery) -> None:
+    """Выбор языка."""
+    text = (
+        "🌐 <b>ЯЗЫК / LANGUAGE</b>\n\n"
+        "Выберите язык интерфейса. На данный момент платформа полностью оптимизирована для русского языка."
+    )
+    from src.keyboards.seller import get_language_settings_kb
+    await callback.message.edit_caption(caption=text, reply_markup=get_language_settings_kb(), parse_mode="HTML")
+    await callback.answer()
+
+@router.callback_query(SellerSettingsCD.filter(F.action == "lang_set"))
+async def set_language(callback: CallbackQuery, session: AsyncSession) -> None:
+    """Установка языка (пока только RU)."""
+    await callback.answer("✅ Язык установлен на RU", show_alert=True)
+    await show_settings(callback, session)
 
 @router.callback_query(SellerNotifCD.filter())
 async def set_notification_pref(callback: CallbackQuery, callback_data: SellerNotifCD, session: AsyncSession) -> None:
@@ -228,5 +349,6 @@ async def pin_confirm(callback: CallbackQuery, callback_data: PinPadCD, state: F
 @router.callback_query(PinPadCD.filter(F.action == "cancel"))
 async def pin_cancel(callback: CallbackQuery, session: AsyncSession, state: FSMContext) -> None:
     await state.update_data(pin_input="")
-    await show_settings(callback, session)
+    # Возвращаем в ПРОФИЛЬ по просьбе пользователя
+    await show_profile(callback, session)
     await callback.answer()

@@ -123,7 +123,7 @@ async def mod_approve(callback: CallbackQuery, callback_data: AdminGradeCD, sess
     """Мгновенный ЗАЧЕТ актива + плашка отката."""
     try:
         mod_svc = ModerationService(session=session)
-        success = await mod_svc.finalize_submission(callback_data.item_id, SubmissionStatus.ACCEPTED)
+        success = await mod_svc.finalize_submission(callback_data.item_id, SubmissionStatus.ACCEPTED, bot=bot)
         if not success:
             await callback.answer("⚠️ Ошибка: актив уже обработан или не найден", show_alert=True)
             return
@@ -177,7 +177,7 @@ async def mod_finalize_defect(callback: CallbackQuery, session: AsyncSession, st
             return
 
         mod_svc = ModerationService(session=session)
-        success = await mod_svc.finalize_submission(item_id, status_map[type_key], reason=reason)
+        success = await mod_svc.finalize_submission(item_id, status_map[type_key], reason=reason, bot=bot)
         
         if not success:
             await callback.answer("⚠️ Ошибка: актив уже обработан или не найден", show_alert=True)
@@ -233,7 +233,7 @@ async def process_custom_comment(message: Message, state: FSMContext, session: A
     }
 
     mod_svc = ModerationService(session=session)
-    await mod_svc.finalize_submission(item_id, status_map[mode], reason="Другое", comment=message.text)
+    await mod_svc.finalize_submission(item_id, status_map[mode], reason="Другое", comment=message.text, bot=bot)
     await session.commit()
 
     await message.answer(f"✅ Актив #{item_id} отклонен с вашим комментарием.")

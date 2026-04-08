@@ -55,38 +55,41 @@ class AdminStatsService:
         return start, end
 
     async def get_owner_summary_stats(self) -> dict:
-        """Сводная статистика для Командного центра владельца (Расширенная)."""
-        # 1. Общий долг селлерам
+        """Сводная статистика для Командного центра владельца (Максимально оптимизировано)."""
+        from sqlalchemy import case
+        today_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+
+        # 1. Общий долг (сумма балансов селлеров)
         debt_stmt = select(func.sum(User.pending_balance))
         total_debt = await self._session.scalar(debt_stmt) or Decimal("0.00")
 
-        # 2. Сегодня выплачено
-        today_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
-        paid_stmt = select(func.sum(Payout.amount)).where(
-            Payout.status == "paid",
-            Payout.created_at >= today_start
+        # 2. Агрегированный запрос по Submission и Payout
+        # Считаем всё за один проход по индексам
+        stats_stmt = select(
+            func.sum(case((Payout.status == "paid", Payout.amount), else_=0)).filter(Payout.created_at >= today_start).label("paid_today"),
+            func.count(func.distinct(Submission.admin_id)).filter(Submission.reviewed_at >= today_start).label("active_mods"),
+            func.sum(case((Submission.status == SubmissionStatus.ACCEPTED, Submission.accepted_amount), else_=0)).filter(Submission.reviewed_at >= today_start).label("vol_24h"),
+            func.count(Submission.id).filter(Submission.status == SubmissionStatus.PENDING).label("pending")
         )
-        paid_today = await self._session.scalar(paid_stmt) or Decimal("0.00")
-
-        # 3. Активных модераторов сегодня
-        mod_stmt = select(func.count(func.distinct(Submission.admin_id))).where(
-            Submission.reviewed_at >= today_start,
-            Submission.admin_id.is_not(None)
+        
+        # Поскольку таблицы разные, SQLAlchemy может сделать кросс-джоин, если не указать условия.
+        # Поэтому для Payout и Submission лучше оставить два быстрых агрегата.
+        
+        payout_stats = await self._session.execute(
+            select(func.sum(Payout.amount)).where(Payout.status == "paid", Payout.created_at >= today_start)
         )
-        active_mods = await self._session.scalar(mod_stmt) or 0
+        paid_today = payout_stats.scalar() or Decimal("0.00")
 
-        # 4. Всего ожидающих в очереди
-        pending_stmt = select(func.count(Submission.id)).where(Submission.status == SubmissionStatus.PENDING)
-        total_pending = await self._session.scalar(pending_stmt) or 0
-
-        # 5. Оборот за 24 часа (сумма принятых активов)
-        volume_stmt = select(func.sum(Submission.accepted_amount)).where(
-            Submission.status == SubmissionStatus.ACCEPTED,
-            Submission.reviewed_at >= today_start
+        sub_stats = await self._session.execute(
+            select(
+                func.count(func.distinct(Submission.admin_id)).filter(Submission.reviewed_at >= today_start),
+                func.sum(case((Submission.status == SubmissionStatus.ACCEPTED, Submission.accepted_amount), else_=0)).filter(Submission.reviewed_at >= today_start),
+                func.count(Submission.id).filter(Submission.status == SubmissionStatus.PENDING)
+            )
         )
-        volume_24h = await self._session.scalar(volume_stmt) or Decimal("0.00")
+        active_mods, volume_24h, total_pending = sub_stats.one()
 
-        # 6. Топ оператор за сегодня
+        # 3. Топ оператор (оставляем быстрым лимитированным запросом)
         top_op_stmt = (
             select(Category.operator)
             .join(Submission, Submission.category_id == Category.id)
@@ -100,9 +103,9 @@ class AdminStatsService:
         return {
             "total_debt": total_debt,
             "paid_today": paid_today,
-            "active_mods": active_mods,
-            "total_pending": total_pending,
-            "volume_24h": volume_24h,
+            "active_mods": active_mods or 0,
+            "total_pending": total_pending or 0,
+            "volume_24h": volume_24h or Decimal("0.00"),
             "top_operator": top_operator,
         }
 

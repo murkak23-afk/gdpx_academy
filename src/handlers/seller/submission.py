@@ -10,21 +10,21 @@ import logging
 from decimal import Decimal
 from html import escape
 
-from aiogram import Router, F, Bot
-from aiogram.types import CallbackQuery, Message, InputMediaPhoto
-from aiogram.fsm.context import FSMContext
+from aiogram import Bot, F, Router
 from aiogram.filters import StateFilter
+from aiogram.fsm.context import FSMContext
+from aiogram.types import CallbackQuery, InputMediaPhoto, Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.keyboards import get_categories_kb, get_seller_main_kb, get_upload_finish_kb
+from src.keyboards.factory import SellerAssetCD, SellerMenuCD
 from src.services.category_service import CategoryService
 from src.services.submission_service import SubmissionService
 from src.services.user_service import UserService
-from src.utils.media import media
 from src.states.submission_state import SubmissionState
-from src.keyboards.factory import SellerMenuCD, SellerAssetCD
-from src.keyboards import get_seller_main_kb, get_categories_kb, get_upload_finish_kb
-from src.utils.ui_builder import DIVIDER, DIVIDER_LIGHT
+from src.utils.media import media
 from src.utils.text_format import edit_message_text_or_caption_safe
+from src.utils.ui_builder import DIVIDER, DIVIDER_LIGHT
 
 router = Router(name="seller-submission-premium-router")
 logger = logging.getLogger(__name__)
@@ -34,10 +34,7 @@ _debounce_tasks: dict[int, asyncio.Task] = {}
 
 
 def _get_upload_header() -> str:
-    return (
-        f"❖ <b>GDPX // ИНТЕГРАЦИЯ АКТИВОВ</b>\n"
-        f"{DIVIDER}\n"
-    )
+    return f"❖ <b>GDPX // ИНТЕГРАЦИЯ АКТИВОВ</b>\n{DIVIDER}\n"
 
 
 @router.callback_query(SellerMenuCD.filter(F.action == "sell"))
@@ -63,13 +60,15 @@ async def start_submission(callback: CallbackQuery, state: FSMContext, session: 
 
     await callback.message.edit_media(
         media=InputMediaPhoto(media=banner, caption=text, parse_mode="HTML"),
-        reply_markup=get_categories_kb(categories, fav_ids)
+        reply_markup=get_categories_kb(categories, fav_ids),
     )
     await callback.answer()
 
 
 @router.callback_query(SellerAssetCD.filter(), StateFilter(SubmissionState.waiting_for_category))
-async def pick_category(callback: CallbackQuery, callback_data: SellerAssetCD, state: FSMContext, session: AsyncSession) -> None:
+async def pick_category(
+    callback: CallbackQuery, callback_data: SellerAssetCD, state: FSMContext, session: AsyncSession
+) -> None:
     """Шаг 2: Открытие буфера загрузки."""
     category = await CategoryService(session=session).get_by_id(callback_data.category_id)
     if not category:
@@ -80,7 +79,7 @@ async def pick_category(callback: CallbackQuery, callback_data: SellerAssetCD, s
         category_id=category.id,
         category_title=category.title,
         fixed_payout_rate=str(category.payout_rate),
-        media_pool=[]
+        media_pool=[],
     )
     await state.set_state(SubmissionState.waiting_for_media)
 
@@ -130,11 +129,7 @@ async def _update_status_msg(user_id: int, bot: Bot, state: FSMContext, chat_id:
 
     try:
         await bot.edit_message_caption(
-            chat_id=chat_id,
-            message_id=msg_id,
-            caption=text,
-            reply_markup=get_upload_finish_kb(),
-            parse_mode="HTML"
+            chat_id=chat_id, message_id=msg_id, caption=text, reply_markup=get_upload_finish_kb(), parse_mode="HTML"
         )
     except Exception:
         pass
@@ -165,12 +160,7 @@ async def process_bulk_media(message: Message, state: FSMContext, bot: Bot) -> N
         unique_id = vid.file_unique_id
         att_type = "video"
 
-    pool.append({
-        "file_id": file_id,
-        "unique_id": unique_id,
-        "type": att_type,
-        "caption": message.caption or ""
-    })
+    pool.append({"file_id": file_id, "unique_id": unique_id, "type": att_type, "caption": message.caption or ""})
 
     await state.update_data(media_pool=pool)
 
@@ -178,9 +168,7 @@ async def process_bulk_media(message: Message, state: FSMContext, bot: Bot) -> N
     if user_id in _debounce_tasks:
         _debounce_tasks[user_id].cancel()
 
-    _debounce_tasks[user_id] = asyncio.create_task(
-        _update_status_msg(user_id, bot, state, chat_id)
-    )
+    _debounce_tasks[user_id] = asyncio.create_task(_update_status_msg(user_id, bot, state, chat_id))
 
     # Удаляем сообщение пользователя, чтобы чат оставался чистым
     try:
@@ -211,10 +199,7 @@ async def finalize_upload(callback: CallbackQuery, state: FSMContext, session: A
 
     try:
         await SubmissionService(session=session).create_bulk_submissions(
-            user_id=user.id,
-            category_id=cat_id,
-            fixed_payout_rate=payout_rate,
-            media_items=pool
+            user_id=user.id, category_id=cat_id, fixed_payout_rate=payout_rate, media_items=pool
         )
         await session.commit()
 
@@ -233,13 +218,11 @@ async def finalize_upload(callback: CallbackQuery, state: FSMContext, session: A
             callback.message, success_text, reply_markup=get_seller_main_kb(), parse_mode="HTML"
         )
 
-            # Уведомление админам
+        # Уведомление админам
         try:
-            asyncio.create_task(
-                _notify_admins_about_upload(bot, user.telegram_id, len(pool), cat_title)
-        )
+            asyncio.create_task(_notify_admins_about_upload(bot, user.telegram_id, len(pool), cat_title))
         except Exception as e:
-                logger.error(f"Failed to create admin notification task: {e}")
+            logger.error(f"Failed to create admin notification task: {e}")
 
     except Exception as e:
         logger.error(f"Critical error during bulk insert: {e}", exc_info=True)
@@ -248,7 +231,7 @@ async def finalize_upload(callback: CallbackQuery, state: FSMContext, session: A
             callback.message,
             "🔴 <b>КРИТИЧЕСКАЯ ОШИБКА</b>\nТранзакция отменена. Обратитесь в поддержку.",
             reply_markup=get_seller_main_kb(),
-            parse_mode="HTML"
+            parse_mode="HTML",
         )
         await state.clear()
 
@@ -257,24 +240,23 @@ async def finalize_upload(callback: CallbackQuery, state: FSMContext, session: A
 async def cancel_upload(callback: CallbackQuery, state: FSMContext) -> None:
     """Отмена загрузки."""
     await state.clear()
-    text = (
-        f"❌ <b>ИНТЕГРАЦИЯ ОТМЕНЕНА</b>\n"
-        f"{DIVIDER}\n"
-        f"Буфер очищен. Несохранённые файлы удалены."
+    text = f"❌ <b>ИНТЕГРАЦИЯ ОТМЕНЕНА</b>\n{DIVIDER}\nБуфер очищен. Несохранённые файлы удалены."
+    await edit_message_text_or_caption_safe(
+        callback.message, text, reply_markup=get_seller_main_kb(), parse_mode="HTML"
     )
-    await edit_message_text_or_caption_safe(callback.message, text, reply_markup=get_seller_main_kb(), parse_mode="HTML")
     await callback.answer()
 
 
 async def _notify_admins_about_upload(bot: Bot, seller_tg_id: int, count: int, cat_title: str) -> None:
     """Отправка алертов админам."""
     from src.core.config import get_settings
+
     admin_ids = get_settings().admin_telegram_ids
     if not admin_ids:
         return
 
     text = (
-        f"🔔 <b>НОВЫЙ ЗАЛИВ АКТИВОВ</b>\n"
+        f"🔔 <b>НОВЫЙ ЗАЛИВ QR-CODE</b>\n"
         f"Селлер: <a href='tg://user?id={seller_tg_id}'>ID {seller_tg_id}</a>\n"
         f"Кластер: <code>{escape(cat_title)}</code>\n"
         f"Объём: <code>{count}</code> шт.\n\n"

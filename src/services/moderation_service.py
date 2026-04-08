@@ -1,12 +1,16 @@
 from __future__ import annotations
 from datetime import datetime, timezone, timedelta
-from typing import Optional, List
+from typing import Optional, List, TYPE_CHECKING
 from sqlalchemy import select, func, update, or_
 from sqlalchemy.orm import joinedload
 from sqlalchemy.ext.asyncio import AsyncSession
+
+if TYPE_CHECKING:
+    from aiogram import Bot
+
 from src.database.models.submission import Submission, ReviewAction
 from src.database.models.category import Category
-from src.database.models.enums import SubmissionStatus
+from src.database.models.enums import SubmissionStatus, NotificationPreference
 from src.database.models.user import User
 from decimal import Decimal
 
@@ -208,10 +212,11 @@ class ModerationService:
         submission_id: int, 
         status: SubmissionStatus, 
         reason: str | None = None, 
-        comment: str | None = None
+        comment: str | None = None,
+        bot: Optional["Bot"] = None
     ) -> bool:
         """Финальное решение по активу (Зачёт/Брак/Блок). Возвращает True при успехе."""
-        stmt = select(Submission).where(Submission.id == submission_id)
+        stmt = select(Submission).options(joinedload(Submission.seller)).where(Submission.id == submission_id)
         res = await self._session.execute(stmt)
         sub = res.scalar_one_or_none()
         
@@ -252,6 +257,49 @@ class ModerationService:
                 )
             )
             await self._session.commit()
+
+            # --- УВЕДОМЛЕНИЕ ПРОДАВЦУ ---
+            if bot and sub.seller and sub.seller.notification_preference == NotificationPreference.FULL:
+                try:
+                    phone = sub.phone_normalized or f"#{sub.id}"
+                    msg_text = ""
+                    
+                    if status == SubmissionStatus.ACCEPTED:
+                        msg_text = (
+                            f"✅ <b>Ваша заявка принята!</b>\n\n"
+                            f"Номер: <code>{phone}</code>\n"
+                            f"Статус: Зачёт\n"
+                            f"Выплата начислена на баланс."
+                        )
+                    elif status == SubmissionStatus.REJECTED:
+                        msg_text = (
+                            f"❌ <b>Заявка отклонена (БРАК)</b>\n\n"
+                            f"Номер: <code>{phone}</code>\n"
+                            f"Причина: {reason or 'Не указана'}\n"
+                            f"Комментарий модератора: {comment or 'Нет'}"
+                        )
+                    elif status == SubmissionStatus.BLOCKED:
+                        msg_text = (
+                            f"🚫 <b>Заявка заблокирована</b>\n\n"
+                            f"Номер: <code>{phone}</code>\n"
+                            f"Причина: {reason or 'Не указана'}\n"
+                            f"Комментарий: {comment or 'Нет'}"
+                        )
+                    elif status == SubmissionStatus.NOT_A_SCAN:
+                        msg_text = (
+                            f"📵 <b>Не скан</b>\n\n"
+                            f"Номер: <code>{phone}</code>\n"
+                            f"Причина: {reason or 'Не указана'}\n"
+                            f"Комментарий: {comment or 'Нет'}"
+                        )
+                    
+                    if msg_text:
+                        await bot.send_message(chat_id=sub.seller.telegram_id, text=msg_text, parse_mode="HTML")
+                        logger.info(f"Notification sent to seller {sub.seller.telegram_id} for sub {sub.id}")
+                except Exception as notify_err:
+                    logger.error(f"Failed to send notification to seller {sub.user_id}: {notify_err}")
+            # ----------------------------
+
             return True
         except Exception as e:
             await self._session.rollback()

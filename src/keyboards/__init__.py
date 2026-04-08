@@ -19,7 +19,7 @@ from src.keyboards.seller import (
     get_seller_main_kb, get_seller_profile_kb, get_back_to_main_kb, get_categories_kb,
     get_seller_assets_folders_kb, get_seller_assets_items_kb,
     get_seller_item_view_kb, get_upload_finish_kb,
-    get_seller_stats_kb, get_seller_settings_kb,
+    get_seller_stats_kb, get_seller_settings_kb, get_seller_payout_history_kb,
     get_pin_pad_kb, get_notification_settings_kb,
     get_favorite_categories_kb
 )
@@ -71,6 +71,7 @@ __all__ = [
     "get_upload_finish_kb",
     "get_seller_stats_kb",
     "get_seller_settings_kb",
+    "get_seller_payout_history_kb",
     "get_pin_pad_kb",
     "get_notification_settings_kb",
     "get_favorite_categories_kb",

@@ -93,15 +93,32 @@ def get_pin_pad_kb(current_input: str, context: str) -> InlineKeyboardMarkup:
     builder.adjust(3, 3, 3, 3)
     return builder.as_markup()
 
-def get_notification_settings_kb() -> InlineKeyboardMarkup:
-    """Выбор режима уведомлений."""
-    return (PremiumBuilder()
-            .button("✅ О каждой проверке", SellerNotifCD(preference="full"))
-            .button("📊 Итог за день", SellerNotifCD(preference="summary"))
-            .button("▫️ Выключить", SellerNotifCD(preference="none"))
-            .adjust(1)
-            .back(SellerSettingsCD(action="main"), "В НАСТРОЙКИ")
-            .as_markup())
+def get_notification_settings_kb(current_pref: str) -> InlineKeyboardMarkup:
+    """Выбор режима уведомлений с индикацией текущего выбора."""
+    builder = PremiumBuilder()
+    
+    options = [
+        ("О каждой проверке", "full"),
+        ("Итог за день", "summary"),
+        ("Выключить", "none")
+    ]
+    
+    for label, pref in options:
+        text = f"✅ {label}" if pref == current_pref else f"▫️ {label}"
+        builder.button(text, SellerNotifCD(preference=pref))
+        
+    builder.adjust(1)
+    builder.back(SellerSettingsCD(action="main"), "В НАСТРОЙКИ")
+    return builder.as_markup()
+
+def get_language_settings_kb() -> InlineKeyboardMarkup:
+    """Выбор языка интерфейса."""
+    builder = PremiumBuilder()
+    # Пока поддерживается только RU
+    builder.button("✅ РУССКИЙ (RU)", SellerSettingsCD(action="lang_set", value="ru"))
+    builder.adjust(1)
+    builder.back(SellerSettingsCD(action="main"), "В НАСТРОЙКИ")
+    return builder.as_markup()
 
 def get_favorite_categories_kb(categories: list, favorite_ids: list[int]) -> InlineKeyboardMarkup:
     """Управление избранными категориями."""
@@ -186,6 +203,25 @@ def get_seller_item_view_kb(item_id: int, category_id: int) -> InlineKeyboardMar
             .back(SellerAssetCD(category_id=category_id), "К СПИСКУ")
             .adjust(1)
             .as_markup())
+
+def get_seller_payout_history_kb(current_period: str) -> InlineKeyboardMarkup:
+    """Клавиатура истории выплат с фильтрами."""
+    builder = PremiumBuilder()
+    periods = [
+        ("7 ДНЕЙ", "7"),
+        ("30 ДНЕЙ", "30"),
+        ("90 ДНЕЙ", "90"),
+        ("ВСЁ ВРЕМЯ", "all")
+    ]
+    for label, key in periods:
+        text = f"✨ {label}" if key == current_period else label
+        builder.button(text, SellerStatsCD(period=key)) # Используем SellerStatsCD для периодов
+    
+    builder.adjust(2, 2)
+    builder.button("📥 СКАЧАТЬ CSV", "payout_export_csv")
+    builder.back(NavCD(to="menu"), "В ГЛАВНОЕ МЕНЮ")
+    builder.adjust(2, 2, 1, 1)
+    return builder.as_markup()
 
 def get_upload_finish_kb() -> InlineKeyboardMarkup:
     """Финальное подтверждение загрузки."""

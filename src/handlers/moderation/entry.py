@@ -7,6 +7,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.services.moderation_service import ModerationService
 from src.services.admin_service import AdminService
+from src.services.user_service import UserService
+from src.handlers.admin import on_enter_owner_panel
+from src.handlers.start import _show_main_dashboard
 from src.keyboards.moderation import get_mod_dashboard_kb
 from src.keyboards.factory import AdminMenuCD
 from src.utils.ui_builder import DIVIDER, DIVIDER_LIGHT
@@ -80,24 +83,34 @@ async def cmd_moderation_dashboard_cb(callback: CallbackQuery, session: AsyncSes
 
 @router.callback_query(F.data == "mod_exit")
 async def cmd_moderation_exit(callback: CallbackQuery, session: AsyncSession, state: FSMContext):
-    """Выход из режима модерации: Овнер -> /o, Админ -> Главное меню."""
-    await state.clear()
-    from src.services.admin_service import AdminService
-    admin_svc = AdminService(session=session)
+    """
+    Выход из режима модерации.
     
-    if await admin_svc.is_owner_strictly(callback.from_user.id):
-        from src.handlers.admin import on_enter_owner_panel
+    Логика перенаправления:
+    - Владелец (Owner) -> Возвращается в кабинет владельца (/o).
+    - Администратор (Admin) -> Возвращается в главное меню селлера.
+    """
+    await state.clear()
+    
+    admin_svc = AdminService(session=session)
+    user_svc = UserService(session=session)
+    
+    user_id = callback.from_user.id
+    
+    # 1. Проверяем, является ли пользователь владельцем
+    if await admin_svc.is_owner_strictly(user_id):
         await on_enter_owner_panel(callback, session)
+        return await callback.answer()
+
+    # 2. Для остальных (админов) возвращаем в селлерский дашборд
+    user = await user_svc.get_by_telegram_id(user_id)
+    if user:
+        await _show_main_dashboard(callback, user, session)
     else:
-        # Для обычных админов - возврат в общее главное меню (селлерское)
-        from src.services.user_service import UserService
-        from src.handlers.start import _show_main_dashboard
-        user = await UserService(session=session).get_by_telegram_id(callback.from_user.id)
-        if user:
-            await _show_main_dashboard(callback, user, session)
-        else:
-            await callback.answer("🏠 Возврат в меню...")
-            # Fallback на /start
+        # Крайний случай: если пользователь не найден, просто уведомляем
+        await callback.answer("🏠 Возврат в меню...", show_alert=False)
+        # Здесь можно добавить fallback на /start если необходимо
+        
     await callback.answer()
 
 @router.callback_query(F.data == "mod_my_work_folder")

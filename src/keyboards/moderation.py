@@ -88,7 +88,7 @@ def get_sellers_queue_kb(sellers_data: list) -> InlineKeyboardMarkup:
     for s in sellers_data:
         name = f"@{s['username']}" if s["username"] else f"ID:{s['user_id']}"
         text = f"👤 {name} | ⏳ {s['count']}"
-        builder.button(text, AdminSellerQueueCD(user_id=str(s["user_id"]), action="view"))
+        builder.button(text, AdminSellerQueueCD(user_id=s["user_id"], action="view"))
 
     builder.adjust(1)
     builder.refresh("mod_q:refresh", "ОБНОВИТЬ ОЧЕРЕДЬ")
@@ -101,12 +101,12 @@ def get_seller_detail_actions_kb(user_id: int, pending_count: int) -> InlineKeyb
     builder = PremiumBuilder()
 
     # Кнопки взятия в работу
-    builder.primary(f"⚡️ ВЗЯТЬ ВСЁ ({pending_count})", AdminSellerQueueCD(user_id=str(user_id), action="take_all"))
+    builder.primary(f"⚡️ ВЗЯТЬ ВСЁ ({pending_count})", AdminSellerQueueCD(user_id=user_id, action="take_all"))
 
     if pending_count > 5:
-        builder.button("🔹 ВЗЯТЬ 5 ШТ", AdminSellerQueueCD(user_id=str(user_id), action="take_5"))
+        builder.button("🔹 ВЗЯТЬ 5 ШТ", AdminSellerQueueCD(user_id=user_id, action="take_5"))
     if pending_count > 10:
-        builder.button("🔹 ВЗЯТЬ 10 ШТ", AdminSellerQueueCD(user_id=str(user_id), action="take_10"))
+        builder.button("🔹 ВЗЯТЬ 10 ШТ", AdminSellerQueueCD(user_id=user_id, action="take_10"))
 
     builder.adjust(1)
     builder.back(AdminQueueCD(action="start"), "К ОЧЕРЕДИ")

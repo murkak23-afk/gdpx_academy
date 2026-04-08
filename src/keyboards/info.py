@@ -8,14 +8,21 @@ from src.keyboards.base import PremiumBuilder
 from src.keyboards.constants import *
 from src.keyboards.factory import NavCD, SellerMenuCD, SellerInfoCD
 
-def get_info_root_kb() -> InlineKeyboardMarkup:
-    """Главный экран информационного центра."""
-    return (PremiumBuilder()
-            .button(f"{EMOJI_KNOWLEDGE} F.A.Q.", SellerMenuCD(action="faq"))
-            .button(f"🧭 МАНУАЛЫ", SellerMenuCD(action="manuals"))
-            .adjust(2)
-            .back(NavCD(to="menu"), "В ГЛАВНОЕ МЕНЮ")
-            .as_markup())
+def get_info_root_kb(chat_url: str | None = None) -> InlineKeyboardMarkup:
+    """Главный экран информационного центра (База Знаний)."""
+    builder = PremiumBuilder()
+    
+    # Большая кнопка сверху (ссылка на чат)
+    if chat_url:
+        builder.button("💬 GDPX // ACADEMY", url=chat_url)
+    
+    # Основные кнопки раздела
+    builder.button(f"{EMOJI_KNOWLEDGE} F.A.Q.", SellerMenuCD(action="faq"))
+    builder.button(f"🧭 МАНУАЛЫ", SellerMenuCD(action="manuals"))
+    
+    builder.adjust(1, 2)
+    builder.back("mod_exit", "В ГЛАВНОЕ МЕНЮ")
+    return builder.as_markup()
 
 def get_faq_list_kb(faq_cards: list) -> InlineKeyboardMarkup:
     """Список вопросов FAQ."""

@@ -85,7 +85,7 @@ def get_user_card_kb(user_id: int, current_role: str, is_restricted: bool, page:
     builder.button("📜 ИСТОРИЯ ДЕЙСТВИЙ", OwnerUserCD(action="history", user_id=user_id, page=page, role=role_filter))
     
     builder.adjust(1)
-    builder.back(OwnerUserCD(action="list", page=page, role=role_filter), "« К СПИСКУ")
+    builder.back(OwnerUserCD(action="list", page=page, role_filter=role_filter), "« К СПИСКУ")
     return builder.as_markup()
 
 
@@ -108,12 +108,64 @@ def get_owner_settings_kb(maintenance_mode: bool) -> InlineKeyboardMarkup:
             .button("🌐 ГЛОБАЛЬНЫЕ ПАРАМЕТРЫ", "owner_settings_global")
             .button("🔑 РОЛИ И ПРАВА", "owner_settings_roles")
             .button("🔔 РАССЫЛКИ", "owner_settings_notify")
-            .button("📜 БЕЗОПАСНОСТЬ И ЛОГИ", "owner_settings_audit")
+            .button("🔐 БЕЗОПАСНОСТЬ И ЛОГИ", "owner_settings_security")
             .button("💾 BACKUP / ЭКСПОРТ", "owner_settings_backup")
             .button(m_text, "owner_settings_maintenance")
             .adjust(1)
             .back("owner_back_main")
             .as_markup())
+
+
+def get_owner_security_kb() -> InlineKeyboardMarkup:
+    """Клавиатура раздела «Безопасность и логи»."""
+    return (PremiumBuilder()
+            .button("📜 АУДИТ ДЕЙСТВИЙ", "owner_sec_audit")
+            .button("🔍 ПОИСК ПО НОМЕРУ", "owner_sec_audit_search")
+            .button("🔑 ЛОГИ ВХОДОВ", "owner_sec_logins")
+            .button("📊 УРОВЕНЬ ЛОГИРОВАНИЯ", "owner_sec_level")
+            .button("🧹 ОЧИСТКА ЛОГОВ", "owner_sec_cleanup")
+            .button("📤 ЭКСПОРТ ЛОГОВ", "owner_sec_export")
+            .button("🛡️ КРИТ. УВЕДОМЛЕНИЯ", "owner_sec_alerts")
+            .button("📍 АКТИВНЫЕ СЕССИИ", "owner_sec_sessions")
+            .adjust(1)
+            .back("owner_settings")
+            .as_markup())
+
+
+def get_owner_categories_kb(categories: list) -> InlineKeyboardMarkup:
+    """Список всех категорий для Владельца."""
+    builder = PremiumBuilder()
+    for cat in categories:
+        emoji = "🏮 " if cat.is_priority else ""
+        status = "🟢" if cat.is_active else "🔴"
+        title = f"{emoji}{status} {cat.title} | {cat.payout_rate} USDT"
+        builder.button(title, CatManageCD(action="view", cat_id=cat.id))
+    
+    builder.adjust(1)
+    builder.primary("➕ СОЗДАТЬ КАТЕГОРИЮ", CatConCD(action="start"))
+    builder.button("💹 МАССОВАЯ СМЕНА СТАВОК", "owner_cat_mass_edit")
+    builder.button("📜 ИСТОРИЯ ИЗМЕНЕНИЙ", "owner_cat_history")
+    builder.adjust(1)
+    builder.back("owner_back_main")
+    return builder.as_markup()
+
+
+def get_owner_category_detail_kb(cat_id: int, is_active: bool, is_priority: bool) -> InlineKeyboardMarkup:
+    """Детальное управление конкретной категорией."""
+    builder = PremiumBuilder()
+    
+    active_text = "🔴 ОТКЛЮЧИТЬ" if is_active else "🟢 ВКЛЮЧИТЬ"
+    builder.button(active_text, CatManageCD(action="toggle_active", cat_id=cat_id))
+    
+    priority_text = "🏮 УБРАТЬ ПРИОРИТЕТ" if is_priority else "🏮 В ПРИОРИТЕТ"
+    builder.button(priority_text, CatManageCD(action="toggle_priority", cat_id=cat_id))
+    
+    builder.button("💰 ИЗМЕНИТЬ СТАВКУ", CatManageCD(action="edit_price", cat_id=cat_id))
+    builder.danger("🗑 УДАЛИТЬ КАТЕГОРИЮ", CatManageCD(action="confirm_delete", cat_id=cat_id))
+    
+    builder.adjust(2, 1, 1)
+    builder.back("owner_categories", "« К СПИСКУ")
+    return builder.as_markup()
 
 
 def get_catcon_main_kb() -> InlineKeyboardMarkup:
@@ -122,6 +174,8 @@ def get_catcon_main_kb() -> InlineKeyboardMarkup:
         PremiumBuilder()
         .button(f"{EMOJI_BOX} УПРАВЛЕНИЕ КЛАСТЕРАМИ", CatConCD(action="list"))
         .primary("СОЗДАТЬ НОВЫЙ КЛАСТЕР", CatConCD(action="start"))
+        .button("💹 МАССОВАЯ СМЕНА СТАВОК", "owner_cat_mass_edit")
+        .button("📜 ИСТОРИЯ ИЗМЕНЕНИЙ", "owner_cat_history")
         .adjust(1)
         .back("owner_back_main")
         .as_markup()
@@ -155,10 +209,11 @@ def get_cat_manage_list_kb(categories: list) -> InlineKeyboardMarkup:
     for cat in categories:
         emoji = "🏮 " if getattr(cat, "is_priority", False) else ""
         status = "🟢" if cat.is_active else "🔴"
+        # Будем передавать количество eSIM в тексте кнопки снаружи или считать здесь, если данные переданы
         title = f"{emoji}{status} {cat.title} | {cat.payout_rate} USDT"
         builder.button(title, CatManageCD(action="view", cat_id=cat.id))
     builder.adjust(1)
-    builder.back("owner_back_main")
+    builder.back(CatConCD(action="list"), "« НАЗАД")
     return builder.as_markup()
 
 

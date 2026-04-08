@@ -1,13 +1,12 @@
-"""Info center, FAQ, manuals, and support handlers for the seller module."""
+"""Knowledge Base, FAQ, manuals, and support handlers for the seller module."""
 
 from __future__ import annotations
 
-from aiogram import F, Router
+import logging
+
+from aiogram import Bot, F, Router
 from aiogram.types import (
     CallbackQuery,
-    InlineKeyboardButton,
-    InlineKeyboardMarkup,
-    FSInputFile,
     InputMediaPhoto,
     Message,
 )
@@ -16,397 +15,227 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.core.config import get_settings
 from src.faq import FAQ_CARDS, get_faq_by_id
 from src.keyboards import get_seller_main_kb
-from src.keyboards.callbacks import (
-    CB_SELLER_FAQ_OPEN,
-    CB_SELLER_INFO_FAQ,
-    CB_SELLER_INFO_MANUALS,
-    CB_SELLER_INFO_ROOT,
-    CB_SELLER_MANUAL_LEVEL,
-    CB_SELLER_MANUAL_OPEN,
-    CB_SELLER_MENU_INFO,
-    CB_SELLER_MENU_PROFILE,
-    CB_SELLER_MENU_SUPPORT,
+from src.keyboards.base import PremiumBuilder
+from src.keyboards.factory import SellerInfoCD, SellerMenuCD
+from src.keyboards.info import (
+    get_back_to_info_kb,
+    get_back_to_manual_level_kb,
+    get_faq_list_kb,
+    get_info_root_kb,
+    get_manual_levels_kb,
+    get_manuals_in_level_kb,
 )
-
 from src.manuals import MANUAL_LEVELS, get_manual_by_id, get_manuals_by_level
-from src.services import UserService
-from src.utils.clean_screen import send_clean_text_screen
-from src.utils.text_format import edit_message_text_safe
+from src.services.user_service import UserService
 from src.utils.media import media
-
-from ._shared import DIVIDER
+from src.utils.text_format import edit_message_text_or_caption_safe
+from src.utils.ui_builder import DIVIDER
 
 router = Router(name="seller-info-router")
 
 
-# ── Keyboard builders ─────────────────────────────────────────────────────
-
-
-def _manuals_levels_keyboard() -> InlineKeyboardMarkup:
-    rows: list[list[InlineKeyboardButton]] = []
-    for lvl in MANUAL_LEVELS:
-        rows.append(
-            [
-                InlineKeyboardButton(
-                    text=f"{lvl.emoji} {lvl.title}",
-                    callback_data=f"{CB_SELLER_MANUAL_LEVEL}:{lvl.id}",
-                )
-            ]
-        )
-    rows.append([InlineKeyboardButton(text="⬅️ В INFO", callback_data=CB_SELLER_INFO_ROOT)])
-    return InlineKeyboardMarkup(inline_keyboard=rows)
-
-
-def _manuals_level_keyboard(level_id: str) -> InlineKeyboardMarkup:
-    rows: list[list[InlineKeyboardButton]] = []
-    for m in get_manuals_by_level(level_id):
-        rows.append(
-            [
-                InlineKeyboardButton(
-                    text=f"{m.emoji} {m.title}",
-                    callback_data=f"{CB_SELLER_MANUAL_OPEN}:{m.id}",
-                )
-            ]
-        )
-    rows.append(
-        [InlineKeyboardButton(text="⬅️ К уровням", callback_data=CB_SELLER_INFO_MANUALS)]
-    )
-    return InlineKeyboardMarkup(inline_keyboard=rows)
-
-
-def _manual_detail_keyboard(level_id: str) -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [
-                InlineKeyboardButton(
-                    text="⬅️ Назад",
-                    callback_data=f"{CB_SELLER_MANUAL_LEVEL}:{level_id}",
-                )
-            ],
-        ]
-    )
-
-
-def _faq_list_keyboard() -> InlineKeyboardMarkup:
-    rows: list[list[InlineKeyboardButton]] = []
-    for f in FAQ_CARDS:
-        rows.append(
-            [
-                InlineKeyboardButton(
-                    text=f"{f.emoji} {f.title}",
-                    callback_data=f"{CB_SELLER_FAQ_OPEN}:{f.id}",
-                )
-            ]
-        )
-    rows.append([InlineKeyboardButton(text="⬅️ В INFO", callback_data=CB_SELLER_INFO_ROOT)])
-    return InlineKeyboardMarkup(inline_keyboard=rows)
-
-
-def _faq_detail_keyboard() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text="⬅️ К FAQ", callback_data=CB_SELLER_INFO_FAQ)],
-        ]
-    )
-
-
-def _info_root_keyboard(
-    channel_url: str | None, chat_url: str | None
-) -> InlineKeyboardMarkup:
-    rows: list[list[InlineKeyboardButton]] = []
-    links_row: list[InlineKeyboardButton] = []
-    if channel_url:
-        links_row.append(InlineKeyboardButton(text="GDPX // ACADEMY", url=channel_url))
-    if chat_url:
-        links_row.append(
-            InlineKeyboardButton(text="GDPX Academy | Чат", url=chat_url)
-        )
-    if links_row:
-        rows.append(links_row)
-    rows.append(
-        [
-            InlineKeyboardButton(text="📘 FAQ", callback_data=CB_SELLER_INFO_FAQ),
-            InlineKeyboardButton(text="🧭 Мануалы", callback_data=CB_SELLER_INFO_MANUALS),
-        ]
-    )
-    rows.append(
-        [InlineKeyboardButton(text="⬅️ Назад", callback_data=CB_SELLER_MENU_PROFILE)]
-    )
-    return InlineKeyboardMarkup(inline_keyboard=rows)
-
-
 def _info_root_text() -> str:
     return (
-        "<b>❖ GDPX // INFO CENTER</b>\n\n"
-        "Доступ к методологии GDPX ACADEMY открыт. Вы вошли в закрытый лекторий.\n"
-        "Здесь знания конвертируются в капитал по высшим стандартам качества.»\n\n"
-        "<b>АРХИТЕКТУРА РАЗДЕЛА:</b>\n"
-        "❂ <b>КОМЬЮИНИТИ //</b>\n"
-        "└ Прямой доступ к штабу сообщества.\n\n"
+        "<b>❖ GDPX // KNOWLEDGE BASE</b>\n\n"
+        "Добро пожаловать в закрытую Академию GDPX. Здесь собраны все необходимые "
+        "протоколы и регламенты для эффективной работы с eSIM.\n\n"
+        "<b>СТРУКТУРА БАЗЫ:</b>\n"
+        "❂ <b>GDPX // ACADEMY //</b>\n"
+        "└ Прямой чат сообщества и оперативная поддержка.\n\n"
         "❂ <b>F.A.Q. //</b>\n"
-        "└ Свод протоколов по финансовым и техническим вопросам.\n\n"
+        "└ Ответы на финансовые и технические вопросы.\n\n"
         "❂ <b>МАНУАЛЫ //</b>\n"
-        "└ Пошаговые алгоритмы действий для полевых агентов (селлеров).\n\n"
-        "━━━━━━━━━━━━━━━━━━━━\n"
-        "<i>Выберите целевой сектор управления кнопками ниже.</i>"
+        "└ Пошаговые алгоритмы действий для селлеров.\n\n"
+        f"{DIVIDER}\n"
+        "<i>Изучите материалы перед началом работы. Знания — это ваш капитал.</i>"
     )
 
 
-# ── Handlers ──────────────────────────────────────────────────────────────
+from src.core.logger import logger
+
+# --- БАЗА ЗНАНИЙ (ГЛАВНАЯ) ---
 
 
-@router.callback_query(F.data == CB_SELLER_MENU_SUPPORT)
-async def on_seller_menu_support(callback: CallbackQuery, session: AsyncSession) -> None:
-    if callback.from_user is None:
-        return
-        
-    user = await UserService(session=session).get_by_telegram_id(callback.from_user.id)
-    if user is None:
-        await callback.answer("Сначала /start", show_alert=True)
-        return
+@router.callback_query(F.data == "mod_exit")  # Возврат из подразделов (обработка селлерского меню)
+@router.callback_query(SellerMenuCD.filter(F.action == "info"))
+async def on_info_root(callback: CallbackQuery):
+    """Главный экран Базы Знаний."""
+    try:
+        settings = get_settings()
+        filename = "baza.jpg"
+        banner = media.get(filename)
 
-    # Подготовка визуала
-    filename = "support.jpg"
-    banner = media.get(filename)
-
-    support_link = "@GDPX1"
-    support_link2 = "@brug0S"
-    helper_1 = "@oduvan_kenoby"
-    helper_2 = "@hdksiwns"
-    
-    text = (
-        f"❖ <b>GDPX // SUPPORT CENTER</b>\n"
-        f"{DIVIDER}\n"
-        f"🌑 <b>ОСНОВАТЕЛЬ</b> ── {support_link}\n"
-        f"  └─<i>Ресурсная база / Глобальный выкуп</i>\n\n"
-        f"🛡 <b>САППОРТЫ</b> ── {helper_1} | {helper_2}\n"
-        f"  └─<i>Наставление / Прием материала</i>\n\n"
-        f"⚙️ <b>АРХИТЕКТОР</b> ── {support_link2}\n"
-        f"  └─<i>Технические вопросы / Бот </i>\n"
-        f"{DIVIDER}\n"
-        f"[🟢 <b>ONLINE</b>] ── <i>Отклик: ~15 MIN.</i>\n"
-    )
-
-    await callback.answer()
-    
-    if callback.message is not None:
+        await callback.answer()
         try:
-            # Плавная замена на баннер саппорта
-            msg = await callback.message.edit_media(
-                media=InputMediaPhoto(media=banner, caption=text, parse_mode="HTML"),
-                reply_markup=get_seller_main_kb()
+            await callback.message.edit_media(
+                media=InputMediaPhoto(media=banner, caption=_info_root_text(), parse_mode="HTML"),
+                reply_markup=get_info_root_kb(settings.brand_chat_url),
             )
-            # Кэшируем file_id для мгновенной работы в будущем
-            if isinstance(banner, FSInputFile):
-                media.save_from_message(filename, msg)
         except Exception:
-            # Фолбэк на текст, если что-то пошло не так (например, спам кнопки)
-            await edit_message_text_safe(
-                callback.message, 
-                text, 
-                reply_markup=get_seller_main_kb(), 
-                parse_mode="HTML"
+            await edit_message_text_or_caption_safe(
+                callback.message,
+                _info_root_text(),
+                reply_markup=get_info_root_kb(settings.brand_chat_url),
+                parse_mode="HTML",
             )
+    except Exception as e:
+        logger.exception(f"Error in on_info_root: {e}")
+        await callback.answer("⚠️ Ошибка при открытии Базы Знаний", show_alert=True)
 
 
-@router.message(F.text.in_({"INFO", "Справка"}))
-async def on_info_root(message: Message, session: AsyncSession) -> None:
-    if message.from_user is None:
-        return
-    user = await UserService(session=session).get_by_telegram_id(message.from_user.id)
-    if user is None:
-        await message.answer("Сначала пройди регистрацию через /start.")
-        return
-    settings = get_settings()
-    await send_clean_text_screen(
-        trigger_message=message,
-        text=_info_root_text(),
-        key="seller:info",
-        reply_markup=_info_root_keyboard(settings.brand_channel_url, settings.brand_chat_url),
-        parse_mode="HTML",
-    )
+# --- F.A.Q. ---
 
 
-@router.callback_query(F.data == CB_SELLER_MENU_INFO)
-async def on_seller_menu_info(callback: CallbackQuery) -> None:
-    if callback.message is None:
-        return
-    
-    settings = get_settings()
-    text = _info_root_text()
-    keyboard = _info_root_keyboard(settings.brand_channel_url, settings.brand_chat_url)
-    
-    # Достаем картинку для главного раздела Инфо
-    filename = "info.jpg"
-    banner = media.get(filename)
-    
-    await callback.answer()
-    
+@router.callback_query(SellerMenuCD.filter(F.action == "faq"))
+async def on_info_faq(callback: CallbackQuery):
+    """Список вопросов FAQ."""
     try:
-        msg = await callback.message.edit_media(
-            media=InputMediaPhoto(media=banner, caption=text, parse_mode="HTML"),
-            reply_markup=keyboard
+        filename = "faq.jpg"
+        banner = media.get(filename)
+
+        text = (
+            f"❖ <b>GDPX // F.A.Q.</b>\n"
+            f"{DIVIDER}\n"
+            f"База ответов на часто задаваемые вопросы.\n"
+            f"Выберите интересующую категорию:\n\n"
+            f"📡 <b>STATUS:</b> <code>STABLE</code>"
         )
-        if isinstance(banner, FSInputFile):
-            media.save_from_message(filename, msg)
-    except Exception:
-        pass
 
-
-@router.callback_query(F.data == CB_SELLER_INFO_ROOT)
-async def on_info_root_refresh(callback: CallbackQuery) -> None:
-    if callback.message is None:
-        return
-        
-    settings = get_settings()
-    text = _info_root_text()
-    keyboard = _info_root_keyboard(settings.brand_channel_url, settings.brand_chat_url)
-    
-    # Здесь та же самая картинка, так как это возврат в корень Инфо
-    filename = "info.jpg"
-    banner = media.get(filename)
-    
-    await callback.answer()
-    
-    try:
-        msg = await callback.message.edit_media(
+        await callback.answer()
+        await callback.message.edit_media(
             media=InputMediaPhoto(media=banner, caption=text, parse_mode="HTML"),
-            reply_markup=keyboard
+            reply_markup=get_faq_list_kb(FAQ_CARDS),
         )
-        if isinstance(banner, FSInputFile):
-            media.save_from_message(filename, msg)
-    except Exception:
-        pass
+    except Exception as e:
+        logger.exception(f"Error in on_info_faq: {e}")
+        await callback.answer("⚠️ Ошибка при открытии FAQ", show_alert=True)
 
 
-@router.callback_query(F.data == CB_SELLER_INFO_FAQ)
-async def on_info_faq(callback: CallbackQuery) -> None:
-    if callback.message is None:
-        return
-    
-    filename = "faq.jpg"
-    banner = media.get(filename)
-    
-    text = (
-        f"❖ <b>GDPX ACADEMY // БАЗА ЗНАНИЙ</b>\n"
-        f"{DIVIDER}\n"
-        f"Доступ к архивным протоколам разрешен.\n"
-        f"Выберите директорию для изучения:\n\n"
-        f"📡 <b>STATUS:</b> <code>UNDER ARCHITECT OVERWATCH</code>\n"
-        f" ╰ <i>Архитектор мониторит фрод-алгоритм 24/7.</i>"
-        f"{DIVIDER}"
-    )
-    
-    await callback.answer()
+@router.callback_query(SellerInfoCD.filter(F.type == "faq"))
+async def on_faq_item(callback: CallbackQuery, callback_data: SellerInfoCD):
+    """Просмотр конкретного вопроса FAQ."""
     try:
-        msg = await callback.message.edit_media(
-            media=InputMediaPhoto(media=banner, caption=text, parse_mode="HTML"),
-            reply_markup=_faq_list_keyboard()
-        )
-        if isinstance(banner, FSInputFile):
-            media.save_from_message(filename, msg)
-    except Exception:
-        pass
+        card = get_faq_by_id(callback_data.id)
+        if not card:
+            return await callback.answer("❌ FAQ не найден", show_alert=True)
 
+        filename = "faq.jpg"
+        banner = media.get(filename)
 
-@router.callback_query(F.data == CB_SELLER_INFO_MANUALS)
-async def on_info_manuals(callback: CallbackQuery) -> None:
-    if callback.message is None:
-        return
-    
-    filename = "baza.jpg"
-    banner = media.get(filename)
-    
-    text = (
-        f"❖ <b>GDPX ACADEMY // МАНУАЛЫ</b>\n"
-        f"{DIVIDER}\n"
-        f"Доступные уровни подготовки:\n\n"
-        f"📡 <b>STATUS:</b> <code>READY</code>"
-    )
-    
-    await callback.answer()
-    try:
-        msg = await callback.message.edit_media(
-            media=InputMediaPhoto(media=banner, caption=text, parse_mode="HTML"),
-            reply_markup=_manuals_levels_keyboard()
-        )
-        if isinstance(banner, FSInputFile):
-            media.save_from_message(filename, msg)
-    except Exception:
-        pass
-
-
-@router.callback_query(F.data.startswith(f"{CB_SELLER_FAQ_OPEN}:"))
-async def on_faq_open(callback: CallbackQuery) -> None:
-    if callback.message is None or callback.data is None:
-        return
-    faq_id = callback.data.split(":")[3]
-    card = get_faq_by_id(faq_id)
-    if card is None:
-        await callback.answer("FAQ не найден", show_alert=True)
-        return
-    
-    filename = "faq.jpg" # Оставляем баннер FAQ для самих статей
-    banner = media.get(filename)
-
-    await callback.answer()
-    try:
+        await callback.answer()
         await callback.message.edit_media(
             media=InputMediaPhoto(media=banner, caption=card.text, parse_mode="HTML"),
-            reply_markup=_faq_detail_keyboard()
+            reply_markup=get_back_to_info_kb("faq"),
         )
-    except Exception:
-        pass
+    except Exception as e:
+        logger.exception(f"Error in on_faq_item: {e}")
+        await callback.answer("⚠️ Ошибка при чтении статьи", show_alert=True)
 
 
-@router.callback_query(F.data.startswith(f"{CB_SELLER_MANUAL_LEVEL}:"))
-async def on_manual_level(callback: CallbackQuery) -> None:
-    if callback.message is None or callback.data is None:
-        return
-    level_id = callback.data.split(":")[3]
-    level = next((lvl for lvl in MANUAL_LEVELS if lvl.id == level_id), None)
-    if level is None:
-        await callback.answer("Уровень не найден", show_alert=True)
-        return
+# --- МАНУАЛЫ ---
 
-    filename = "baza.jpg"
-    banner = media.get(filename)
-    
-    text = (
-        f"❖ <b>{level.emoji} {level.title}</b>\n"
-        f"{DIVIDER}\n"
-        f"<i>Выберите мануал:</i>"
-    )
 
-    await callback.answer()
+@router.callback_query(SellerMenuCD.filter(F.action == "manuals"))
+async def on_info_manuals(callback: CallbackQuery):
+    """Главный экран мануалов (выбор уровней)."""
     try:
+        filename = "info.jpg"
+        banner = media.get(filename)
+
+        text = (
+            f"❖ <b>GDPX // МАНУАЛЫ</b>\n"
+            f"{DIVIDER}\n"
+            f"Выберите уровень подготовки для изучения методологии:\n\n"
+            f"📡 <b>STATUS:</b> <code>READY</code>"
+        )
+
+        await callback.answer()
         await callback.message.edit_media(
             media=InputMediaPhoto(media=banner, caption=text, parse_mode="HTML"),
-            reply_markup=_manuals_level_keyboard(level_id)
+            reply_markup=get_manual_levels_kb(MANUAL_LEVELS),
         )
-    except Exception:
-        pass
+    except Exception as e:
+        logger.exception(f"Error in on_info_manuals: {e}")
+        await callback.answer("⚠️ Ошибка при открытии Мануалов", show_alert=True)
 
 
-#--- Opening Specific Manual ---
-@router.callback_query(F.data.startswith(f"{CB_SELLER_MANUAL_OPEN}:"))
-async def on_manual_open(callback: CallbackQuery) -> None:
-    if callback.message is None or callback.data is None:
-        return
-    manual_id = callback.data.split(":")[3]
-    card = get_manual_by_id(manual_id)
-    if card is None:
-        await callback.answer("Мануал не найден", show_alert=True)
-        return
-
-    filename = "baza.jpg"
-    banner = media.get(filename)
-
-    await callback.answer()
+@router.callback_query(SellerInfoCD.filter(F.type == "manual_lvl"))
+async def on_manual_level(callback: CallbackQuery, callback_data: SellerInfoCD):
+    """Список мануалов внутри уровня."""
     try:
+        level = next((lvl for lvl in MANUAL_LEVELS if lvl.id == callback_data.id), None)
+        if not level:
+            return await callback.answer("❌ Уровень не найден", show_alert=True)
+
+        filename = "baza.jpg"
+        banner = media.get(filename)
+
+        manuals = get_manuals_by_level(level.id)
+        text = (
+            f"❖ <b>{level.emoji} {level.title}</b>\n{DIVIDER}\n<i>Выберите интересующий протокол для ознакомления:</i>"
+        )
+
+        await callback.answer()
+        await callback.message.edit_media(
+            media=InputMediaPhoto(media=banner, caption=text, parse_mode="HTML"),
+            reply_markup=get_manuals_in_level_kb(manuals),
+        )
+    except Exception as e:
+        logger.exception(f"Error in on_manual_level: {e}")
+        await callback.answer("⚠️ Ошибка при открытии уровня", show_alert=True)
+
+
+@router.callback_query(SellerInfoCD.filter(F.type == "manual_item"))
+async def on_manual_item(callback: CallbackQuery, callback_data: SellerInfoCD):
+    """Просмотр текста мануала."""
+    try:
+        card = get_manual_by_id(callback_data.id)
+        if not card:
+            return await callback.answer("❌ Мануал не найден", show_alert=True)
+
+        filename = "info.jpg"
+        banner = media.get(filename)
+
+        await callback.answer()
         await callback.message.edit_media(
             media=InputMediaPhoto(media=banner, caption=card.text, parse_mode="HTML"),
-            reply_markup=_manual_detail_keyboard(card.level)
+            reply_markup=get_back_to_manual_level_kb(card.level),
         )
-    except Exception:
-        pass
+    except Exception as e:
+        logger.exception(f"Error in on_manual_item: {e}")
+        await callback.answer("⚠️ Ошибка при чтении мануала", show_alert=True)
+
+
+# --- SUPPORT CENTER ---
+
+
+@router.callback_query(SellerMenuCD.filter(F.action == "support"))
+async def on_support_center(callback: CallbackQuery):
+    """Новый раздел SUPPORT CENTER."""
+    try:
+        filename = "support.jpg"
+        banner = media.get(filename)
+
+        text = (
+            f"❖ <b>GDPX // SUPPORT CENTER</b>\n"
+            f"{DIVIDER}\n"
+            f"Штаб оперативной связи с командой проекта.\n\n"
+            f"🌑 <b>ОСНОВАТЕЛЬ</b> — @GDPX1\n"
+            f" └ <i>Ресурсная база / Глобальный выкуп</i>\n\n"
+            f"🛡 <b>САППОРТЫ</b> — @oduvan_kenoby | @hdksiwns\n"
+            f" └ <i>Наставление / Прием материала.</i>\n\n"
+            f"⚙️ <b>АРХИТЕКТОР</b> — @brug0S\n"
+            f" └ <i>Бот / Технические вопросы.</i>\n"
+            f"{DIVIDER}\n"
+            f"[🟢 <b>ONLINE</b>] — <i>Пишите сразу по существу вопроса.</i>"
+        )
+
+        kb = PremiumBuilder().back("mod_exit", "❮ НАЗАД").as_markup()
+
+        await callback.answer()
+        await callback.message.edit_media(
+            media=InputMediaPhoto(media=banner, caption=text, parse_mode="HTML"), reply_markup=kb
+        )
+    except Exception as e:
+        logger.exception(f"Error in on_support_center: {e}")
+        await callback.answer("⚠️ Ошибка при открытии Поддержки", show_alert=True)
