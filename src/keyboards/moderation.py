@@ -150,12 +150,14 @@ def get_mod_reasons_kb(item_id: int, type_key: str) -> InlineKeyboardMarkup:
     }
 
     for r in reasons.get(type_key, ["Другое"]):
-        # Формируем колбэк вручную, так как он сложный (mod_rf:ID:TYPE:REASON)
-        builder.button(r, f"mod_rf:{item_id}:{type_key}:{r}")
+        # Используем AdminGradeCD для безопасности (никаких ручных строк с ':')
+        # Если в причине есть ':', заменяем на '|' для CallbackData
+        safe_r = r.replace(":", "|")
+        builder.button(r, AdminGradeCD(item_id=item_id, action="reason", val=f"{type_key}:{safe_r}"))
 
     builder.adjust(1)
     # Кнопка своего комментария
-    builder.button("✍️ СВОЙ КОММЕНТАРИЙ", f"mod_rc:{item_id}:{type_key}")
+    builder.button("✍️ СВОЙ КОММЕНТАРИЙ", AdminGradeCD(item_id=item_id, action="reason", val=f"{type_key}:CUSTOM"))
     # Отмена
     builder.back(AdminGradeCD(item_id=item_id, action="cancel_defect"), "« ОТМЕНА")
 
@@ -215,7 +217,9 @@ def get_batch_reasons_kb(type_key: str) -> InlineKeyboardMarkup:
     }
 
     for r in reasons.get(type_key, ["Другое"]):
-        builder.button(r, AdminBatchCD(action="reason", val=f"{type_key}:{r}"))
+        # Заменяем ':' на '|' для безопасности CallbackData
+        safe_r = r.replace(":", "|")
+        builder.button(r, AdminBatchCD(action="reason", val=f"{type_key}|{safe_r}"))
 
     builder.adjust(1)
     builder.button("✍️ СВОЙ КОММЕНТАРИЙ", AdminBatchCD(action="custom", val=type_key))

@@ -353,6 +353,53 @@ class GDPXRenderer:
         lines.extend([DIVIDER, "<i>Используйте кнопки для проведения выплат и просмотра истории ↴</i>"])
         return "\n".join(lines)
 
+    def render_finance_audit(self, stats: dict) -> str:
+        """Отрисовка детального финансового аудита."""
+        return "\n".join(
+            [
+                self._render_heartbeat(),
+                HEADER_FINANCE,
+                DIVIDER,
+                "🛡️ <b>ФИНАНСОВЫЙ АУДИТ СИСТЕМЫ</b>",
+                DIVIDER_LIGHT,
+                f"🏦 <b>ОБЩИЙ ДОЛГ (БАЛАНСЫ):</b> <code>{float(stats.get('total_debt', 0)):.2f}</code> USDT",
+                f"💎 <b>ВСЕГО ВЫПЛАЧЕНО:</b> <code>{float(stats.get('total_paid_all_time', 0)):.2f}</code> USDT",
+                DIVIDER_LIGHT,
+                f"📅 <b>ВЫПЛАТЫ (24H):</b> <code>{float(stats.get('paid_today', 0)):.2f}</code> USDT",
+                f"📅 <b>ВЫПЛАТЫ (7D):</b> <code>{float(stats.get('paid_week', 0)):.2f}</code> USDT",
+                f"📅 <b>ВЫПЛАТЫ (30D):</b> <code>{float(stats.get('paid_month', 0)):.2f}</code> USDT",
+                DIVIDER_LIGHT,
+                f"📈 <b>ОБОРОТ (30D):</b> <code>{float(stats.get('volume_30d', 0)):.2f}</code> USDT",
+                DIVIDER,
+                "<i>Все данные рассчитаны на основе транзакций и проверенных активов.</i>",
+            ]
+        )
+
+    def render_moderation_audit(self, actions: list[dict], title: str = "АУДИТ ДЕЙСТВИЙ") -> str:
+        """Отрисовка списка действий модерации."""
+        lines = [
+            self._render_heartbeat(),
+            HEADER_HISTORY,
+            DIVIDER,
+            f"📜 <b>{title}</b>",
+            DIVIDER_LIGHT,
+        ]
+
+        if not actions:
+            lines.append(" └ <i>Действий не найдено.</i>")
+        else:
+            for a in actions:
+                time_str = a["time"].strftime("%d.%m %H:%M")
+                status = a["to_status"].value.upper()
+                phone = a["phone"] or f"#{a['sub_id']}"
+                line = f" ├ <code>[{time_str}]</code> <b>@{a['admin']}</b> → {phone} | <code>{status}</code>"
+                if a.get("reason"):
+                    line += f"\n   └ <i>Причина: {a['reason']}</i>"
+                lines.append(line)
+
+        lines.extend([DIVIDER, "<i>Последние действия системы.</i>"])
+        return "\n".join(lines)
+
     def render_platform_analytics(self, stats: dict) -> str:
         """Отрисовка общей аналитики платформы."""
         return "\n".join(

@@ -64,17 +64,6 @@ class AdminStatsService:
         total_debt = await self._session.scalar(debt_stmt) or Decimal("0.00")
 
         # 2. Агрегированный запрос по Submission и Payout
-        # Считаем всё за один проход по индексам
-        stats_stmt = select(
-            func.sum(case((Payout.status == "paid", Payout.amount), else_=0)).filter(Payout.created_at >= today_start).label("paid_today"),
-            func.count(func.distinct(Submission.admin_id)).filter(Submission.reviewed_at >= today_start).label("active_mods"),
-            func.sum(case((Submission.status == SubmissionStatus.ACCEPTED, Submission.accepted_amount), else_=0)).filter(Submission.reviewed_at >= today_start).label("vol_24h"),
-            func.count(Submission.id).filter(Submission.status == SubmissionStatus.PENDING).label("pending")
-        )
-        
-        # Поскольку таблицы разные, SQLAlchemy может сделать кросс-джоин, если не указать условия.
-        # Поэтому для Payout и Submission лучше оставить два быстрых агрегата.
-        
         payout_stats = await self._session.execute(
             select(func.sum(Payout.amount)).where(Payout.status == "paid", Payout.created_at >= today_start)
         )
@@ -89,7 +78,7 @@ class AdminStatsService:
         )
         active_mods, volume_24h, total_pending = sub_stats.one()
 
-        # 3. Топ оператор (оставляем быстрым лимитированным запросом)
+        # 3. Топ оператор
         top_op_stmt = (
             select(Category.operator)
             .join(Submission, Submission.category_id == Category.id)
@@ -107,6 +96,48 @@ class AdminStatsService:
             "total_pending": total_pending or 0,
             "volume_24h": volume_24h or Decimal("0.00"),
             "top_operator": top_operator,
+        }
+
+    async def get_detailed_finance_audit(self) -> dict:
+        """Расширенный финансовый аудит для владельца."""
+        from sqlalchemy import case
+        now = datetime.now(timezone.utc)
+        d1 = now - timedelta(days=1)
+        d7 = now - timedelta(days=7)
+        d30 = now - timedelta(days=30)
+
+        # Долг и Всего выплачено
+        totals = await self._session.execute(
+            select(
+                func.sum(User.pending_balance).label("debt"),
+                func.sum(User.total_paid).label("paid_all")
+            )
+        )
+        debt, paid_all = totals.one()
+
+        # Выплаты за периоды
+        payouts = await self._session.execute(
+            select(
+                func.sum(case((Payout.created_at >= d1, Payout.amount), else_=0)).label("p1"),
+                func.sum(case((Payout.created_at >= d7, Payout.amount), else_=0)).label("p7"),
+                func.sum(case((Payout.created_at >= d30, Payout.amount), else_=0)).label("p30")
+            ).where(Payout.status == "paid")
+        )
+        p1, p7, p30 = payouts.one()
+
+        # Оборот за 30 дней
+        vol30 = await self._session.scalar(
+            select(func.sum(Submission.accepted_amount))
+            .where(Submission.status == SubmissionStatus.ACCEPTED, Submission.reviewed_at >= d30)
+        )
+
+        return {
+            "total_debt": debt or Decimal("0.00"),
+            "total_paid_all_time": paid_all or Decimal("0.00"),
+            "paid_today": p1 or Decimal("0.00"),
+            "paid_week": p7 or Decimal("0.00"),
+            "paid_month": p30 or Decimal("0.00"),
+            "volume_30d": vol30 or Decimal("0.00"),
         }
 
     async def get_platform_stats(self, start: datetime, end: datetime) -> dict:
@@ -390,9 +421,86 @@ class AdminStatsService:
                 "phone": phone,
                 "sub_id": sub_id,
                 "to_status": action.to_status,
-                "time": action.created_at
+                "time": action.created_at,
+                "reason": action.reason,
+                "comment": action.comment
             })
         return out
+
+    async def search_moderation_actions(self, query: str, limit: int = 20) -> list[dict]:
+        """Поиск действий модерации по номеру телефона или части номера."""
+        stmt = (
+            select(ReviewAction, User.username, Submission.phone_normalized, Submission.id)
+            .join(User, ReviewAction.admin_id == User.id)
+            .join(Submission, ReviewAction.submission_id == Submission.id)
+            .where(Submission.phone_normalized.contains(query))
+            .order_by(ReviewAction.created_at.desc())
+            .limit(limit)
+        )
+        
+        res = await self._session.execute(stmt)
+        out = []
+        for action, username, phone, sub_id in res.all():
+            out.append({
+                "admin": username or "Admin",
+                "phone": phone,
+                "sub_id": sub_id,
+                "to_status": action.to_status,
+                "time": action.created_at,
+                "reason": action.reason,
+                "comment": action.comment
+            })
+        return out
+
+    async def get_user_actions_history(self, user_id: int, limit: int = 20) -> list[dict]:
+        """История действий конкретного пользователя (модератора) или над его активами (селлера)."""
+        # Сначала ищем как модератора
+        stmt_mod = (
+            select(ReviewAction, User.username, Submission.phone_normalized, Submission.id)
+            .join(User, ReviewAction.admin_id == User.id)
+            .join(Submission, ReviewAction.submission_id == Submission.id)
+            .where(ReviewAction.admin_id == user_id)
+            .order_by(ReviewAction.created_at.desc())
+            .limit(limit)
+        )
+        
+        # Затем как селлера (действия над его симками)
+        stmt_seller = (
+            select(ReviewAction, User.username, Submission.phone_normalized, Submission.id)
+            .join(User, ReviewAction.admin_id == User.id)
+            .join(Submission, ReviewAction.submission_id == Submission.id)
+            .where(Submission.user_id == user_id)
+            .order_by(ReviewAction.created_at.desc())
+            .limit(limit)
+        )
+        
+        res_mod = await self._session.execute(stmt_mod)
+        res_sel = await self._session.execute(stmt_seller)
+        
+        out = []
+        for action, username, phone, sub_id in res_mod.all():
+            out.append({
+                "type": "MOD",
+                "admin": username or "Admin",
+                "phone": phone,
+                "sub_id": sub_id,
+                "to_status": action.to_status,
+                "time": action.created_at,
+                "reason": action.reason
+            })
+            
+        for action, username, phone, sub_id in res_sel.all():
+            out.append({
+                "type": "SELL",
+                "admin": username or "Admin",
+                "phone": phone,
+                "sub_id": sub_id,
+                "to_status": action.to_status,
+                "time": action.created_at,
+                "reason": action.reason
+            })
+            
+        return sorted(out, key=lambda x: x['time'], reverse=True)[:limit]
 
     async def get_avg_accept_amount(self, start: datetime, end: datetime) -> Decimal:
         effective = self._effective_start(start)

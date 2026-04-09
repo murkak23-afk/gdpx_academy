@@ -7,7 +7,8 @@ class AdminQueueCD(CallbackData, prefix="mod_q"):
 
 class AdminGradeCD(CallbackData, prefix="mod_g"):
     item_id: int
-    action: str  # accept, reject, not_scan, block, take, cancel_defect, undo
+    action: str  # accept, reject, not_scan, block, take, cancel_defect, undo, reason
+    val: str = "" # Для передачи причины или комментария
 
 class AdminBatchCD(CallbackData, prefix="mod_b"):
     action: str   # start, toggle, apply, status, reason, cancel, select_all, clear

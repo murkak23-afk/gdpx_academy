@@ -151,21 +151,26 @@ async def mod_defect_menu(callback: CallbackQuery, callback_data: AdminGradeCD):
         reply_markup=get_mod_reasons_kb(callback_data.item_id, callback_data.action)
     )
 
-@router.callback_query(F.data.startswith("mod_rf:"))
-async def mod_finalize_defect(callback: CallbackQuery, session: AsyncSession, state: FSMContext, bot: Bot):
-    """Завершение с выбранной причиной отказа + плашка отката."""
+@router.callback_query(AdminGradeCD.filter(F.action == "reason"))
+async def mod_finalize_defect_cd(callback: CallbackQuery, callback_data: AdminGradeCD, session: AsyncSession, state: FSMContext, bot: Bot):
+    """Завершение с выбранной причиной через CallbackData (БЕЗОПАСНО)."""
     try:
-        # Безопасный парсинг: mod_rf:ITEM_ID:TYPE:REASON (причина может содержать двоеточия)
-        parts = callback.data.split(":", 3)
-        if len(parts) < 4:
-            logger.error(f"Invalid callback data format: {callback.data}")
-            await callback.answer("❌ Ошибка данных колбэка", show_alert=True)
-            return
+        # Формат val: "TYPE:REASON"
+        if ":" not in callback_data.val:
+            return await callback.answer("❌ Ошибка формата данных", show_alert=True)
             
-        item_id = int(parts[1])
-        type_key = parts[2]
-        reason = parts[3]
+        type_key, reason = callback_data.val.split(":", 1)
+        item_id = callback_data.item_id
         
+        # Если выбрано 'CUSTOM', переходим к вводу
+        if reason == "CUSTOM":
+            await state.update_data(mod_item_id=item_id, mod_mode=type_key)
+            await state.set_state(ModerationStates.waiting_for_custom_comment)
+            await callback.message.answer("✍️ <b>Введите ваш комментарий для селлера:</b>\n<i>(Причина будет 'Другое')</i>", parse_mode="HTML")
+            await callback.answer()
+            return
+
+        # Иначе финализируем
         status_map = {
             "not_scan": SubmissionStatus.NOT_A_SCAN, 
             "reject": SubmissionStatus.REJECTED, 
@@ -173,33 +178,25 @@ async def mod_finalize_defect(callback: CallbackQuery, session: AsyncSession, st
         }
 
         if type_key not in status_map:
-            logger.error(f"Unknown defect type: {type_key}")
-            return
+            return await callback.answer("❌ Ошибка типа статуса", show_alert=True)
 
+        # Восстанавливаем возможные двоеточия (если мы их заменяли на | при упаковке)
+        real_reason = reason.replace("|", ":")
+        
         mod_svc = ModerationService(session=session)
-        success = await mod_svc.finalize_submission(item_id, status_map[type_key], reason=reason, bot=bot)
+        success = await mod_svc.finalize_submission(item_id, status_map[type_key], reason=real_reason, bot=bot)
         
         if not success:
-            await callback.answer("⚠️ Ошибка: актив уже обработан или не найден", show_alert=True)
-            return
+            return await callback.answer("⚠️ Ошибка: актив уже обработан", show_alert=True)
             
-        logger.info(f"Admin {callback.from_user.id} finalized sub {item_id} as {type_key} (Reason: {reason})")
-        
-        # Визуальное подтверждение
+        # Плашка успеха и следующий
         action_label = "БРАК" if type_key == "reject" else "НЕ СКАН" if type_key == "not_scan" else "БЛОК"
-        
-        # 1. Показываем плашку отката (редактируем текущее сообщение)
-        try:
-            await _show_success_with_undo(bot, callback.message.chat.id, callback.message.message_id, item_id, action_label)
-        except Exception as e:
-            logger.warning(f"Could not show undo plate: {e}")
-
-        # 2. Переходим к следующей карточке
+        await _show_success_with_undo(bot, callback.message.chat.id, callback.message.message_id, item_id, action_label)
         await _render_next_item(bot, callback.from_user.id, session, state)
         
     except Exception as e:
-        logger.exception(f"Critical error in mod_finalize_defect: {e}")
-        await callback.answer("❌ Произошла ошибка при финализации", show_alert=True)
+        logger.exception(f"Error in mod_finalize_defect_cd: {e}")
+        await callback.answer("❌ Ошибка при финализации", show_alert=True)
 
 @router.callback_query(F.data == "mod_pause")
 async def mod_pause(callback: CallbackQuery, state: FSMContext):
@@ -207,17 +204,6 @@ async def mod_pause(callback: CallbackQuery, state: FSMContext):
     await state.clear()
     await callback.message.delete()
     await callback.message.answer("⏸ <b>Конвейер приостановлен.</b>\nВаши взятые активы сохранены в разделе «В работе».", parse_mode="HTML")
-
-# =====================================================================
-
-@router.callback_query(F.data.startswith("mod_rc:"))
-async def mod_custom_comment_start(callback: CallbackQuery, state: FSMContext):
-    """Начало ввода своего комментария к отказу."""
-    _, item_id, mode = callback.data.split(":")
-    await state.update_data(mod_item_id=item_id, mod_mode=mode)
-    await state.set_state(ModerationStates.waiting_for_custom_comment)
-
-    await callback.message.answer("✍️ <b>Введите ваш комментарий для селлера:</b>\n<i>(Причина будет установлена как 'Другое')</i>", parse_mode="HTML")
 
 @router.message(ModerationStates.waiting_for_custom_comment, F.text)
 async def process_custom_comment(message: Message, state: FSMContext, session: AsyncSession, bot: Bot):

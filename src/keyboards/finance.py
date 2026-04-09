@@ -25,7 +25,7 @@ def get_paylist_kb(sellers: list, page: int, total: int) -> InlineKeyboardMarkup
         InlineKeyboardButton(text="📜 ИСТОРИЯ", callback_data=FinancePayCD(action="history").pack())
     )
     builder.row(
-        InlineKeyboardButton(text="❮ НАЗАД В МЕНЮ", callback_data="owner_back_main")
+        InlineKeyboardButton(text="❮ НАЗАД В МЕНЮ", callback_data="owner_finance")
     )
     return builder.as_markup()
 
@@ -49,16 +49,11 @@ def get_payout_history_kb(payouts: list, page: int, total: int, filter_status: s
     
     builder.adjust(2, 2)
     
-    # Транзакции
-    for p in payouts:
-        icon = "🟢" if p.status.value == "paid" else "⏳" if p.status.value == "pending" else "🔴"
-        date_str = p.created_at.strftime("%d.%m %H:%M")
-        text = f"{icon} #{p.id} | {date_str} | {p.amount} USDT"
-        builder.button(text, FinancePayCD(action="hist_detail", payout_id=p.id, page=page))
+    # Раньше здесь был цикл создания кнопок для каждой выплаты.
+    # Теперь список выводится в тексте.
     
-    builder.adjust(2, 2, 1)
     builder.pagination("fin_hist", page, total, 10, query=filter_status)
-    builder.back("owner_back_main", "❮ НАЗАД В МЕНЮ")
+    builder.back("owner_finance", "❮ НАЗАД В МЕНЮ")
     return builder.as_markup()
 
 def get_payout_detail_kb(payout_id: int, status: str, page: int, filter_status: str) -> InlineKeyboardMarkup:
@@ -82,7 +77,7 @@ def get_payout_confirm_undo_kb(payout_id: int) -> InlineKeyboardMarkup:
 def get_finance_stats_kb() -> InlineKeyboardMarkup:
     """Кнопка возврата из статистики финансов."""
     return (PremiumBuilder()
-            .back(FinancePayCD(action="list"))
+            .back("owner_finance")
             .as_markup())
 
 def get_topup_kb() -> InlineKeyboardMarkup:
@@ -93,5 +88,5 @@ def get_topup_kb() -> InlineKeyboardMarkup:
         builder.button(f"➕ {amt} USDT", FinanceTopupCD(amount=float(amt)))
     builder.button(f"{EMOJI_PROFILE} СВОЯ СУММА", "topup_custom")
     builder.adjust(2, 2, 1, 1)
-    builder.back("admin_menu")
+    builder.back("owner_finance")
     return builder.as_markup()

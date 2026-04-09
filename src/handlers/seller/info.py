@@ -2,19 +2,14 @@
 
 from __future__ import annotations
 
-import logging
-
-from aiogram import Bot, F, Router
+from aiogram import F, Router
 from aiogram.types import (
     CallbackQuery,
     InputMediaPhoto,
-    Message,
 )
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.config import get_settings
 from src.faq import FAQ_CARDS, get_faq_by_id
-from src.keyboards import get_seller_main_kb
 from src.keyboards.base import PremiumBuilder
 from src.keyboards.factory import SellerInfoCD, SellerMenuCD
 from src.keyboards.info import (
@@ -26,7 +21,6 @@ from src.keyboards.info import (
     get_manuals_in_level_kb,
 )
 from src.manuals import MANUAL_LEVELS, get_manual_by_id, get_manuals_by_level
-from src.services.user_service import UserService
 from src.utils.media import media
 from src.utils.text_format import edit_message_text_or_caption_safe
 from src.utils.ui_builder import DIVIDER
@@ -36,7 +30,7 @@ router = Router(name="seller-info-router")
 
 def _info_root_text() -> str:
     return (
-        "<b>❖ GDPX // KNOWLEDGE BASE</b>\n\n"
+        "<b>❖ GDPX // БАЗА ЗНАНИЙ</b>\n\n"
         "Добро пожаловать в закрытую Академию GDPX. Здесь собраны все необходимые "
         "протоколы и регламенты для эффективной работы с eSIM.\n\n"
         "<b>СТРУКТУРА БАЗЫ:</b>\n"
@@ -69,13 +63,13 @@ async def on_info_root(callback: CallbackQuery):
         try:
             await callback.message.edit_media(
                 media=InputMediaPhoto(media=banner, caption=_info_root_text(), parse_mode="HTML"),
-                reply_markup=get_info_root_kb(settings.brand_chat_url),
+                reply_markup=get_info_root_kb(settings.brand_chat_url, settings.brand_channel_url),
             )
         except Exception:
             await edit_message_text_or_caption_safe(
                 callback.message,
                 _info_root_text(),
-                reply_markup=get_info_root_kb(settings.brand_chat_url),
+                reply_markup=get_info_root_kb(settings.brand_chat_url, settings.brand_channel_url),
                 parse_mode="HTML",
             )
     except Exception as e:
@@ -207,8 +201,6 @@ async def on_manual_item(callback: CallbackQuery, callback_data: SellerInfoCD):
 
 
 # --- SUPPORT CENTER ---
-
-
 @router.callback_query(SellerMenuCD.filter(F.action == "support"))
 async def on_support_center(callback: CallbackQuery):
     """Новый раздел SUPPORT CENTER."""

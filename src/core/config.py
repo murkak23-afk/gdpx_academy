@@ -133,7 +133,12 @@ class Settings(BaseSettings):
         if isinstance(value, list):
             return [int(v) for v in value if str(v).strip()]
         if isinstance(value, str):
-            items = [s.strip() for s in value.split(",") if s.strip()]
+            v = value.strip()
+            # Убираем квадратные скобки, если они есть
+            if v.startswith("[") and v.endswith("]"):
+                v = v[1:-1]
+            # Убираем все пробелы и разделяем по запятой
+            items = [s.strip() for s in v.replace(" ", "").split(",") if s.strip()]
             return [int(i) for i in items]
         return []
 

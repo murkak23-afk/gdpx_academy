@@ -172,7 +172,7 @@ async def view_item(callback: CallbackQuery, callback_data: SellerItemCD, sessio
     await edit_message_text_or_caption_safe(
         callback.message, 
         text, 
-        reply_markup=get_seller_item_view_kb(item.id, item.category_id), 
+        reply_markup=get_seller_item_view_kb(item.id, item.category_id, item.status.value), 
         parse_mode="HTML"
     )
     await callback.answer()
@@ -180,5 +180,20 @@ async def view_item(callback: CallbackQuery, callback_data: SellerItemCD, sessio
 
 @router.callback_query(SellerItemCD.filter(F.action == "delete"), StateFilter(None))
 async def delete_item_confirm(callback: CallbackQuery, callback_data: SellerItemCD, session: AsyncSession) -> None:
-    """Заглушка отзыва актива."""
-    await callback.answer("⚙️ Функция отзыва актива пока отключена Администрацией.", show_alert=True)
+    """Отзыв (удаление) актива селлером."""
+    try:
+        user = await UserService(session=session).get_by_telegram_id(callback.from_user.id)
+        sub_svc = SubmissionService(session=session)
+
+        success, message = await sub_svc.delete_submission(callback_data.item_id, user.id)
+        if success:
+            await session.commit()
+            await callback.answer("✅ Актив успешно отозван", show_alert=True)
+            # Возвращаемся к списку кластеров (так проще, чем обновлять список)
+            await list_folders(callback, session)
+        else:
+            await callback.answer(f"❌ Ошибка: {message}", show_alert=True)
+
+    except Exception as e:
+        logger.exception(f"Error in delete_item_confirm: {e}")
+        await callback.answer("⚠️ Произошла ошибка при отзыве актива", show_alert=True)

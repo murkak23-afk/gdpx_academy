@@ -295,12 +295,11 @@ async def process_edit_price(message: Message, state: FSMContext, session: Async
     await message.answer(success_msg, reply_markup=get_cat_manage_detail_kb(cat), parse_mode="HTML")
 
 @router.callback_query(CatConCD.filter(F.action == "cancel"))
-async def cancel_catcon(callback: CallbackQuery, state: FSMContext) -> None:
-    """Отмена на любом шаге."""
+async def cancel_catcon(callback: CallbackQuery, state: FSMContext, session: AsyncSession) -> None:
+    """Отмена на любом шаге: возврат в меню управления."""
     await state.clear()
-    try:
-        await callback.message.delete()
-    except Exception:
-        pass
-    await callback.message.answer("❌ <b>Конфигурация кластера отменена.</b>", parse_mode="HTML")
+    text = "❌ <b>Конфигурация кластера отменена.</b>\n\nВыберите действие:"
+    await edit_message_text_or_caption_safe(
+        callback.message, text, reply_markup=get_catcon_main_kb(), parse_mode="HTML"
+    )
     await callback.answer()

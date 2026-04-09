@@ -110,11 +110,17 @@ async def _render_history(event: Message | CallbackQuery, session: AsyncSession,
         f"🔍 <b>Фильтр:</b> <code>{status_filter.upper()}</code>\n"
         f"📊 <b>Всего записей:</b> {total}\n"
         f"{DIVIDER_LIGHT}\n"
-        f"Выберите транзакцию для деталей:"
     )
 
     if not payouts:
-        text += "\n\n📭 История пуста."
+        text += "📭 <i>История пуста.</i>"
+    else:
+        for p in payouts:
+            icon = "🟢" if p.status == PayoutStatus.PAID else "⏳" if p.status == PayoutStatus.PENDING else "🔴"
+            date_str = p.created_at.strftime("%d.%m %H:%M")
+            text += f"{icon} <b>#{p.id}</b> | <code>{p.amount}</code> USDT | {date_str}\n"
+        
+        text += f"{DIVIDER}\n<i>Для просмотра деталей используйте поиск или CSV-экспорт.</i>"
 
     kb = get_payout_history_kb(payouts, page, total, status_filter)
 
@@ -321,16 +327,12 @@ async def cmd_topup_start(message: Message, session: AsyncSession):
     """Скрытая команда: создание счета на пополнение баланса выплат."""
     if not await AdminService(session=session).is_admin(message.from_user.id):
         return
+    await start_topup_process(message, session)
 
-    from aiogram.utils.keyboard import InlineKeyboardBuilder
-    builder = InlineKeyboardBuilder()
-    
-    amounts = [10, 50, 100, 250, 500]
-    for amt in amounts:
-        builder.button(text=f"➕ {amt} USDT", callback_data=FinanceTopupCD(amount=float(amt)).pack())
-    
-    builder.button(text="✍️ СВОЯ СУММА", callback_data="topup_custom")
-    builder.adjust(2, 2, 1, 1)
+
+async def start_topup_process(event: Message | CallbackQuery, session: AsyncSession):
+    """Централизованная функция входа в процесс пополнения баланса (из команды или кнопки)."""
+    from src.keyboards.finance import get_topup_kb
     
     text = (
         f"❖ <b>ПОПОЛНЕНИЕ БАЛАНСА ВЫПЛАТ</b>\n"
@@ -338,7 +340,13 @@ async def cmd_topup_start(message: Message, session: AsyncSession):
         f"Выберите сумму для генерации счета на оплату.\n"
         f"<i>Средства поступят на кошелек приложения в CryptoBot.</i>"
     )
-    await message.answer(text, reply_markup=builder.as_markup(), parse_mode="HTML")
+    
+    kb = get_topup_kb()
+    
+    if isinstance(event, Message):
+        await event.answer(text, reply_markup=kb, parse_mode="HTML")
+    else:
+        await edit_message_text_or_caption_safe(event.message, text, reply_markup=kb, parse_mode="HTML")
 
 
 @router.callback_query(FinanceTopupCD.filter())

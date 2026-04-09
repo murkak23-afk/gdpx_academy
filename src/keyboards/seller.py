@@ -196,13 +196,17 @@ def get_seller_assets_items_kb(items: list, category_id: int, current_page: int,
     builder.back(SellerMenuCD(action="assets"), "К КЛАСТЕРАМ")
     return builder.as_markup()
 
-def get_seller_item_view_kb(item_id: int, category_id: int) -> InlineKeyboardMarkup:
+def get_seller_item_view_kb(item_id: int, category_id: int, status: str = "pending") -> InlineKeyboardMarkup:
     """Детальный просмотр актива."""
-    return (PremiumBuilder()
-            .danger("ОТОЗВАТЬ АКТИВ", SellerItemCD(item_id=item_id, action="delete"))
-            .back(SellerAssetCD(category_id=category_id), "К СПИСКУ")
-            .adjust(1)
-            .as_markup())
+    builder = PremiumBuilder()
+    
+    # Кнопка отзыва только если еще не начали проверять
+    if status == "pending":
+        builder.danger("ОТОЗВАТЬ АКТИВ", SellerItemCD(item_id=item_id, action="delete"))
+        
+    builder.back(SellerAssetCD(category_id=category_id), "К СПИСКУ")
+    builder.adjust(1)
+    return builder.as_markup()
 
 def get_seller_payout_history_kb(current_period: str) -> InlineKeyboardMarkup:
     """Клавиатура истории выплат с фильтрами."""

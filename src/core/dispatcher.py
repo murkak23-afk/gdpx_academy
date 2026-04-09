@@ -12,6 +12,7 @@ from src.middlewares import (
     UserThrottlingMiddleware,
 )
 from src.middlewares.maintenance import MaintenanceMiddleware
+from src.middlewares.block_check import BlockCheckMiddleware
 from src.core.config import get_settings
 
 
@@ -21,11 +22,14 @@ def create_dispatcher() -> Dispatcher:
     dispatcher = Dispatcher(storage=build_fsm_storage())
     settings = get_settings()
 
-    # Порядок: сначала throttling, затем обслуживание, затем логирование, затем сессия БД.
+    # Порядок: сначала throttling, затем логирование.
     dispatcher.update.middleware(UserThrottlingMiddleware(interval_sec=1.0))
-    dispatcher.update.middleware(MaintenanceMiddleware(settings=settings))
     dispatcher.update.middleware(UpdateLoggingMiddleware())
-    dispatcher.update.middleware(DbSessionMiddleware(session_factory=SessionFactory))
+    
+    # ПЕРЕВОДИМ В OUTER MIDDLEWARE (выполняются ВСЕГДА до роутеров)
+    dispatcher.update.outer_middleware(DbSessionMiddleware(session_factory=SessionFactory))
+    dispatcher.update.outer_middleware(MaintenanceMiddleware(settings=settings))
+    dispatcher.update.outer_middleware(BlockCheckMiddleware())
 
     dispatcher.include_router(setup_routers())
     register_error_handlers(dispatcher)

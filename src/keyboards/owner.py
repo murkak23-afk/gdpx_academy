@@ -85,7 +85,7 @@ def get_user_card_kb(user_id: int, current_role: str, is_restricted: bool, page:
     builder.button("📜 ИСТОРИЯ ДЕЙСТВИЙ", OwnerUserCD(action="history", user_id=user_id, page=page, role=role_filter))
     
     builder.adjust(1)
-    builder.back(OwnerUserCD(action="list", page=page, role_filter=role_filter), "« К СПИСКУ")
+    builder.back(OwnerUserCD(action="list", page=page, role=role_filter), "« К СПИСКУ")
     return builder.as_markup()
 
 

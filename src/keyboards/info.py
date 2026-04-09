@@ -8,19 +8,19 @@ from src.keyboards.base import PremiumBuilder
 from src.keyboards.constants import *
 from src.keyboards.factory import NavCD, SellerMenuCD, SellerInfoCD
 
-def get_info_root_kb(chat_url: str | None = None) -> InlineKeyboardMarkup:
+def get_info_root_kb(chat_url: str | None = None, channel_url: str | None = None) -> InlineKeyboardMarkup:
     """Главный экран информационного центра (База Знаний)."""
     builder = PremiumBuilder()
-    
-    # Большая кнопка сверху (ссылка на чат)
-    if chat_url:
-        builder.button("💬 GDPX // ACADEMY", url=chat_url)
     
     # Основные кнопки раздела
     builder.button(f"{EMOJI_KNOWLEDGE} F.A.Q.", SellerMenuCD(action="faq"))
     builder.button(f"🧭 МАНУАЛЫ", SellerMenuCD(action="manuals"))
     
-    builder.adjust(1, 2)
+    # Кнопка чата/канала (третья кнопка)
+    if chat_url or channel_url:
+        builder.button("💬 ЧАТ / КАНАЛ", url=chat_url or channel_url)
+    
+    builder.adjust(1)
     builder.back("mod_exit", "В ГЛАВНОЕ МЕНЮ")
     return builder.as_markup()
 

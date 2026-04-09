@@ -372,18 +372,20 @@ class SubmissionService:
             "by_main_operator": by_main,
         }
 
-    async def list_pending_submissions(self, limit: int = 10) -> list[Submission]:
-        """Возвращает список ожидающих карточек для проверки админом."""
-
-        stmt = (
-            select(Submission)
-            .options(joinedload(Submission.category), joinedload(Submission.seller))
-            .where(Submission.status == SubmissionStatus.PENDING)
-            .order_by(Submission.created_at.asc())
-            .limit(limit)
-        )
-        result = await self._session.execute(stmt)
-        return list(result.scalars().all())
+    async def delete_submission(self, submission_id: int, user_id: int) -> tuple[bool, str]:
+        """Удаление (отзыв) актива селлером. Только если он еще в PENDING."""
+        submission = await self.get_by_id(submission_id)
+        if not submission:
+            return False, "Актив не найден"
+        
+        if submission.user_id != user_id:
+            return False, "Это не ваш актив"
+            
+        if submission.status != SubmissionStatus.PENDING:
+            return False, f"Нельзя отозвать актив в статусе {submission.status.value}"
+            
+        await self._session.delete(submission)
+        return True, "Актив успешно отозван"
 
     async def list_pending_groups_by_user(self, limit: int = 20) -> list[tuple[int, int]]:
         """Возвращает группы pending-материалов в формате (user_id, count)."""

@@ -88,8 +88,12 @@ async def start_batch_mode(callback: CallbackQuery, callback_data: AdminBatchCD,
 @router.callback_query(F.data.startswith("mod_batch_pg:"))
 async def process_batch_pagination(callback: CallbackQuery, state: FSMContext, session: AsyncSession):
     """Обработка переключения страниц в Batch-режиме."""
-    page = int(callback.data.split(":")[1])
+    parts = callback.data.split(":")
+    if len(parts) < 3:
+        return
+    page = int(parts[2])
     await start_batch_mode(callback, AdminBatchCD(action="start", val=str(page)), session, state)
+
 
 
 @router.callback_query(AdminBatchCD.filter(F.action == "toggle"))
@@ -167,7 +171,7 @@ async def process_batch_status(callback: CallbackQuery, callback_data: AdminBatc
 @router.callback_query(AdminBatchCD.filter(F.action == "reason"))
 async def process_batch_reason(callback: CallbackQuery, callback_data: AdminBatchCD, state: FSMContext, session: AsyncSession, bot: Bot):
     """Обработка выбора готовой причины."""
-    type_key, reason = callback_data.val.split(":", 1)
+    type_key, reason = callback_data.val.split("|", 1)
     status_map = {
         "not_scan": SubmissionStatus.NOT_A_SCAN,
         "reject": SubmissionStatus.REJECTED,
@@ -218,7 +222,7 @@ async def _finalize_batch_job(
     admin = await UserService(session=session).get_by_telegram_id(message_obj.from_user.id)
 
     mod_svc = ModerationService(session=session)
-    count = await mod_svc.bulk_finalize_submissions(selected_ids, status, admin.id, reason, comment)
+    count = await mod_svc.bulk_finalize_submissions(selected_ids, status, admin.id, reason, comment, bot=bot)
     await session.commit()
 
     # Очищаем выбор

@@ -15,11 +15,11 @@ class PremiumBuilder:
     def __init__(self):
         self.builder = InlineKeyboardBuilder()
 
-    def button(self, text: str, callback_data: Any) -> PremiumBuilder:
-        """Добавить обычную кнопку."""
+    def button(self, text: str, callback_data: Any = None, url: str | None = None) -> PremiumBuilder:
+        """Добавить обычную кнопку (callback или url)."""
         if isinstance(callback_data, CallbackData):
             callback_data = callback_data.pack()
-        self.builder.button(text=text, callback_data=callback_data)
+        self.builder.button(text=text, callback_data=callback_data, url=url)
         return self
 
     def primary(self, text: str, callback_data: Any) -> PremiumBuilder:
