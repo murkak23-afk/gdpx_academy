@@ -8,8 +8,33 @@ from src.keyboards.constants import *
 from src.keyboards.factory import (
     SellerMenuCD, NavCD, SellerAssetCD, SellerItemCD, 
     SellerSubmissionCD, SellerStatsCD, SellerSettingsCD,
-    PinPadCD, SellerNotifCD
+    SellerNotifCD, SellerArchiveCD
 )
+
+def get_seller_archive_kb(period: str) -> InlineKeyboardMarkup:
+    """Клавиатура раздела Архив с выбором периодов и экспортом."""
+    builder = PremiumBuilder()
+    
+    # Кнопки периодов
+    periods = [
+        ("ВЧЕРА", "yesterday"),
+        ("7 ДНЕЙ", "7d"),
+        ("30 ДНЕЙ", "30d"),
+        ("ВСО ВРЕМЯ", "all")
+    ]
+    
+    for label, p in periods:
+        text = f"✨ {label}" if period == p else label
+        builder.button(text, SellerArchiveCD(period=p))
+    
+    builder.adjust(2, 2)
+    
+    # Кнопки действий
+    builder.button("📥 ЭКСПОРТ В EXCEL", SellerSettingsCD(action="export", value=f"arch_{period}"))
+    builder.back(NavCD(to="menu"), "❮ В ГЛАВНОЕ МЕНЮ")
+    builder.adjust(2, 2, 1, 1)
+    
+    return builder.as_markup()
 
 def get_seller_main_kb(has_accepted_codex: bool = True) -> InlineKeyboardMarkup:
     """Главное меню селлера в стиле Silver Sakura."""
@@ -22,17 +47,17 @@ def get_seller_main_kb(has_accepted_codex: bool = True) -> InlineKeyboardMarkup:
         builder.adjust(1)
     else:
         # Полноценное меню
-        builder.primary("🧧 ЗАГРУЗИТЬ eSIM", SellerMenuCD(action="sell"))
+        builder.button("🧧 ЗАГРУЗИТЬ eSIM", SellerMenuCD(action="sell"))
         builder.row()
-        builder.button("📊 МОИ АКТИВЫ", SellerMenuCD(action="assets"))
-        builder.button("👤 МОЙ ПРОФИЛЬ", SellerMenuCD(action="profile"))
-        builder.row()
-        builder.button("💎 ВЫПЛАТЫ", SellerMenuCD(action="payouts"))
-        builder.button("📈 СТАТИСТИКА", SellerMenuCD(action="stats"))
+        builder.button("💎 ИСТОРИЯ ВЫПЛАТ", SellerMenuCD(action="payouts"))
+        builder.button("🥋 МОЙ ПРОФИЛЬ", SellerMenuCD(action="profile"))
         builder.row()
         builder.button("📜 БАЗА ЗНАНИЙ", SellerMenuCD(action="info"))
+        builder.button("📈 СТАТИСТИКА", SellerMenuCD(action="stats"))
+        builder.row()
+        builder.button("🏆 ДОСКА ЛИДЕРОВ", SellerMenuCD(action="leaderboard"))
         builder.button("🛡 ПОДДЕРЖКА", SellerMenuCD(action="support"))
-        builder.adjust(1, 2, 2, 2)
+        builder.adjust(1, 2, 2, 2, 2)
         
     return builder.as_markup()
 
@@ -42,9 +67,11 @@ def get_seller_profile_kb() -> InlineKeyboardMarkup:
             .button("📈 СТАТИСТИКА", SellerMenuCD(action="stats"))
             .button("⚙️ НАСТРОЙКИ", SellerMenuCD(action="settings"))
             .row()
-            .button("📊 МОИ АКТИВЫ", SellerMenuCD(action="assets"))
+            .button("📊 МОИ СИМКИ", SellerMenuCD(action="assets"))
+            .button("📦 АРХИВ", SellerMenuCD(action="archive"))
+            .row()
             .back(NavCD(to="menu"), "В ГЛАВНОЕ МЕНЮ")
-            .adjust(2, 1, 1)
+            .adjust(2, 2, 1)
             .as_markup())
 
 def get_seller_stats_kb(current_period: str) -> InlineKeyboardMarkup:
@@ -67,7 +94,6 @@ def get_seller_stats_kb(current_period: str) -> InlineKeyboardMarkup:
 def get_seller_settings_kb() -> InlineKeyboardMarkup:
     """Меню настроек профиля."""
     return (PremiumBuilder()
-            .button("🛡 БЕЗОПАСНОСТЬ (PIN)", SellerSettingsCD(action="pin"))
             .button("👤 ЛИЧНЫЕ ДАННЫЕ", SellerSettingsCD(action="alias"))
             .row()
             .button("🎭 РЕЖИМ INCOGNITO", SellerSettingsCD(action="incognito"))
@@ -75,23 +101,9 @@ def get_seller_settings_kb() -> InlineKeyboardMarkup:
             .row()
             .button("🌐 ЯЗЫК / LANGUAGE", SellerSettingsCD(action="lang"))
             .button("📊 ЭКСПОРТ ДАННЫХ", SellerSettingsCD(action="export"))
-            .adjust(2, 2, 2)
+            .adjust(1, 2, 2)
             .back(SellerMenuCD(action="profile"), "В ПРОФИЛЬ")
             .as_markup())
-
-def get_pin_pad_kb(current_input: str, context: str) -> InlineKeyboardMarkup:
-    """Цифровая клавиатура для ввода PIN."""
-    builder = PremiumBuilder()
-    for i in range(1, 10):
-        builder.button(str(i), PinPadCD(action="digit", value=str(i), context=context))
-    builder.button("⌫", PinPadCD(action="backspace", context=context))
-    builder.button("0", PinPadCD(action="digit", value="0", context=context))
-    if len(current_input) >= 4:
-        builder.button("✅ OK", PinPadCD(action="confirm", context=context))
-    else:
-        builder.button("❌", PinPadCD(action="cancel", context=context))
-    builder.adjust(3, 3, 3, 3)
-    return builder.as_markup()
 
 def get_notification_settings_kb(current_pref: str) -> InlineKeyboardMarkup:
     """Выбор режима уведомлений с индикацией текущего выбора."""
@@ -156,8 +168,8 @@ def get_categories_kb(categories: list, favorite_ids: list[int] = None, cancel_t
     builder.cancel(NavCD(to=cancel_to))
     return builder.as_markup()
 
-def get_seller_assets_folders_kb(folders: list[dict], best_cat_id: int | None) -> InlineKeyboardMarkup:
-    """Список кластеров с активами селлера."""
+def get_seller_assets_folders_kb(folders: list[dict], best_cat_id: int | None, is_archived: bool = False) -> InlineKeyboardMarkup:
+    """Список кластеров с активами селлера (поддержка архива)."""
     builder = PremiumBuilder()
     sorted_folders = sorted(folders, key=lambda f: (f['category_id'] != best_cat_id, -f['total']))
     for f in sorted_folders:
@@ -165,12 +177,12 @@ def get_seller_assets_folders_kb(folders: list[dict], best_cat_id: int | None) -
         icon = "🏆" if is_best else "🗂"
         suffix = " 🔥" if is_best else ""
         btn_text = f"{icon} {f['title']}{suffix} [{f['total']}]"
-        builder.button(btn_text, SellerAssetCD(category_id=f['category_id']))
+        builder.button(btn_text, SellerAssetCD(category_id=f['category_id'], is_archived=is_archived))
     builder.adjust(1)
     builder.back(NavCD(to="menu"), "В ГЛАВНОЕ МЕНЮ")
     return builder.as_markup()
 
-def get_seller_assets_items_kb(items: list, category_id: int, current_page: int, total_items: int, current_filter: str) -> InlineKeyboardMarkup:
+def get_seller_assets_items_kb(items: list, category_id: int, current_page: int, total_items: int, current_filter: str, is_archived: bool = False) -> InlineKeyboardMarkup:
     """Список конкретных активов внутри кластера с пагинацией и фильтрами."""
     builder = PremiumBuilder()
     filters = [
@@ -181,7 +193,7 @@ def get_seller_assets_items_kb(items: list, category_id: int, current_page: int,
     ]
     for label, key in filters:
         text = f"✨ {label}" if key == current_filter else label
-        builder.button(text, SellerAssetCD(category_id=category_id, page=0, filter_key=key))
+        builder.button(text, SellerAssetCD(category_id=category_id, page=0, filter_key=key, is_archived=is_archived))
     builder.adjust(2, 2)
     for item in items:
         status_val = item.status.value
@@ -192,8 +204,12 @@ def get_seller_assets_items_kb(items: list, category_id: int, current_page: int,
         text = f"{status_emoji} {ident} | {price} USDT"
         builder.button(text, SellerItemCD(item_id=item.id, action="view"))
     builder.adjust(2, 2, 1)
-    builder.pagination("sel_asset_pg", current_page, total_items, 7, query=f"{category_id}:{current_filter}")
-    builder.back(SellerMenuCD(action="assets"), "К КЛАСТЕРАМ")
+    # В query для пагинации прокидываем флаг архива (0/1)
+    archive_suffix = "1" if is_archived else "0"
+    builder.pagination("sel_asset_pg", current_page, total_items, 7, query=f"{category_id}:{current_filter}:{archive_suffix}")
+    
+    back_action: SellerMenuCD = SellerMenuCD(action="archive") if is_archived else SellerMenuCD(action="assets")
+    builder.back(back_action, "К КЛАСТЕРАМ")
     return builder.as_markup()
 
 def get_seller_item_view_kb(item_id: int, category_id: int, status: str = "pending") -> InlineKeyboardMarkup:

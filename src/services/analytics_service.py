@@ -95,20 +95,25 @@ class AnalyticsService:
         ).where(
             Submission.status == SubmissionStatus.ACCEPTED,
             Submission.reviewed_at >= cutoff,
+            Submission.is_archived == False,
         )
         result = await self._session.execute(stmt)
         return Decimal(result.scalar_one() or 0)
 
     async def _esim_count(self, status: SubmissionStatus) -> int:
-        """COUNT(*) submissions with a given status."""
-        stmt = select(func.count(Submission.id)).where(Submission.status == status)
+        """COUNT(*) submissions with a given status (excluding archived)."""
+        stmt = select(func.count(Submission.id)).where(
+            Submission.status == status,
+            Submission.is_archived == False,
+        )
         result = await self._session.execute(stmt)
         return int(result.scalar_one() or 0)
 
     async def _esim_rejected_count(self) -> int:
-        """COUNT(*) submissions with any rejection-family status."""
+        """COUNT(*) submissions with any rejection-family status (excluding archived)."""
         stmt = select(func.count(Submission.id)).where(
-            Submission.status.in_(_REJECTED_STATUSES)
+            Submission.status.in_(_REJECTED_STATUSES),
+            Submission.is_archived == False,
         )
         result = await self._session.execute(stmt)
         return int(result.scalar_one() or 0)

@@ -6,7 +6,6 @@ from .entry import router as entry_router
 from .queue import router as queue_router
 from .inspector import router as inspector_router
 from .search import router as search_router
-from .batch import router as batch_router
 
 # Главный роутер модерации, который объединяет все под-роутеры (/a)
 router = Router(name="admin-moderation-root")
@@ -19,6 +18,5 @@ router.include_routers(
     entry_router,
     queue_router,
     inspector_router,
-    search_router,
-    batch_router
+    search_router
 )

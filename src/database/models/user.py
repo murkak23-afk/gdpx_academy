@@ -57,8 +57,6 @@ class User(Base, TimestampMixin):
     # --- Премиум-поля (Silver Sakura) ---
     nickname: Mapped[str | None] = mapped_column(String(64), nullable=True)
     pseudonym: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    pin_code: Mapped[str | None] = mapped_column(String(128), nullable=True)
-    is_pin_enabled: Mapped[bool] = mapped_column(nullable=False, default=False)
     is_incognito: Mapped[bool] = mapped_column(nullable=False, default=False)
     notification_preference: Mapped[NotificationPreference] = mapped_column(
         Enum(

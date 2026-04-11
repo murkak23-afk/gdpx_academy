@@ -41,6 +41,26 @@ def mask_phone_public(phone: str | None) -> str:
     # Показываем начало (код/префикс) и многоточие; без «хвоста» — как в ТЗ.
     return f"{p[:5]}…"
 
+def extract_all_normalized_phones(text: str | None) -> list[str]:
+    """
+    Находит ВСЕ российские мобильные номера в тексте и нормализует их.
+    Используется для массовой загрузки номеров из одного сообщения/подписи.
+    """
+    if not text:
+        return []
+
+    # Ищем все вхождения паттерна: (+7/7/8) 9XX XXX XX XX
+    pattern = r"(?:^|[^\d])(?:\+?7|8)?[\s\-\(\)]*([9]\d{2})[\s\-\(\)]*(\d{3})[\s\-\(\)]*(\d{2})[\s\-\(\)]*(\d{2})(?:[^\d]|$)"
+    matches = re.finditer(pattern, text)
+
+    phones = []
+    for match in matches:
+        phone = f"7{match.group(1)}{match.group(2)}{match.group(3)}{match.group(4)}"
+        if phone not in phones:
+            phones.append(phone)
+    return phones
+
+
 def extract_and_normalize_phone(text: str | None) -> str | None:
     """
     Умный поиск первого мобильного номера РФ в тексте (среди мусора).

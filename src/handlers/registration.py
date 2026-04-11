@@ -83,7 +83,7 @@ async def cmd_start(message: Message, session: AsyncSession, state: FSMContext) 
           .as_markup())
     
     await message.answer(
-        "🏮 <b>WELCOME // GDPX SYSTEM</b>\n"
+        "<b>WELCOME // GDPX SYSTEM</b>\n"
         "▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰\n"
         "Выберите язык интерфейса для инициализации терминала.\n"
         "<i>Select interface language to initialize the terminal.</i>",
@@ -133,7 +133,10 @@ async def process_pseudonym(message: Message, session: AsyncSession, state: FSMC
     await message.answer("✅ <b>IDENTITY FIXED</b>\nРегистрация в системе завершена.", parse_mode="HTML")
     await _show_main_dashboard(message, user, session)
 
+from src.keyboards.factory import NavCD, SellerMenuCD
+
 @router.callback_query(NavCD.filter(F.to == "menu"))
+@router.callback_query(SellerMenuCD.filter(F.action == "main"))
 async def back_to_menu(callback: CallbackQuery, session: AsyncSession, state: FSMContext) -> None:
     """Возврат в меню через колбэк."""
     await state.clear()

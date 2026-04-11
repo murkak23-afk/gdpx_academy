@@ -41,6 +41,8 @@ class Submission(Base, TimestampMixin):
     description_text: Mapped[str] = mapped_column(Text, nullable=False)
     phone_normalized: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)
     is_duplicate: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    is_archived: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, index=True)
+    archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     last_status_change: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     status: Mapped[SubmissionStatus] = mapped_column(

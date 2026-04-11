@@ -24,6 +24,15 @@ def create_dispatcher() -> Dispatcher:
 
     # Порядок: сначала throttling, затем логирование.
     dispatcher.update.middleware(UserThrottlingMiddleware(interval_sec=1.0))
+    
+    @dispatcher.update.outer_middleware()
+    async def global_debug_middleware(handler, event, data):
+        user = data.get("event_from_user")
+        if user:
+            from src.core.logger import logger
+            logger.info(f"!!! [GLOBAL_TRACE] !!! Update from {user.id} (@{user.username})")
+        return await handler(event, data)
+
     dispatcher.update.middleware(UpdateLoggingMiddleware())
     
     # ПЕРЕВОДИМ В OUTER MIDDLEWARE (выполняются ВСЕГДА до роутеров)

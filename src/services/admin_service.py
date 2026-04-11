@@ -70,10 +70,6 @@ class AdminService:
         """Выплаты доступны ТОЛЬКО Владельцу."""
         return await self.is_owner(telegram_id)
 
-    async def can_use_sim_groups(self, telegram_id: int) -> bool:
-        """Доступ к /sim доступен любому админу/владельцу."""
-        return await self.is_admin(telegram_id)
-
     async def can_edit_categories(self, telegram_id: int) -> bool:
         """Редактирование категорий доступно ТОЛЬКО Владельцу."""
         return await self.is_owner(telegram_id)

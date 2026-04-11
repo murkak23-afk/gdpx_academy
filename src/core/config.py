@@ -85,6 +85,31 @@ class Settings(BaseSettings):
         description="Глобальная приостановка работы всех модераторов.",
     )
 
+    auto_fix_enabled: bool = Field(default=True, alias="AUTO_FIX_ENABLED")
+    auto_fix_chats: dict[int, dict[int, str]] = Field(default_factory=dict, alias="AUTO_FIX_CHATS")
+    auto_fix_role: str = Field(default="simbuyer", alias="AUTO_FIX_ROLE")
+
+    @field_validator("auto_fix_chats", mode="before")
+    @classmethod
+    def parse_auto_fix_chats(cls, v: Any) -> dict[int, dict[int, str]]:
+        if isinstance(v, str):
+            v = v.strip()
+            if not v:
+                return {}
+            try:
+                import json
+                data = json.loads(v)
+                # Преобразуем строковые ключи в int
+                return {
+                    int(chat_id): {int(topic_id): action for topic_id, action in topics.items()}
+                    for chat_id, topics in data.items()
+                }
+            except Exception as e:
+                import sys
+                sys.stderr.write(f"Failed to parse AUTO_FIX_CHATS: {e}\n")
+                return {}
+        return v or {}
+
 
     brand_channel_url: str | None = Field(
         default=None,
@@ -108,7 +133,7 @@ class Settings(BaseSettings):
     support_contact_helper_2: str | None = Field(default=None, alias="SUPPORT_CONTACT_HELPER_2")
     chats: str | None = Field(default=None, alias="CHATS")
 
-    @field_validator("maintenance_mode", "health_ready_include_cryptobot", "moderation_suspended", mode="before")
+    @field_validator("maintenance_mode", "health_ready_include_cryptobot", "moderation_suspended", "auto_fix_enabled", mode="before")
     @classmethod
     def _normalize_bool(cls, value: object) -> bool:
         if isinstance(value, bool):
@@ -123,23 +148,32 @@ class Settings(BaseSettings):
             return "true" in val
         return bool(value)
 
-    @field_validator("admin_telegram_ids", "owner_telegram_ids", mode="before")
+    @field_validator(
+        "admin_telegram_ids", 
+        "owner_telegram_ids", 
+        mode="before"
+    )
     @classmethod
-    def _normalize_admin_ids(cls, value: object) -> list[int]:
+    def _normalize_ids_or_list(cls, value: object) -> list[Any]:
         if value is None or value == "":
             return []
         if isinstance(value, (int, float)):
             return [int(value)]
         if isinstance(value, list):
-            return [int(v) for v in value if str(v).strip()]
+            return value
         if isinstance(value, str):
             v = value.strip()
-            # Убираем квадратные скобки, если они есть
             if v.startswith("[") and v.endswith("]"):
                 v = v[1:-1]
-            # Убираем все пробелы и разделяем по запятой
-            items = [s.strip() for s in v.replace(" ", "").split(",") if s.strip()]
-            return [int(i) for i in items]
+            items = [s.strip().strip("'").strip('"') for s in v.split(",") if s.strip()]
+            
+            processed = []
+            for item in items:
+                try:
+                    processed.append(int(item))
+                except ValueError:
+                    processed.append(item)
+            return processed
         return []
 
     @field_validator("redis_url", mode="before")

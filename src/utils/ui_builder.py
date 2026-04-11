@@ -25,6 +25,7 @@ from src.keyboards.constants import (
     HEADER_PROFILE,
     HEADER_QUEUE,
     HEADER_STATS,
+    HEADER_LEADERBOARD,
     PREFIX_ITEM,
     PREFIX_LAST,
     STATUS_EMOJI,
@@ -57,12 +58,21 @@ class GDPXRenderer:
     def _get_agent_wisdom(self) -> str:
         """Возвращает случайную цитату или совет для агента."""
         wisdom = [
-            "Качество — это единственная валюта, которая не обесценивается.",
-            "Тишина в эфире — признак профессионализма.",
-            "Система видит всё. Будь безупречен.",
-            "Твой позывной — твоя честь. Береги её.",
+            "Академия GDPX: Высший пилотаж в мире цифровых активов.",
+            "Академия GDPX: Искусство быть первым в невидимом поле.",
+            "Академия GDPX: Твой результат - лучшая рекомендация.",
+            "Академия GDPX: Алгоритм успеха прописан в твоих действиях.",
             "Академия GDPX: Знания конвертируются в капитал.",
-            "Чистый актив — залог долгого сотрудничества.",
+            "Академия GDPX: Качественная симка - залог долгого сотрудничества.",
+            "Академия GDPX: Твой результат - лучшая рекомендация."
+            "Академия GDPX: Точность в расчетах, твердость в решениях."
+            "Академия GDPX: Гроссмейстеры в мире eSIM."
+            "Академия GDPX: Когда технология переходит в искусство."
+            "Академия GDPX: Ничего личного. Только безупречный ворк."
+            "Академия GDPX: Твой интеллект - твой печатный станок."
+            "Академия GDPX: Прокладывай путь там, где другие ищут выход."
+            "Академия GDPX: Мастерство в тени, профит на свету."
+
         ]
         return f"<i>💡 {random.choice(wisdom)}</i>"
 
@@ -108,7 +118,7 @@ class GDPXRenderer:
             f"💰 <b>ТЕКУЩИЙ БАЛАНС:</b> <code>{balance:.2f}</code> USDT",
             f"📈 <b>ВСЕГО ВЫПЛАЧЕНО:</b> <code>{total_paid:.2f}</code> USDT",
             "",
-            f"🛡 <b>РАНГ:</b> {rank_emoji} <code>{rank_name.upper()}</code>",
+            f"🥋 <b>РАНГ:</b> {rank_emoji} <code>{rank_name.upper()}</code>",
             f"📊 <b>ПРОГРЕСС:</b> [{progress_bar}]",
             f"🎁 <b>БОНУС:</b> <i>{rank_desc}</i>",
             DIVIDER_LIGHT,
@@ -130,71 +140,41 @@ class GDPXRenderer:
         lines.append("<i>Выберите раздел управления ниже ↴</i>")
         return "\n".join(lines)
 
-    def render_pin_pad(self, current_input: str, title: str = "SECURITY // PIN ACCESS") -> str:
-        """Отрисовка экрана ввода PIN."""
-        masked = "*" * len(current_input)
-        return "\n".join(
-            [
-                self._render_heartbeat(),
-                f"🛡 <b>{title}</b>",
-                DIVIDER,
-                "Для подтверждения доступа введите ваш персональный PIN-код.",
-                "",
-                f"ВВОД: <code>{masked if masked else '____'}</code>",
-                DIVIDER,
-                "<i>Забыли PIN? Свяжитесь с Архитектором.</i>",
-            ]
-        )
-
-    def render_notification_settings(self, current_pref: str) -> str:
-        """Отрисовка меню настроек уведомлений."""
-        pref_labels = {
-            "full": "ПОЛНЫЙ (о каждой проверке) ✅",
-            "summary": "ИТОГОВЫЙ (раз в сутки) 📊",
-            "none": "ВЫКЛЮЧЕНЫ ▫️",
-        }
-        return "\n".join(
-            [
-                self._render_heartbeat(),
-                "🔔 <b>GDPX // NOTIFICATION CENTER</b>",
-                DIVIDER,
-                f"ТЕКУЩИЙ РЕЖИМ: <b>{pref_labels.get(current_pref, 'Неизвестно')}</b>",
-                DIVIDER_LIGHT,
-                "Выберите желаемый формат оповещений о проверке ваших активов.",
-                DIVIDER,
-                "<i>Настройки применяются мгновенно.</i>",
-            ]
-        )
-
-    def render_seller_stats(self, period_label: str, stats: dict, rank_pos: tuple[int, int]) -> str:
-        """Отрисовка детальной статистики за период."""
-        pos, total = rank_pos
-        quality = stats.get("quality", 100.0)
-
-        return "\n".join(
-            [
-                self._render_heartbeat(),
-                f"📈 <b>STATISTICS // [{period_label.upper()}]</b>",
-                DIVIDER,
-                f"🏆 <b>МЕСТО В РЕЙТИНГЕ:</b> <code>{pos}</code> из <code>{total}</code>",
-                f"✨ <b>КАЧЕСТВО ТОВАРА:</b> <code>{quality:.1f}%</code>",
-                DIVIDER_LIGHT,
-                f"✅ <b>ЗАЧТЕНО:</b> <code>{stats.get('accepted', 0)}</code> шт.",
-                f"❌ <b>БРАК (ОТКЛОНЕНО):</b> <code>{stats.get('rejected', 0)}</code> шт.",
-                f"📦 <b>НЕ СКАН / ПОВТОР:</b> <code>{stats.get('not_scan', 0)}</code> шт.",
-                f"🚫 <b>БЛОКИРОВКА:</b> <code>{stats.get('blocked', 0)}</code> шт.",
-                DIVIDER_LIGHT,
-                f"💰 <b>ВЫРУЧКА ЗА ПЕРИОД:</b> <code>{float(stats.get('earned', 0)):.2f}</code> USDT",
-                DIVIDER,
-                self._get_agent_wisdom(),
-            ]
-        )
+    def render_seller_stats(self, period_label: str, stats: Mapping[str, Any], rank_pos: tuple[int, int]) -> str:
+        """Отрисовка детальной статистики селлера."""
+        
+        accepted = int(stats.get("accepted", 0))
+        rejected = int(stats.get("rejected", 0))
+        blocked = int(stats.get("blocked", 0))
+        not_scan = int(stats.get("not_scan", 0))
+        earned = float(stats.get("earned", 0))
+        quality = float(stats.get("quality", 100.0))
+        
+        current_rank, total_ranks = rank_pos
+        
+        lines = [
+            self._render_heartbeat(),
+            HEADER_STATS,
+            DIVIDER,
+            f"📊 <b>СТАТИСТИКА: {period_label.upper()}</b>",
+            DIVIDER_LIGHT,
+            f"✅ <b>ПРИНЯТО:</b> <code>{accepted}</code> шт.",
+            f"❌ <b>ОТКЛОНЕНО:</b> <code>{rejected}</code> шт.",
+            f"🚫 <b>ЗАБЛОКИРОВАНО:</b> <code>{blocked}</code> шт.",
+            f"⚠️ <b>НЕ СКАН:</b> <code>{not_scan}</code> шт.",
+            DIVIDER_LIGHT,
+            f"💰 <b>ЗАРАБОТАНО:</b> <code>{earned:.2f}</code> USDT",
+            f"✨ <b>КАЧЕСТВО:</b> <code>{quality:.1f}%</code>",
+            f"🏆 <b>РЕЙТИНГ:</b> <code>{current_rank}</code> из <code>{total_ranks}</code>",
+            DIVIDER,
+            "<i>Выберите период для фильтрации ↴</i>"
+        ]
+        return "\n".join(lines)
 
     def render_seller_settings(self, user: Any) -> str:
         """Отрисовка меню настроек."""
         alias = user.nickname or user.pseudonym or "не установлен"
         incognito = "ВКЛЮЧЕН 🎭" if user.is_incognito else "ВЫКЛЮЧЕН ▫️"
-        has_pin = "УСТАНОВЛЕН ✅" if user.pin_code else "НЕ УСТАНОВЛЕН ❌"
 
         return "\n".join(
             [
@@ -203,10 +183,8 @@ class GDPXRenderer:
                 DIVIDER,
                 f"👤 <b>ПСЕВДОНИМ:</b> <code>{escape(alias)}</code>",
                 f"🎭 <b>РЕЖИМ INCOGNITO:</b> <code>{incognito}</code>",
-                f"🛡 <b>ЗАЩИТА PIN-КОДОМ:</b> <code>{has_pin}</code>",
                 DIVIDER_LIGHT,
                 "<b>ДОСТУПНЫЕ ОПЦИИ:</b>",
-                " ├ Безопасность и PIN-код",
                 " ├ Смена публичного имени",
                 " ├ Шаблоны загрузки активов",
                 " └ Экспорт данных в Excel",
@@ -215,13 +193,36 @@ class GDPXRenderer:
             ]
         )
 
+    def render_personal_data(self, user: Any, stats: Mapping[str, Any]) -> str:
+        """Отрисовка экрана личных данных пользователя."""
+        created_at = user.created_at.strftime("%d.%m.%Y")
+        username = user.username or "не привязан"
+        
+        return "\n".join([
+            self._render_heartbeat(),
+            "👤 <b>GDPX // PERSONAL DATA</b>",
+            DIVIDER,
+            f"🆔 <b>SYSTEM ID:</b> <code>{user.id}</code>",
+            f"📡 <b>TELEGRAM ID:</b> <code>{user.telegram_id}</code>",
+            f"🔗 <b>USERNAME:</b> @{escape(username)}",
+            f"📅 <b>РЕГИСТРАЦИЯ:</b> <code>{created_at}</code>",
+            DIVIDER_LIGHT,
+            "📊 <b>ОБЩАЯ СТАТИСТИКА:</b>",
+            f" ├ Всего загружено: <code>{int(stats.get('accepted', 0) + stats.get('rejected', 0) + stats.get('pending', 0))}</code>",
+            f" ├ Зачтено: <code>{int(stats.get('accepted', 0))}</code>",
+            f" └ Отклонено: <code>{int(stats.get('rejected', 0))}</code>",
+            DIVIDER_LIGHT,
+            f"💰 <b>ТЕКУЩИЙ БАЛАНС:</b> <code>{float(user.pending_balance or 0):.2f}</code> USDT",
+            DIVIDER,
+            "<i>Эти данные используются для внутренней идентификации.</i>"
+        ])
+
     def render_dashboard(self, stats: Mapping[str, Any]) -> str:
         # (Updated to use new constants)
         actor = str(stats.get("username") or "resident")
         greeting = get_time_greeting()
         return "\n".join(
             [
-                self._render_heartbeat(),
                 HEADER_MAIN,
                 DIVIDER,
                 f"👋 <b>Приветствуем, {escape(actor)}</b>",
@@ -229,13 +230,14 @@ class GDPXRenderer:
                 "",
                 "❂ <b>ЭКОСИСТЕМА GDPX</b>",
                 "╰ Мы учим - вы производите - мы забираем.",
-                "<i>Стань системным партнером и зарабатывай на eSIM активах!</i>",
+                "<i>Интегрируйся в систему - монетизируй eSIM технологии.</i>",
                 "",
                 "📊 <b>ТЕКУЩИЕ ПОКАЗАТЕЛИ:</b>",
                 f" ├ ПРИНЯТО: <code>{int(stats.get('approved_count', 0))}</code>",
                 f" ├ В ОБРАБОТКЕ: <code>{int(stats.get('pending_count', 0))}</code>",
                 f" └ ВЫПЛАЧЕНО: {format_currency(float(stats.get('total_payout_amount', 0)))}",
                 DIVIDER,
+                "",
                 self._get_agent_wisdom(),
                 "",
                 "<i>Выберите раздел системы:</i>",
@@ -248,20 +250,20 @@ class GDPXRenderer:
         if approved_count <= 50:
             return "Новичок", "🌱", "Только начинаешь путь", 51
         if approved_count <= 300:
-            return "Поставщик", "📦", "+5% к ставке", 301
+            return "Поставщик", "📦", "", 301
         if approved_count <= 1000:
-            return "Вендор", "🏷️", "+10% к ставке + приоритет", 1001
+            return "Вендор", "🏷️", "", 1001
         if approved_count <= 3000:
-            return "Мастер", "🌸", "+15% к ставке + менеджер", 3001
+            return "Мастер", "🌸", "", 3001
         if approved_count <= 8000:
-            return "Элита", "🏆", "+20% к ставке + авто-выплаты", 8001
-        return "Легенда", "🌟", "+25% к ставке + эксклюзив", None
+            return "Элита", "🏆", "", 8001
+        return "Легенда", "🌟", "", None
 
     @staticmethod
     def _rank_progress_bar(approved_count: int, next_target: int | None) -> str:
         total_cells = 12
         if next_target is None:
-            return "▰" * total_cells
+            return "■" * total_cells
 
         # Для корректного отображения прогресса внутри текущего ранга
         ranges = [0, 51, 301, 1001, 3001, 8001]
@@ -277,16 +279,18 @@ class GDPXRenderer:
 
         ratio = min(max(current_progress / (needed or 1), 0), 1.0)
         filled = int(round(ratio * total_cells))
-        return ("▰" * filled) + ("▱" * (total_cells - filled))
+        return ("■" * filled) + ("□" * (total_cells - filled))
 
-    def render_queue_lobby(self, *, pending_count: int) -> str:
+    def render_queue_lobby(self, *, pending_count: int, in_work_count: int) -> str:
         return "\n".join(
             [
                 self._render_heartbeat(),
                 HEADER_QUEUE,
                 DIVIDER,
-                f"🔲 <b>PENDING SYNC:</b> <code>{int(pending_count)}</code>",
+                f"🔲 <b>PENDING (ОЧЕРЕДЬ):</b> <code>{int(pending_count)}</code>",
+                f"📟 <b>SCANNING (НА СКАНЕ):</b> <code>{int(in_work_count)}</code>",
                 DIVIDER,
+                "<i>Модератор берет активы, которые УЖЕ выданы на скан.</i>"
             ]
         )
 
@@ -298,7 +302,7 @@ class GDPXRenderer:
         total_debt = float(stats.get("total_debt", 0))
         paid_today = float(stats.get("paid_today", 0))
         active_mods = int(stats.get("active_mods", 0))
-        total_pending = int(stats.get("total_pending", 0))
+        warehouse = int(stats.get("warehouse", 0))
         volume_24h = float(stats.get("volume_24h", 0))
         top_op = str(stats.get("top_operator", "N/A"))
 
@@ -316,7 +320,7 @@ class GDPXRenderer:
                 f" └ К выплате: <code>{total_debt:.2f}</code> USDT",
                 DIVIDER_LIGHT,
                 "🚀 <b>ОПЕРАЦИОННЫЙ СТАТУС:</b>",
-                f" ├ В очереди: <code>{total_pending}</code> активов",
+                f" ├ На складе: <code>{warehouse}</code> активов",
                 f" ├ Модераторы: <code>{active_mods}</code> онлайн",
                 f" └ Топ-сегмент: <code>{top_op}</code>",
                 DIVIDER_LIGHT,
@@ -362,7 +366,7 @@ class GDPXRenderer:
                 DIVIDER,
                 "🛡️ <b>ФИНАНСОВЫЙ АУДИТ СИСТЕМЫ</b>",
                 DIVIDER_LIGHT,
-                f"🏦 <b>ОБЩИЙ ДОЛГ (БАЛАНСЫ):</b> <code>{float(stats.get('total_debt', 0)):.2f}</code> USDT",
+                f"🏦 <b>ОБЩЕЕ К ВЫПЛАТЕ:</b> <code>{float(stats.get('total_debt', 0)):.2f}</code> USDT",
                 f"💎 <b>ВСЕГО ВЫПЛАЧЕНО:</b> <code>{float(stats.get('total_paid_all_time', 0)):.2f}</code> USDT",
                 DIVIDER_LIGHT,
                 f"📅 <b>ВЫПЛАТЫ (24H):</b> <code>{float(stats.get('paid_today', 0)):.2f}</code> USDT",
@@ -439,24 +443,49 @@ class GDPXRenderer:
         lines.append(DIVIDER)
         return "\n".join(lines)
 
-    def render_sellers_leaderboard_owner(self, sellers: list[dict]) -> str:
-        """Отрисовка рейтинга селлеров для владельца."""
+    def render_premium_leaderboard(self, top_sellers: list[dict], period_label: str) -> str:
+        """Премиальная отрисовка доски лидеров в академическом стиле."""
         lines = [
-            self._render_heartbeat(),
-            HEADER_STATS,
-            DIVIDER,
-            "💰 <b>РЕЙТИНГ СЕЛЛЕРОВ (VOLUME)</b>",
-            DIVIDER_LIGHT,
+            "🏆 <b>GDPX // ДОСКА ЛИДЕРОВ</b>",
+            f"\n📅 <b>Период:</b> {period_label}",
+            "\n────────────────────────────"
         ]
-        if not sellers:
-            lines.append("<i>Продавцов в системе пока нет.</i>")
-        else:
-            for i, s in enumerate(sellers[:10], 1):
-                lines.append(
-                    f"{i}. {s['username']}: <code>{s['total']}</code> шт. | <code>{s['earned']:.2f}</code> USDT"
-                )
 
-        lines.append(DIVIDER)
+        if not top_sellers:
+            lines.append("\n<i>В данном цикле трафик пока не зафиксирован.</i>")
+        else:
+            for i, s in enumerate(top_sellers, 1):
+                medal = "🥇" if i == 1 else "🥈" if i == 2 else "🥉" if i == 3 else "  "
+                rank = f"{i:>2}."
+                
+                # Имя: добавляем @ если это username и нет других префиксов
+                name = s['name']
+                if not name.startswith(('@', 'ID:')):
+                    name = f"@{name}"
+                
+                if len(name) > 14:
+                    name = name[:12] + ".."
+                name = name.ljust(14)
+                
+                earned = f"{int(s['earned']):,}".replace(",", " ")
+                earned_str = f"{earned:>6} USDT"
+                
+                count = s['count']
+                # Склонение
+                if 11 <= count % 100 <= 14:
+                    suffix = "симок"
+                else:
+                    rem = count % 10
+                    if rem == 1: suffix = "симка"
+                    elif 2 <= rem <= 4: suffix = "симки"
+                    else: suffix = "симок"
+                
+                line = f"<code>{medal} {rank} {name} {earned_str}  • {count:>2} {suffix}</code>"
+                lines.append(line)
+
+        lines.append("────────────────────────────")
+        lines.append(f"🕒 <b>Обновлено:</b> {datetime.now().strftime('%H:%M')} МСК")
+        
         return "\n".join(lines)
 
     def render_cat_constructor_step(self, step: int, total_steps: int, title: str, description: str) -> str:

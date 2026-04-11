@@ -29,10 +29,10 @@ from aiogram.types import (
 )
 
 from src.keyboards.callbacks import (
-    CB_SELLER_MENU_PROFILE,
     CB_SESSION_TERMINATE,
     CB_SESSION_TERMINATE_CONFIRM,
 )
+from src.keyboards.factory import SellerMenuCD
 from src.lexicon import Lex
 
 router = Router(name="seller-session-router")
@@ -54,7 +54,7 @@ def _terminate_confirm_keyboard() -> InlineKeyboardMarkup:
             [
                 InlineKeyboardButton(
                     text=Lex.BTN_CANCEL,
-                    callback_data=CB_SELLER_MENU_PROFILE,
+                    callback_data=SellerMenuCD(action="profile").pack(),
                 ),
             ],
         ]

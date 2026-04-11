@@ -122,8 +122,11 @@ async def handle_take_batch(callback: CallbackQuery, callback_data: AdminSellerQ
 async def mod_approve(callback: CallbackQuery, callback_data: AdminGradeCD, session: AsyncSession, state: FSMContext, bot: Bot):
     """Мгновенный ЗАЧЕТ актива + плашка отката."""
     try:
+        user_svc = UserService(session=session)
+        admin = await user_svc.get_by_telegram_id(callback.from_user.id)
+
         mod_svc = ModerationService(session=session)
-        success = await mod_svc.finalize_submission(callback_data.item_id, SubmissionStatus.ACCEPTED, bot=bot)
+        success = await mod_svc.finalize_submission(callback_data.item_id, SubmissionStatus.ACCEPTED, bot=bot, admin_id=admin.id)
         if not success:
             await callback.answer("⚠️ Ошибка: актив уже обработан или не найден", show_alert=True)
             return
@@ -155,11 +158,11 @@ async def mod_defect_menu(callback: CallbackQuery, callback_data: AdminGradeCD):
 async def mod_finalize_defect_cd(callback: CallbackQuery, callback_data: AdminGradeCD, session: AsyncSession, state: FSMContext, bot: Bot):
     """Завершение с выбранной причиной через CallbackData (БЕЗОПАСНО)."""
     try:
-        # Формат val: "TYPE:REASON"
-        if ":" not in callback_data.val:
+        # Формат val: "TYPE|REASON"
+        if "|" not in callback_data.val:
             return await callback.answer("❌ Ошибка формата данных", show_alert=True)
             
-        type_key, reason = callback_data.val.split(":", 1)
+        type_key, reason = callback_data.val.split("|", 1)
         item_id = callback_data.item_id
         
         # Если выбрано 'CUSTOM', переходим к вводу
@@ -183,8 +186,11 @@ async def mod_finalize_defect_cd(callback: CallbackQuery, callback_data: AdminGr
         # Восстанавливаем возможные двоеточия (если мы их заменяли на | при упаковке)
         real_reason = reason.replace("|", ":")
         
+        user_svc = UserService(session=session)
+        admin = await user_svc.get_by_telegram_id(callback.from_user.id)
+
         mod_svc = ModerationService(session=session)
-        success = await mod_svc.finalize_submission(item_id, status_map[type_key], reason=real_reason, bot=bot)
+        success = await mod_svc.finalize_submission(item_id, status_map[type_key], reason=real_reason, bot=bot, admin_id=admin.id)
         
         if not success:
             return await callback.answer("⚠️ Ошибка: актив уже обработан", show_alert=True)
@@ -218,8 +224,11 @@ async def process_custom_comment(message: Message, state: FSMContext, session: A
         "block": SubmissionStatus.BLOCKED
     }
 
+    user_svc = UserService(session=session)
+    admin = await user_svc.get_by_telegram_id(message.from_user.id)
+
     mod_svc = ModerationService(session=session)
-    await mod_svc.finalize_submission(item_id, status_map[mode], reason="Другое", comment=message.text, bot=bot)
+    await mod_svc.finalize_submission(item_id, status_map[mode], reason="Другое", comment=message.text, bot=bot, admin_id=admin.id)
     await session.commit()
 
     await message.answer(f"✅ Актив #{item_id} отклонен с вашим комментарием.")

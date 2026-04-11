@@ -3,7 +3,8 @@ from typing import Optional
 from aiogram.filters.callback_data import CallbackData
 
 class AdminQueueCD(CallbackData, prefix="mod_q"):
-    action: str  # start, list, stats
+    action: str  # start, list, stats, verification
+    page: int = 0
 
 class AdminGradeCD(CallbackData, prefix="mod_g"):
     item_id: int
@@ -16,7 +17,10 @@ class AdminBatchCD(CallbackData, prefix="mod_b"):
 
 class AdminSellerQueueCD(CallbackData, prefix="mod_sel"):
     user_id: int = 0
-    action: str  # list, view, take_all, take_5, take_10 и т.д.
+    action: str  # list, view, toggle, apply, return_warehouse
+    status: str = "pending" # pending, in_work, verification
+    page: int = 0
+    val: str = "" # ID айтема для toggle
 
 class AdminSearchCD(CallbackData, prefix="mod_src"):
     action: str                    # filter, take_all

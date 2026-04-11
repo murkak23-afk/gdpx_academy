@@ -3,19 +3,19 @@ from __future__ import annotations
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, case, union_all, or_, and_, desc
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.stats_epoch import get_stats_epoch
 from src.database.models.category import Category
-from src.database.models.enums import SubmissionStatus
+from src.database.models.enums import SubmissionStatus, UserRole
 from src.database.models.publication import Payout
 from src.database.models.submission import Submission, ReviewAction
 from src.database.models.user import User
 
 
 class AdminStatsService:
-    """Агрегаты для раздела «Статистика» админ-панели."""
+    """Агрегаты для раздела «Статистика» админ-панели. Оптимизировано для высокой нагрузки."""
 
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
@@ -30,7 +30,6 @@ class AdminStatsService:
     @staticmethod
     def period_bounds(period: str) -> tuple[datetime, datetime]:
         """UTC: day = с начала суток; week = 7 дней; month = 30 дней."""
-
         now = datetime.now(timezone.utc)
         end = now
         if period == "day":
@@ -46,7 +45,6 @@ class AdminStatsService:
     @staticmethod
     def month_bounds_utc(year: int, month: int) -> tuple[datetime, datetime]:
         """UTC-границы календарного месяца [start, end)."""
-
         start = datetime(year=year, month=month, day=1, tzinfo=timezone.utc)
         if month == 12:
             end = datetime(year=year + 1, month=1, day=1, tzinfo=timezone.utc)
@@ -55,80 +53,76 @@ class AdminStatsService:
         return start, end
 
     async def get_owner_summary_stats(self) -> dict:
-        """Сводная статистика для Командного центра владельца (Максимально оптимизировано)."""
-        from sqlalchemy import case
+        """Сводная статистика для Командного центра владельца."""
         today_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
 
-        # 1. Общий долг (сумма балансов селлеров)
+        # 1. Общий долг
         debt_stmt = select(func.sum(User.pending_balance))
         total_debt = await self._session.scalar(debt_stmt) or Decimal("0.00")
 
-        # 2. Агрегированный запрос по Submission и Payout
-        payout_stats = await self._session.execute(
-            select(func.sum(Payout.amount)).where(Payout.status == "paid", Payout.created_at >= today_start)
-        )
-        paid_today = payout_stats.scalar() or Decimal("0.00")
-
+        # 2. Агрегированные показатели за 24ч
         sub_stats = await self._session.execute(
             select(
-                func.count(func.distinct(Submission.admin_id)).filter(Submission.reviewed_at >= today_start),
-                func.sum(case((Submission.status == SubmissionStatus.ACCEPTED, Submission.accepted_amount), else_=0)).filter(Submission.reviewed_at >= today_start),
-                func.count(Submission.id).filter(Submission.status == SubmissionStatus.PENDING)
+                func.count(func.distinct(case(
+                    ((Submission.reviewed_at >= today_start) & (Submission.is_archived == False), Submission.admin_id),
+                    else_=None
+                ))),
+                func.sum(case(
+                    ((Submission.status == SubmissionStatus.ACCEPTED) & (Submission.reviewed_at >= today_start) & (Submission.is_archived == False), Submission.accepted_amount),
+                    else_=0
+                )),
+                func.count(case(
+                    ((Submission.status == SubmissionStatus.PENDING) & (Submission.is_archived == False), Submission.id),
+                    else_=None
+                ))
             )
         )
-        active_mods, volume_24h, total_pending = sub_stats.one()
+        active_mods, volume_24h, warehouse = sub_stats.one()
 
-        # 3. Топ оператор
-        top_op_stmt = (
+        # 3. Выплаты сегодня
+        paid_today = await self._session.scalar(
+            select(func.sum(Payout.amount)).where(Payout.status == "paid", Payout.created_at >= today_start)
+        ) or Decimal("0.00")
+
+        # 4. Топ оператор
+        top_operator = await self._session.scalar(
             select(Category.operator)
             .join(Submission, Submission.category_id == Category.id)
-            .where(Submission.reviewed_at >= today_start)
+            .where(Submission.reviewed_at >= today_start, Submission.is_archived == False)
             .group_by(Category.operator)
             .order_by(func.count(Submission.id).desc())
             .limit(1)
-        )
-        top_operator = await self._session.scalar(top_op_stmt) or "N/A"
+        ) or "N/A"
 
         return {
             "total_debt": total_debt,
             "paid_today": paid_today,
             "active_mods": active_mods or 0,
-            "total_pending": total_pending or 0,
+            "warehouse": warehouse or 0,
             "volume_24h": volume_24h or Decimal("0.00"),
             "top_operator": top_operator,
         }
 
     async def get_detailed_finance_audit(self) -> dict:
         """Расширенный финансовый аудит для владельца."""
-        from sqlalchemy import case
         now = datetime.now(timezone.utc)
-        d1 = now - timedelta(days=1)
-        d7 = now - timedelta(days=7)
-        d30 = now - timedelta(days=30)
+        d1, d7, d30 = now - timedelta(days=1), now - timedelta(days=7), now - timedelta(days=30)
 
-        # Долг и Всего выплачено
-        totals = await self._session.execute(
-            select(
-                func.sum(User.pending_balance).label("debt"),
-                func.sum(User.total_paid).label("paid_all")
-            )
-        )
+        totals = await self._session.execute(select(func.sum(User.pending_balance), func.sum(User.total_paid)))
         debt, paid_all = totals.one()
 
-        # Выплаты за периоды
         payouts = await self._session.execute(
             select(
-                func.sum(case((Payout.created_at >= d1, Payout.amount), else_=0)).label("p1"),
-                func.sum(case((Payout.created_at >= d7, Payout.amount), else_=0)).label("p7"),
-                func.sum(case((Payout.created_at >= d30, Payout.amount), else_=0)).label("p30")
+                func.sum(case((Payout.created_at >= d1, Payout.amount), else_=0)),
+                func.sum(case((Payout.created_at >= d7, Payout.amount), else_=0)),
+                func.sum(case((Payout.created_at >= d30, Payout.amount), else_=0))
             ).where(Payout.status == "paid")
         )
         p1, p7, p30 = payouts.one()
 
-        # Оборот за 30 дней
         vol30 = await self._session.scalar(
             select(func.sum(Submission.accepted_amount))
-            .where(Submission.status == SubmissionStatus.ACCEPTED, Submission.reviewed_at >= d30)
+            .where(Submission.status == SubmissionStatus.ACCEPTED, Submission.reviewed_at >= d30, Submission.is_archived == False)
         )
 
         return {
@@ -141,407 +135,126 @@ class AdminStatsService:
         }
 
     async def get_platform_stats(self, start: datetime, end: datetime) -> dict:
-        """Общая статистика по платформе."""
-        effective = self._effective_start(start)
+        """Общая статистика по платформе за период."""
+        eff = self._effective_start(start)
         
-        # Кол-во симок
-        total_stmt = select(func.count(Submission.id)).where(
-            Submission.created_at >= effective,
-            Submission.created_at <= end
-        )
-        total_count = await self._session.scalar(total_stmt) or 0
+        stmt = select(
+            func.count(Submission.id).label("total"),
+            func.count(case(((Submission.status == SubmissionStatus.ACCEPTED) & (Submission.reviewed_at.is_not(None)), Submission.id))).label("acc"),
+            func.count(case(((Submission.status.in_([SubmissionStatus.REJECTED, SubmissionStatus.BLOCKED, SubmissionStatus.NOT_A_SCAN])) & (Submission.reviewed_at.is_not(None)), Submission.id))).label("rej"),
+            func.avg(case(((Submission.status == SubmissionStatus.ACCEPTED), Submission.accepted_amount))).label("avg_rate")
+        ).where(Submission.created_at >= eff, Submission.created_at <= end, Submission.is_archived == False)
         
-        # Кол-во принятых
-        accepted_stmt = select(func.count(Submission.id)).where(
-            Submission.status == SubmissionStatus.ACCEPTED,
-            Submission.reviewed_at >= effective,
-            Submission.reviewed_at <= end
-        )
-        accepted_count = await self._session.scalar(accepted_stmt) or 0
+        row = (await self._session.execute(stmt)).one()
+        total, accepted, rejected, avg_rate = row
         
-        # Процент брака
-        rejected_statuses = [SubmissionStatus.REJECTED, SubmissionStatus.BLOCKED, SubmissionStatus.NOT_A_SCAN]
-        rejected_stmt = select(func.count(Submission.id)).where(
-            Submission.status.in_(rejected_statuses),
-            Submission.reviewed_at >= effective,
-            Submission.reviewed_at <= end
-        )
-        rejected_count = await self._session.scalar(rejected_stmt) or 0
-        
-        reject_rate = (rejected_count / (accepted_count + rejected_count) * 100) if (accepted_count + rejected_count) > 0 else 0
-        
-        # Средняя ставка
-        avg_rate_stmt = select(func.avg(Submission.accepted_amount)).where(
-            Submission.status == SubmissionStatus.ACCEPTED,
-            Submission.reviewed_at >= effective,
-            Submission.reviewed_at <= end
-        )
-        avg_rate = await self._session.scalar(avg_rate_stmt) or Decimal("0.00")
+        rate = (rejected / (accepted + rejected) * 100) if (accepted + rejected) > 0 else 0
         
         return {
-            "total_count": total_count,
-            "accepted_count": accepted_count,
-            "rejected_count": rejected_count,
-            "reject_rate": reject_rate,
-            "avg_rate": Decimal(avg_rate).quantize(Decimal("0.01")),
+            "total_count": total or 0,
+            "accepted_count": accepted or 0,
+            "rejected_count": rejected or 0,
+            "reject_rate": rate,
+            "avg_rate": Decimal(avg_rate or 0).quantize(Decimal("0.01")),
         }
 
     async def get_moderators_performance(self, start: datetime, end: datetime) -> list[dict]:
-        """Статистика по модераторам."""
-        effective = self._effective_start(start)
-        
+        """Статистика по модераторам за период."""
+        eff = self._effective_start(start)
         stmt = (
-            select(
-                User.username,
-                User.telegram_id,
-                func.count(Submission.id).label("total"),
-                func.count(Submission.id).filter(Submission.status == SubmissionStatus.ACCEPTED).label("accepted")
-            )
+            select(User.username, User.telegram_id, func.count(Submission.id).label("total"), func.count(case(((Submission.status == SubmissionStatus.ACCEPTED), Submission.id))).label("acc"))
             .join(Submission, Submission.admin_id == User.id)
-            .where(
-                Submission.reviewed_at >= effective,
-                Submission.reviewed_at <= end
-            )
-            .group_by(User.id)
-            .order_by(func.count(Submission.id).desc())
+            .where(Submission.reviewed_at >= eff, Submission.reviewed_at <= end, Submission.is_archived == False)
+            .group_by(User.id).order_by(desc("total"))
         )
-        
         rows = (await self._session.execute(stmt)).all()
-        return [
-            {
-                "username": r.username or str(r.telegram_id),
-                "total": r.total,
-                "accepted": r.accepted,
-                "accept_rate": (r.accepted / r.total * 100) if r.total > 0 else 0
-            }
-            for r in rows
-        ]
-
-    async def get_top_sellers_extended(self, start: datetime, end: datetime, limit: int = 10) -> list[dict]:
-        """Расширенная статистика по селлерам (топ по объему и качеству)."""
-        effective = self._effective_start(start)
-        
-        stmt = (
-            select(
-                User.username,
-                User.telegram_id,
-                func.count(Submission.id).label("total"),
-                func.count(Submission.id).filter(Submission.status == SubmissionStatus.ACCEPTED).label("accepted"),
-                func.sum(Submission.accepted_amount).label("earned")
-            )
-            .join(Submission, Submission.user_id == User.id)
-            .where(
-                Submission.created_at >= effective,
-                Submission.created_at <= end
-            )
-            .group_by(User.id)
-            .order_by(func.count(Submission.id).desc())
-            .limit(limit)
-        )
-        
-        rows = (await self._session.execute(stmt)).all()
-        return [
-            {
-                "username": r.username or str(r.telegram_id),
-                "total": r.total,
-                "accepted": r.accepted,
-                "quality": (r.accepted / r.total * 100) if r.total > 0 else 0,
-                "earned": Decimal(r.earned or 0).quantize(Decimal("0.01"))
-            }
-            for r in rows
-        ]
+        return [{"username": r.username or str(r.telegram_id), "total": r.total, "accepted": r.acc, "accept_rate": (r.acc / r.total * 100) if r.total > 0 else 0} for r in rows]
 
     async def daily_sim_stats_for_month(self, year: int, month: int) -> list[dict[str, int | date]]:
-        """Дневная статистика за месяц по SIM: вход, зачёт и виды брака."""
-
+        """Дневная статистика за месяц: Оптимизировано за один запрос."""
         start, end = self.month_bounds_utc(year, month)
-        effective_start = self._effective_start(start)
-        days = (end.date() - start.date()).days
+        eff = self._effective_start(start)
+        
+        stmt = select(
+            func.date(func.coalesce(Submission.reviewed_at, Submission.created_at)).label("d"),
+            func.count(case(((Submission.created_at >= eff) & (Submission.created_at < end), Submission.id))).label("inc"),
+            func.count(case(((Submission.status == SubmissionStatus.ACCEPTED) & (Submission.reviewed_at >= eff) & (Submission.reviewed_at < end), Submission.id))).label("acc"),
+            func.count(case(((Submission.status == SubmissionStatus.REJECTED) & (Submission.reviewed_at >= eff) & (Submission.reviewed_at < end), Submission.id))).label("rej"),
+            func.count(case(((Submission.status == SubmissionStatus.BLOCKED) & (Submission.reviewed_at >= eff) & (Submission.reviewed_at < end), Submission.id))).label("blo"),
+            func.count(case(((Submission.status == SubmissionStatus.NOT_A_SCAN) & (Submission.reviewed_at >= eff) & (Submission.reviewed_at < end), Submission.id))).label("nos")
+        ).where(Submission.is_archived == False, or_(and_(Submission.created_at >= eff, Submission.created_at < end), and_(Submission.reviewed_at >= eff, Submission.reviewed_at < end))
+        ).group_by(func.date(func.coalesce(Submission.reviewed_at, Submission.created_at)))
 
-        result: dict[date, dict[str, int | date]] = {}
-        for offset in range(days):
-            d = start.date() + timedelta(days=offset)
-            result[d] = {
-                "date": d,
-                "incoming": 0,
-                "accepted": 0,
-                "rejected": 0,
-                "blocked": 0,
-                "not_a_scan": 0,
-            }
-
-        incoming_stmt = (
-            select(
-                func.date(Submission.created_at).label("d"),
-                func.count(Submission.id).label("cnt"),
-            )
-            .where(
-                Submission.created_at >= effective_start,
-                Submission.created_at < end,
-            )
-            .group_by(func.date(Submission.created_at))
-        )
-        for d, cnt in (await self._session.execute(incoming_stmt)).all():
-            if d in result:
-                result[d]["incoming"] = int(cnt or 0)
-
-        reviewed_statuses = [
-            (SubmissionStatus.ACCEPTED, "accepted"),
-            (SubmissionStatus.REJECTED, "rejected"),
-            (SubmissionStatus.BLOCKED, "blocked"),
-            (SubmissionStatus.NOT_A_SCAN, "not_a_scan"),
-        ]
-        for status, key in reviewed_statuses:
-            stmt = (
-                select(
-                    func.date(Submission.reviewed_at).label("d"),
-                    func.count(Submission.id).label("cnt"),
-                )
-                .where(
-                    Submission.reviewed_at.is_not(None),
-                    Submission.reviewed_at >= effective_start,
-                    Submission.reviewed_at < end,
-                    Submission.status == status,
-                )
-                .group_by(func.date(Submission.reviewed_at))
-            )
-            for d, cnt in (await self._session.execute(stmt)).all():
-                if d in result:
-                    result[d][key] = int(cnt or 0)
-
-        return [result[d] for d in sorted(result.keys())]
-
-    async def count_incoming_submissions(self, start: datetime, end: datetime) -> int:
-        effective = self._effective_start(start)
-        stmt = select(func.count(Submission.id)).where(
-            Submission.created_at >= effective,
-            Submission.created_at <= end,
-        )
-        return int((await self._session.execute(stmt)).scalar_one())
-
-    async def count_by_status_reviewed(
-        self,
-        status: SubmissionStatus,
-        start: datetime,
-        end: datetime,
-    ) -> int:
-        effective = self._effective_start(start)
-        stmt = select(func.count(Submission.id)).where(
-            Submission.status == status,
-            Submission.reviewed_at.is_not(None),
-            Submission.reviewed_at >= effective,
-            Submission.reviewed_at <= end,
-        )
-        return int((await self._session.execute(stmt)).scalar_one())
-
-    async def accepted_by_category(self, start: datetime, end: datetime) -> list[tuple[str, int, Decimal]]:
-        effective = self._effective_start(start)
-        stmt = (
-            select(
-                Category.title,
-                func.count(Submission.id),
-                func.coalesce(func.sum(Submission.accepted_amount), Decimal("0.00")),
-            )
-            .join(Submission, Submission.category_id == Category.id)
-            .where(
-                Submission.status == SubmissionStatus.ACCEPTED,
-                Submission.reviewed_at.is_not(None),
-                Submission.reviewed_at >= effective,
-                Submission.reviewed_at <= end,
-            )
-            .group_by(Category.id, Category.title)
-            .order_by(Category.title.asc())
-        )
         rows = (await self._session.execute(stmt)).all()
-        return [(str(t), int(c), Decimal(a)) for t, c, a in rows]
+        
+        days = (end.date() - start.date()).days
+        res: dict[date, dict] = { (start.date() + timedelta(days=i)): {"date": (start.date() + timedelta(days=i)), "incoming": 0, "accepted": 0, "rejected": 0, "blocked": 0, "not_a_scan": 0} for i in range(days) }
 
-    async def get_users_paginated(
-        self, 
-        page: int, 
-        page_size: int = 20, 
-        role: UserRole | None = None
-    ) -> tuple[list[User], int]:
-        """Получить список пользователей с пагинацией и фильтром по роли."""
+        for d, inc, acc, rej, blo, nos in rows:
+            if d in res:
+                res[d].update({"incoming": inc, "accepted": acc, "rejected": rej, "blocked": blo, "not_a_scan": nos})
+        return [res[d] for d in sorted(res.keys())]
+
+    async def get_users_paginated(self, page: int, page_size: int = 20, role: UserRole | None = None) -> tuple[list[User], int]:
         stmt = select(User)
-        if role:
-            stmt = stmt.where(User.role == role)
-        
-        # Считаем общее количество
-        count_stmt = select(func.count(User.id))
-        if role:
-            count_stmt = count_stmt.where(User.role == role)
-        total = await self._session.scalar(count_stmt) or 0
-        
-        # Получаем данные
-        stmt = stmt.order_by(User.created_at.desc()).offset(page * page_size).limit(page_size)
-        res = await self._session.execute(stmt)
-        return res.scalars().all(), total
+        if role: stmt = stmt.where(User.role == role)
+        total = await self._session.scalar(select(func.count(User.id)).where(User.role == role if role else True)) or 0
+        res = await self._session.execute(stmt.order_by(User.created_at.desc()).offset(page * page_size).limit(page_size))
+        return list(res.scalars().all()), total
 
     async def get_user_detailed_info(self, user_id: int) -> User | None:
-        """Получить полную информацию о пользователе по его внутреннему ID."""
         return await self._session.get(User, user_id)
 
     async def get_online_moderators(self, minutes: int = 30) -> list[dict]:
-        """Список модераторов, активных за последние N минут."""
         since = datetime.now(timezone.utc) - timedelta(minutes=minutes)
-        
-        # Получаем последних активных модераторов через ReviewAction
-        stmt = (
-            select(User.username, User.telegram_id, func.max(ReviewAction.created_at).label("last_act"))
-            .join(ReviewAction, ReviewAction.admin_id == User.id)
-            .where(ReviewAction.created_at >= since)
-            .group_by(User.id)
-            .order_by(func.max(ReviewAction.created_at).desc())
-        )
-        
+        stmt = select(User.username, User.telegram_id, func.max(ReviewAction.created_at)).join(ReviewAction, ReviewAction.admin_id == User.id).where(ReviewAction.created_at >= since).group_by(User.id)
         rows = (await self._session.execute(stmt)).all()
-        return [
-            {
-                "username": r.username or str(r.telegram_id),
-                "last_active": r.last_act
-            }
-            for r in rows
-        ]
+        return [{"username": r[0] or str(r[1]), "last_active": r[2]} for r in rows]
 
     async def get_recent_moderation_actions(self, limit: int = 10) -> list[dict]:
-        """Последние N действий модерации для лога в Командном центре."""
-        stmt = (
-            select(ReviewAction, User.username, Submission.phone_normalized, Submission.id)
-            .join(User, ReviewAction.admin_id == User.id)
-            .join(Submission, ReviewAction.submission_id == Submission.id)
-            .order_by(ReviewAction.created_at.desc())
-            .limit(limit)
-        )
-        
+        stmt = select(ReviewAction, User.username, Submission.phone_normalized, Submission.id).join(User, ReviewAction.admin_id == User.id).join(Submission, ReviewAction.submission_id == Submission.id).where(Submission.is_archived == False).order_by(desc(ReviewAction.created_at)).limit(limit)
         res = await self._session.execute(stmt)
-        out = []
-        for action, username, phone, sub_id in res.all():
-            out.append({
-                "admin": username or "Admin",
-                "phone": phone,
-                "sub_id": sub_id,
-                "to_status": action.to_status,
-                "time": action.created_at,
-                "reason": action.reason,
-                "comment": action.comment
-            })
-        return out
-
-    async def search_moderation_actions(self, query: str, limit: int = 20) -> list[dict]:
-        """Поиск действий модерации по номеру телефона или части номера."""
-        stmt = (
-            select(ReviewAction, User.username, Submission.phone_normalized, Submission.id)
-            .join(User, ReviewAction.admin_id == User.id)
-            .join(Submission, ReviewAction.submission_id == Submission.id)
-            .where(Submission.phone_normalized.contains(query))
-            .order_by(ReviewAction.created_at.desc())
-            .limit(limit)
-        )
-        
-        res = await self._session.execute(stmt)
-        out = []
-        for action, username, phone, sub_id in res.all():
-            out.append({
-                "admin": username or "Admin",
-                "phone": phone,
-                "sub_id": sub_id,
-                "to_status": action.to_status,
-                "time": action.created_at,
-                "reason": action.reason,
-                "comment": action.comment
-            })
-        return out
+        return [{"admin": r[1] or "Admin", "phone": r[2], "sub_id": r[3], "to_status": r[0].to_status, "time": r[0].created_at, "comment": r[0].comment} for r in res.all()]
 
     async def get_user_actions_history(self, user_id: int, limit: int = 20) -> list[dict]:
-        """История действий конкретного пользователя (модератора) или над его активами (селлера)."""
-        # Сначала ищем как модератора
-        stmt_mod = (
-            select(ReviewAction, User.username, Submission.phone_normalized, Submission.id)
-            .join(User, ReviewAction.admin_id == User.id)
-            .join(Submission, ReviewAction.submission_id == Submission.id)
-            .where(ReviewAction.admin_id == user_id)
-            .order_by(ReviewAction.created_at.desc())
-            .limit(limit)
-        )
-        
-        # Затем как селлера (действия над его симками)
-        stmt_seller = (
-            select(ReviewAction, User.username, Submission.phone_normalized, Submission.id)
-            .join(User, ReviewAction.admin_id == User.id)
-            .join(Submission, ReviewAction.submission_id == Submission.id)
-            .where(Submission.user_id == user_id)
-            .order_by(ReviewAction.created_at.desc())
-            .limit(limit)
-        )
-        
-        res_mod = await self._session.execute(stmt_mod)
-        res_sel = await self._session.execute(stmt_seller)
-        
-        out = []
-        for action, username, phone, sub_id in res_mod.all():
-            out.append({
-                "type": "MOD",
-                "admin": username or "Admin",
-                "phone": phone,
-                "sub_id": sub_id,
-                "to_status": action.to_status,
-                "time": action.created_at,
-                "reason": action.reason
-            })
-            
-        for action, username, phone, sub_id in res_sel.all():
-            out.append({
-                "type": "SELL",
-                "admin": username or "Admin",
-                "phone": phone,
-                "sub_id": sub_id,
-                "to_status": action.to_status,
-                "time": action.created_at,
-                "reason": action.reason
-            })
-            
-        return sorted(out, key=lambda x: x['time'], reverse=True)[:limit]
+        """История действий за один запрос через UNION ALL."""
+        s1 = select(ReviewAction.created_at.label("t"), ReviewAction.to_status.label("s"), ReviewAction.comment.label("c"), User.username.label("a"), Submission.phone_normalized.label("p"), Submission.id.label("i"), case((True, "MOD")).label("tp")).join(User, ReviewAction.admin_id == User.id).join(Submission, ReviewAction.submission_id == Submission.id).where(ReviewAction.admin_id == user_id, Submission.is_archived == False)
+        s2 = select(ReviewAction.created_at.label("t"), ReviewAction.to_status.label("s"), ReviewAction.comment.label("c"), User.username.label("a"), Submission.phone_normalized.label("p"), Submission.id.label("i"), case((True, "SELL")).label("tp")).join(User, ReviewAction.admin_id == User.id).join(Submission, ReviewAction.submission_id == Submission.id).where(Submission.user_id == user_id, Submission.is_archived == False)
+        res = await self._session.execute(union_all(s1, s2).order_by(desc("t")).limit(limit))
+        return [{"type": r.tp, "admin": r.a or "Admin", "phone": r.p, "sub_id": r.i, "to_status": r.s, "time": r.t, "comment": r.c} for r in res.all()]
 
-    async def get_avg_accept_amount(self, start: datetime, end: datetime) -> Decimal:
-        effective = self._effective_start(start)
-        stmt = select(func.avg(Submission.accepted_amount)).where(
-            Submission.status == SubmissionStatus.ACCEPTED,
-            Submission.reviewed_at.is_not(None),
-            Submission.reviewed_at >= effective,
-            Submission.reviewed_at <= end,
-        )
-        val = (await self._session.execute(stmt)).scalar_one_or_none()
-        return Decimal(val or 0).quantize(Decimal("0.01"))
-
-    async def top_sellers_by_accept_amount(
-        self,
-        start: datetime,
-        end: datetime,
-        *,
-        limit: int = 5,
-    ) -> list[tuple[str, Decimal, int]]:
-        effective = self._effective_start(start)
-        stmt = (
-            select(
-                User.username,
-                User.telegram_id,
-                func.coalesce(func.sum(Submission.accepted_amount), Decimal("0.00")).label("amt"),
-                func.count(Submission.id).label("cnt"),
-            )
-            .join(Submission, Submission.user_id == User.id)
-            .where(
-                Submission.status == SubmissionStatus.ACCEPTED,
-                Submission.reviewed_at.is_not(None),
-                Submission.reviewed_at >= effective,
-                Submission.reviewed_at <= end,
-            )
-            .group_by(User.id, User.username, User.telegram_id)
-            .order_by(func.sum(Submission.accepted_amount).desc())
-            .limit(limit)
-        )
+    async def get_leaderboard(self, period: str = "all", page: int = 0, page_size: int = 15) -> tuple[list[dict], int]:
+        now, d30 = datetime.now(timezone.utc), datetime.now(timezone.utc) - timedelta(days=30)
+        hidden = ["push", "fierroIT", "GDPX1", "GDPX0", "dyachx"]
+        base_filters = [Submission.status == SubmissionStatus.ACCEPTED, Submission.is_archived == False, ~User.username.in_(hidden), ~User.pseudonym.in_(hidden), ~User.nickname.in_(hidden)]
+        if period == "30d": base_filters.append(Submission.reviewed_at >= d30)
+        total = await self._session.scalar(select(func.count(func.distinct(User.id))).join(Submission, Submission.user_id == User.id).where(*base_filters)) or 0
+        stmt = select(User.username, User.nickname, User.pseudonym, User.telegram_id, func.sum(Submission.accepted_amount).label("e"), func.count(Submission.id).label("c")
+        ).join(Submission, Submission.user_id == User.id).where(*base_filters).group_by(User.id).order_by(desc(period == "30d" and "e" or User.total_paid)).offset(page * page_size).limit(page_size)
         rows = (await self._session.execute(stmt)).all()
-        out: list[tuple[str, Decimal, int]] = []
-        for username, telegram_id, amt, cnt in rows:
-            label = f"@{username}" if username else f"@{telegram_id}"
-            out.append((label, Decimal(amt or 0), int(cnt or 0)))
-        return out
+        return [{"name": r.nickname or r.pseudonym or r.username or f"ID:*{str(r.telegram_id)[-4:]}", "earned": Decimal(r.e or 0).quantize(Decimal("0.01")), "count": r.c} for r in rows], total
+
+    async def get_user_archive_stats(self, user_id: int, start_date: datetime | None = None) -> dict:
+        """Статистика архива пользователя за указанный период (включая всё до 'сегодня')."""
+        msk_tz = timezone(timedelta(hours=3))
+        today_start_msk = datetime.now(msk_tz).replace(hour=0, minute=0, second=0, microsecond=0)
+        today_start_utc = today_start_msk.astimezone(timezone.utc)
+        conds = [Submission.user_id == user_id, Submission.created_at < today_start_utc]
+        if start_date: conds.append(Submission.created_at >= start_date)
+        stmt = select(
+            func.count(case((Submission.status == SubmissionStatus.ACCEPTED, 1))).label("acc"),
+            func.count(case((Submission.status == SubmissionStatus.REJECTED, 1))).label("rej"),
+            func.count(case((Submission.status == SubmissionStatus.BLOCKED, 1))).label("blo"),
+            func.count(case((Submission.status == SubmissionStatus.NOT_A_SCAN, 1))).label("nos"),
+            func.coalesce(func.sum(case((Submission.status == SubmissionStatus.ACCEPTED, Submission.accepted_amount))), Decimal("0.00")).label("val"),
+            func.avg(case((Submission.status == SubmissionStatus.ACCEPTED, Submission.fixed_payout_rate))).label("avg")
+        ).where(*conds)
+        res = await self._session.execute(stmt)
+        acc, rej, blo, nos, val, avg = res.one()
+        by_cat_stmt = select(Category.title, func.count(Submission.id)).join(Category, Submission.category_id == Category.id).where(*conds).group_by(Category.title).order_by(Category.title.asc())
+        cat_rows = (await self._session.execute(by_cat_stmt)).all()
+        return {
+            "accepted": int(acc or 0), "rejected": int(rej or 0), "blocked": int(blo or 0), "not_a_scan": int(nos or 0),
+            "total_value": Decimal(val or "0.00"), "avg_rate": Decimal(avg or "0.00").quantize(Decimal("0.01")),
+            "clusters": [{"title": r[0], "count": r[1]} for r in cat_rows]
+        }

@@ -19,7 +19,6 @@ def get_owner_main_kb() -> InlineKeyboardMarkup:
             .button("💎 ВЫПЛАТЫ И ФИНАНСЫ", "owner_finance")
             .button("📈 АНАЛИТИКА И СТАТИСТИКА", "owner_stats")
             .button("🏷️ КАТЕГОРИИ И СТАВКИ", "owner_categories")
-            .button("🏆 ДОСКА ЛИДЕРОВ", "owner_leaderboard")
             .button("👥 ПОЛЬЗОВАТЕЛИ И МОДЫ", "owner_users")
             .button("⚙️ НАСТРОЙКИ СИСТЕМЫ", "owner_settings")
             .button("🚨 МОНИТОРИНГ И АЛЕРТЫ", "owner_monitoring")
@@ -75,8 +74,20 @@ def get_user_card_kb(user_id: int, current_role: str, is_restricted: bool, page:
     """Действия в карточке пользователя."""
     builder = PremiumBuilder()
     
-    next_role_text = "🔨 СДЕЛАТЬ АДМИНОМ" if current_role == "seller" else "👤 СДЕЛАТЬ СЕЛЛЕРОМ"
-    builder.button(next_role_text, OwnerUserCD(action="role", user_id=user_id, page=page, role=role_filter))
+    # Роли (Seller -> Admin -> Simbuyer -> Seller)
+    roles = ["seller", "admin", "simbuyer"]
+    try:
+        idx = roles.index(current_role)
+        next_role = roles[(idx + 1) % len(roles)]
+    except ValueError:
+        next_role = "seller"
+        
+    role_labels = {
+        "seller": "СЕЛЛЕР",
+        "admin": "АДМИН",
+        "simbuyer": "SIMBUYER"
+    }
+    builder.button(f"🔨 СДЕЛАТЬ {role_labels[next_role]}", OwnerUserCD(action="role", user_id=user_id, page=page, role=role_filter))
     
     status_text = "🔓 РАЗБЛОКИРОВАТЬ" if is_restricted else "🚫 ЗАБЛОКИРОВАТЬ"
     builder.button(status_text, OwnerUserCD(action="status", user_id=user_id, page=page, role=role_filter))
@@ -129,6 +140,17 @@ def get_owner_security_kb() -> InlineKeyboardMarkup:
             .button("📍 АКТИВНЫЕ СЕССИИ", "owner_sec_sessions")
             .adjust(1)
             .back("owner_settings")
+            .as_markup())
+
+
+def get_owner_stats_kb() -> InlineKeyboardMarkup:
+    """Клавиатура раздела аналитики."""
+    return (PremiumBuilder()
+            .button("🌐 ГЛОБАЛЬНАЯ СВОДКА", "owner_stats_global")
+            .button("⚖️ СТАТИСТИКА МОДЕРАТОРОВ", "owner_stats_mods")
+            .button("💰 ТОП СЕЛЛЕРОВ (30Д)", "owner_stats_sellers")
+            .adjust(1)
+            .back("owner_back_main")
             .as_markup())
 
 

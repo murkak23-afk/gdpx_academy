@@ -20,6 +20,7 @@ class SellerAssetCD(CallbackData, prefix="sel_asset"):
     category_id: int
     page: int = 0
     filter_key: str = "all"
+    is_archived: bool = False
 
 class SellerItemCD(CallbackData, prefix="sel_item"):
     item_id: int
@@ -28,21 +29,27 @@ class SellerItemCD(CallbackData, prefix="sel_item"):
 class SellerStatsCD(CallbackData, prefix="sel_stats"):
     period: str  # day, week, month, all
 
+class SellerArchiveCD(CallbackData, prefix="sel_arch"):
+    period: str # yesterday, 7d, 30d, all
+
 class SellerSettingsCD(CallbackData, prefix="sel_sett"):
-    action: str  # main, pin, alias, incognito, prefs, lang, export, notif
+    action: str  # main, alias, incognito, prefs, lang, export, notif
     value: str = ""
 
 class SellerNotifCD(CallbackData, prefix="sel_notif"):
     preference: str # full, summary, none
 
-class PinPadCD(CallbackData, prefix="pin_pad"):
-    action: str # digit, backspace, confirm, cancel
-    value: str = ""
-    context: str = "" # Например, 'payout', 'details'
-
 class SellerSubmissionCD(CallbackData, prefix="sel_sub"):
     category_id: int
     action: str = "pick" # pick, cancel, finish
+
+class QRDeliveryCD(CallbackData, prefix="qr_deliv"):
+    action: str # menu, op_list, op_pick, cancel
+    val: str = ""
+
+class LeaderboardCD(CallbackData, prefix="leaderboard"):
+    period: str # all, 30d
+    page: int = 0
 
 # --- АДМИН ---
 class AdminMenuCD(CallbackData, prefix="adm_menu"):
@@ -74,6 +81,11 @@ class CatConCD(CallbackData, prefix="catcon"):
 class CatManageCD(CallbackData, prefix="cat_manage"):
      action: str # view, toggle_active, toggle_priority, edit_price, confirm_delete, delete
      cat_id: int
+
+class AutoFixConfirmCD(CallbackData, prefix="af_conf"):
+    item_id: int
+    status: str # blocked, not_a_scan
+    action: str # confirm, cancel
 
 # --- ВЛАДЕЛЕЦ (Управление пользователями) ---
 class OwnerUserCD(CallbackData, prefix="ow_user"):

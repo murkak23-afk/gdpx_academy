@@ -12,16 +12,19 @@ def get_info_root_kb(chat_url: str | None = None, channel_url: str | None = None
     """Главный экран информационного центра (База Знаний)."""
     builder = PremiumBuilder()
     
-    # Основные кнопки раздела
+    # 1. ГЛАВНАЯ КНОПКА: ЧАТ ПРОЕКТА
+    if chat_url:
+        builder.button("GDPX // ACADEMIC CHAT", url="https://t.me/+8uIOkwKFgjJhNjRi")
+    else:
+        # Если ссылки нет, показываем неактивную заглушку
+        builder.button("GDPX // ACADEMIC CHAT", callback_data="noop")
+    
+    # 2. Основные кнопки раздела
     builder.button(f"{EMOJI_KNOWLEDGE} F.A.Q.", SellerMenuCD(action="faq"))
     builder.button(f"🧭 МАНУАЛЫ", SellerMenuCD(action="manuals"))
     
-    # Кнопка чата/канала (третья кнопка)
-    if chat_url or channel_url:
-        builder.button("💬 ЧАТ / КАНАЛ", url=chat_url or channel_url)
-    
     builder.adjust(1)
-    builder.back("mod_exit", "В ГЛАВНОЕ МЕНЮ")
+    builder.back(NavCD(to="menu"), "В ГЛАВНОЕ МЕНЮ")
     return builder.as_markup()
 
 def get_faq_list_kb(faq_cards: list) -> InlineKeyboardMarkup:

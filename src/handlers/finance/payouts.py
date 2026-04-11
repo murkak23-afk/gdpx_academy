@@ -84,7 +84,7 @@ async def _render_paylist(event: Message | CallbackQuery, session: AsyncSession,
         f"❖ <b>GDPX // ФИНАНСОВЫЙ РЕЕСТР</b>\n"
         f"{DIVIDER}\n"
         f"🧾 <b>Ожидают выплату:</b> {total} агентов\n"
-        f"💰 <b>Общий долг:</b> <code>{total_debt:.2f}</code> USDT\n"
+        f"💰 <b>К выплате:</b> <code>{total_debt:.2f}</code> USDT\n"
         f"{DIVIDER_LIGHT}\n"
         f"Выберите селлера для инициации транзакции:"
     )
@@ -135,7 +135,7 @@ async def _render_stats(event: Message | CallbackQuery, session: AsyncSession):
     stats = await billing_svc.get_finance_stats()
 
     text = (
-        f"❖ <b>GDPX // ФИНАНСОВЫЙ ДАШБОРД</b>\n"
+        f"❖ <b>GDPX // ФИНАНСОВАЯ ТАБЛИЦА</b>\n"
         f"{DIVIDER}\n"
         f"📅 <b>СЕГОДНЯ:</b>\n"
         f" ├ Выплат: <code>{stats['today']['count']}</code> шт.\n"
@@ -294,14 +294,14 @@ async def cb_payout_confirm(callback: CallbackQuery, callback_data: FinancePayCD
         return await callback.answer("🔴 Системная ошибка БД.", show_alert=True)
 
     receipt_text = (
-        f"❖ <b>GDPX // ФИНАНСЫ</b>\n"
+        f"❖ <b>GDPX // PAYMENTS</b>\n"
         f"{DIVIDER}\n"
         f"✅ <b>ВАМ ПОСТУПИЛА ВЫПЛАТА!</b>\n\n"
         f"💰 <b>Сумма:</b> <code>{amount_to_pay}</code> USDT\n"
         f"🧾 <b>Транзакция:</b> #{payout_record.id}\n"
         f"{DIVIDER_LIGHT}\n"
         f"👉 <a href='{check.check_url}'><b>ПОЛУЧИТЬ USDT В CRYPTO BOT</b></a>\n\n"
-        f"<i>Спасибо за отличную работу! Ждем новых активов.</i>"
+        f"<i>Спасибо за качественную работу! Ждем новых симок.</i>"
     )
     try:
         await bot.send_message(chat_id=seller.telegram_id, text=receipt_text, parse_mode="HTML", disable_web_page_preview=True)

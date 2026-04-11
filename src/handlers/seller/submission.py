@@ -1,6 +1,5 @@
 """
-Премиум-загрузка активов (eSIM) селлером.
-Особенности: Bulk-операции в FSM, Debounce-таймер UI, строгая фиксация ставки.
+Премиум-загрузка активов (eSIM) селлером. Оптимизировано для сверхвысоких нагрузок.
 """
 
 from __future__ import annotations
@@ -11,7 +10,7 @@ from decimal import Decimal
 from html import escape
 
 from aiogram import Bot, F, Router
-from aiogram.filters import StateFilter
+from aiogram.filters import StateFilter, Command
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, InputMediaPhoto, Message
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -23,29 +22,35 @@ from src.services.submission_service import SubmissionService
 from src.services.user_service import UserService
 from src.states.submission_state import SubmissionState
 from src.utils.media import media
-from src.utils.text_format import edit_message_text_or_caption_safe
+from src.utils.text_format import edit_message_text_or_caption_safe, delete_message_safe
 from src.utils.ui_builder import DIVIDER, DIVIDER_LIGHT
 
 router = Router(name="seller-submission-premium-router")
 logger = logging.getLogger(__name__)
 
-# Хранилище задач для debounce
+# Хранилище задач для debounce (user_id -> Task)
 _debounce_tasks: dict[int, asyncio.Task] = {}
+# Локальный буфер (user_id -> {items: [], cat_title: str, payout: Decimal, msg_id: int})
+_media_buffer: dict[int, dict] = {}
 
 
 def _get_upload_header() -> str:
-    return f"❖ <b>GDPX // ИНТЕГРАЦИЯ АКТИВОВ</b>\n{DIVIDER}\n"
+    return f"❖ <b>GDPX // ЗАЛЕЙ МАТЕРИАЛ</b>\n{DIVIDER}\n"
 
 
+@router.message(Command("sell"))
 @router.callback_query(SellerMenuCD.filter(F.action == "sell"))
-async def start_submission(callback: CallbackQuery, state: FSMContext, session: AsyncSession) -> None:
+async def start_submission(event: Message | CallbackQuery, state: FSMContext, session: AsyncSession) -> None:
     """Шаг 1: Выбор оператора."""
+    user_id = event.from_user.id
     categories = await CategoryService(session=session).get_active_categories()
     if not categories:
-        await callback.answer("🔴 Нет активных операторов для загрузки", show_alert=True)
+        msg = "🔴 Нет активных операторов для загрузки"
+        if isinstance(event, CallbackQuery): await event.answer(msg, show_alert=True)
+        else: await event.answer(msg)
         return
 
-    user = await UserService(session=session).get_by_telegram_id(callback.from_user.id)
+    user = await UserService(session=session).get_by_telegram_id(user_id)
     fav_ids = user.favorite_categories or []
 
     await state.set_state(SubmissionState.waiting_for_category)
@@ -58,28 +63,38 @@ async def start_submission(callback: CallbackQuery, state: FSMContext, session: 
         f"<i>⚠️ Ставка выкупа (USDT) фиксируется в момент загрузки и защищена от изменений.</i>"
     )
 
-    await callback.message.edit_media(
-        media=InputMediaPhoto(media=banner, caption=text, parse_mode="HTML"),
-        reply_markup=get_categories_kb(categories, fav_ids),
-    )
-    await callback.answer()
+    kb = get_categories_kb(categories, fav_ids)
+    if isinstance(event, Message):
+        await event.answer_photo(photo=banner, caption=text, reply_markup=kb, parse_mode="HTML")
+    else:
+        try:
+            await event.message.edit_media(media=InputMediaPhoto(media=banner, caption=text, parse_mode="HTML"), reply_markup=kb)
+        except Exception:
+            await event.message.answer_photo(photo=banner, caption=text, reply_markup=kb, parse_mode="HTML")
+        await event.answer()
 
 
 @router.callback_query(SellerAssetCD.filter(), StateFilter(SubmissionState.waiting_for_category))
-async def pick_category(
-    callback: CallbackQuery, callback_data: SellerAssetCD, state: FSMContext, session: AsyncSession
-) -> None:
-    """Шаг 2: Открытие буфера загрузки."""
+async def pick_category(callback: CallbackQuery, callback_data: SellerAssetCD, state: FSMContext, session: AsyncSession) -> None:
+    """Шаг 2: Инициализация буфера загрузки."""
     category = await CategoryService(session=session).get_by_id(callback_data.category_id)
     if not category:
-        await callback.answer("🔴 Оператор не найден", show_alert=True)
-        return
+        return await callback.answer("🔴 Оператор не найден", show_alert=True)
+
+    user_id = callback.from_user.id
+    _media_buffer[user_id] = {
+        "items": [],
+        "cat_title": category.title,
+        "payout": category.payout_rate,
+        "msg_id": callback.message.message_id
+    }
 
     await state.update_data(
         category_id=category.id,
         category_title=category.title,
         fixed_payout_rate=str(category.payout_rate),
         media_pool=[],
+        status_msg_id=callback.message.message_id
     )
     await state.set_state(SubmissionState.waiting_for_media)
 
@@ -93,178 +108,125 @@ async def pick_category(
         f"<i>Можно выделить до 50 файлов разом. После загрузки нажмите «Подтвердить интеграцию».</i>"
     )
 
-    await edit_message_text_or_caption_safe(
-        callback.message, text, reply_markup=get_upload_finish_kb(), parse_mode="HTML"
-    )
-    await state.update_data(status_msg_id=callback.message.message_id)
-    await callback.answer("Приемник открыт. Жду файлы.")
+    await edit_message_text_or_caption_safe(callback.message, text, reply_markup=get_upload_finish_kb(), parse_mode="HTML")
+    await callback.answer("Приемник открыт")
 
 
-async def _update_status_msg(user_id: int, bot: Bot, state: FSMContext, chat_id: int) -> None:
-    """Debounce: обновляет счётчик загруженных файлов в UI."""
-    await asyncio.sleep(0.3)  # 600ms debounce
-    _debounce_tasks.pop(user_id, None)
-
+async def _flush_buffer_to_state(user_id: int, state: FSMContext) -> int:
+    """Переносит локальный буфер в FSM одним запросом."""
+    buf = _media_buffer.get(user_id)
+    if not buf or not buf["items"]:
+        data = await state.get_data()
+        return len(data.get("media_pool", []))
+    
+    items = buf.pop("items")
+    buf["items"] = [] # Очищаем
+    
     data = await state.get_data()
     pool = data.get("media_pool", [])
-    msg_id = data.get("status_msg_id")
-    payout_rate = Decimal(data.get("fixed_payout_rate", "0"))
-    cat_title = data.get("category_title", "Unknown")
-
-    if not msg_id or not pool:
-        return
-
-    count = len(pool)
-    total_val = payout_rate * count
-
-    text = (
-        f"{_get_upload_header()}"
-        f"🗂 <b>Оператор:</b> <code>{escape(cat_title)}</code>\n"
-        f"🪙 <b>Ставка:</b> <code>{payout_rate}</code> USDT\n"
-        f"{DIVIDER_LIGHT}\n"
-        f"📦 <b>СИМОК В БУФЕРЕ:</b> <code>{count}</code> шт.\n"
-        f"💎 <b>ОЖИДАЕМАЯ ЦЕННОСТЬ:</b> <code>{total_val:.2f}</code> USDT\n\n"
-        f"<i>Отправьте еще файлы или нажмите «Подтвердить интеграцию».</i>"
-    )
-
-    try:
-        await bot.edit_message_caption(
-            chat_id=chat_id, message_id=msg_id, caption=text, reply_markup=get_upload_finish_kb(), parse_mode="HTML"
-        )
-    except Exception:
-        pass
+    pool.extend(items)
+    await state.update_data(media_pool=pool)
+    return len(pool)
 
 
 @router.message(StateFilter(SubmissionState.waiting_for_media), F.photo | F.document | F.video)
 async def process_bulk_media(message: Message, state: FSMContext, bot: Bot) -> None:
-    """Обработка входящих файлов в буфер."""
+    """Сверхскоростная обработка файлов (In-Memory Buffering)."""
     user_id = message.from_user.id
-    chat_id = message.chat.id
-    data = await state.get_data()
+    
+    file = message.photo[-1] if message.photo else (message.document or message.video)
+    m_type = "photo" if message.photo else ("document" if message.document else "video")
+    
+    item = {"file_id": file.file_id, "unique_id": file.file_unique_id, "type": m_type, "caption": message.caption or ""}
 
-    pool = data.get("media_pool", [])
+    if user_id not in _media_buffer:
+        _media_buffer[user_id] = {"items": [], "cat_title": "...", "payout": Decimal("0"), "msg_id": 0}
+    
+    _media_buffer[user_id]["items"].append(item)
+    asyncio.create_task(delete_message_safe(message))
 
-    if message.photo:
-        photo = message.photo[-1]
-        file_id = photo.file_id
-        unique_id = photo.file_unique_id
-        att_type = "photo"
-    elif message.document:
-        doc = message.document
-        file_id = doc.file_id
-        unique_id = doc.file_unique_id
-        att_type = "document"
-    else:
-        vid = message.video
-        file_id = vid.file_id
-        unique_id = vid.file_unique_id
-        att_type = "video"
+    if user_id in _debounce_tasks: _debounce_tasks[user_id].cancel()
+    _debounce_tasks[user_id] = asyncio.create_task(_refresh_control_panel(user_id, bot, state, message.chat.id))
 
-    pool.append({"file_id": file_id, "unique_id": unique_id, "type": att_type, "caption": message.caption or ""})
 
-    await state.update_data(media_pool=pool)
+async def _refresh_control_panel(user_id: int, bot: Bot, state: FSMContext, chat_id: int) -> None:
+    """Тихое обновление UI без лишних обращений к Redis."""
+    await asyncio.sleep(0.3) 
+    
+    buf = _media_buffer.get(user_id)
+    if not buf: return
 
-    # Перезапускаем debounce
-    if user_id in _debounce_tasks:
-        _debounce_tasks[user_id].cancel()
+    count = await _flush_buffer_to_state(user_id, state)
+    msg_id = buf["msg_id"]
+    
+    if not msg_id:
+        data = await state.get_data()
+        msg_id = data.get("status_msg_id")
+        buf["msg_id"] = msg_id
 
-    _debounce_tasks[user_id] = asyncio.create_task(_update_status_msg(user_id, bot, state, chat_id))
+    if not msg_id: return
 
-    # Удаляем сообщение пользователя, чтобы чат оставался чистым
+    text = (
+        f"{_get_upload_header()}"
+        f"🗂 <b>Оператор:</b> <code>{escape(buf['cat_title'])}</code>\n"
+        f"📦 <b>В БУФЕРЕ:</b> <code>{count}</code> шт.\n"
+        f"{DIVIDER_LIGHT}\n"
+        f"📥 <b>Продолжайте отправку...</b>\n"
+        f"<i>Нажмите «Подтвердить интеграцию» для сохранения.</i>"
+    )
+
     try:
-        await message.delete()
-    except Exception:
-        pass
+        await bot.edit_message_caption(chat_id=chat_id, message_id=msg_id, caption=text, reply_markup=get_upload_finish_kb(), parse_mode="HTML")
+    except Exception: pass
+    _debounce_tasks.pop(user_id, None)
 
 
 @router.callback_query(F.data == "upload_finish", StateFilter(SubmissionState.waiting_for_media))
 async def finalize_upload(callback: CallbackQuery, state: FSMContext, session: AsyncSession, bot: Bot) -> None:
-    """Финальное сохранение всех файлов."""
+    """Финальное сохранение пачки в БД."""
+    user_id = callback.from_user.id
+    await _flush_buffer_to_state(user_id, state)
+    _media_buffer.pop(user_id, None)
+    
     data = await state.get_data()
-    pool = data.get("media_pool", [])
-    cat_id = data.get("category_id")
-    payout_rate = Decimal(data.get("fixed_payout_rate", "0"))
-    cat_title = data.get("category_title", "Unknown")
+    pool, cat_id = data.get("media_pool", []), data.get("category_id")
+    rate, title = Decimal(data.get("fixed_payout_rate", "0")), data.get("category_title", "Unknown")
 
     if not pool or not cat_id:
-        await callback.answer("🔴 Буфер пуст. Сначала отправьте файлы.", show_alert=True)
-        return
+        return await callback.answer("🔴 Буфер пуст", show_alert=True)
 
-    await callback.answer("⏳ Сохраняю активы...")
+    await callback.answer("💾 Сохранение...")
+    await edit_message_text_or_caption_safe(callback.message, "🔄 <b>ЗАПИСЬ В СИСТЕМУ...</b>", parse_mode="HTML")
 
-    loading_text = f"🔄 <b>БЕЗОПАСНАЯ ЗАПИСЬ...</b>\nСохраняем {len(pool)} активов..."
-    await edit_message_text_or_caption_safe(callback.message, loading_text, parse_mode="HTML")
-
-    user = await UserService(session=session).get_by_telegram_id(callback.from_user.id)
-
+    user = await UserService(session=session).get_by_telegram_id(user_id)
     try:
-        await SubmissionService(session=session).create_bulk_submissions(
-            user_id=user.id, category_id=cat_id, fixed_payout_rate=payout_rate, media_items=pool
-        )
+        created = await SubmissionService(session=session).create_bulk_submissions(user_id=user.id, category_id=cat_id, fixed_payout_rate=rate, media_items=pool)
         await session.commit()
-
-        total_val = len(pool) * payout_rate
-        success_text = (
-            f"🟢 <b>ИНТЕГРАЦИЯ УСПЕШНА</b>\n"
-            f"{DIVIDER}\n"
-            f"🗂 <b>Оператор:</b> <code>{escape(cat_title)}</code>\n"
-            f"📦 <b>Загружено:</b> <code>{len(pool)}</code> шт.\n"
-            f"💎 <b>Ожидаемая ценность:</b> <code>{total_val:.2f}</code> USDT\n\n"
-            f"<i>Активы переданы в буфер модерации.</i>"
-        )
-
         await state.clear()
-        await edit_message_text_or_caption_safe(
-            callback.message, success_text, reply_markup=get_seller_main_kb(), parse_mode="HTML"
-        )
-
-        # Уведомление админам
-        try:
-            asyncio.create_task(_notify_admins_about_upload(bot, user.telegram_id, len(pool), cat_title))
-        except Exception as e:
-            logger.error(f"Failed to create admin notification task: {e}")
-
+        await edit_message_text_or_caption_safe(callback.message, f"✅ <b>Принято {len(created)} симок.</b>", reply_markup=get_seller_main_kb(), parse_mode="HTML")
+        asyncio.create_task(_notify_admins_about_upload(bot, user.telegram_id, len(created), title))
     except Exception as e:
-        logger.error(f"Critical error during bulk insert: {e}", exc_info=True)
+        logger.error(f"Bulk insert failed: {e}", exc_info=True)
         await session.rollback()
-        await edit_message_text_or_caption_safe(
-            callback.message,
-            "🔴 <b>КРИТИЧЕСКАЯ ОШИБКА</b>\nТранзакция отменена. Обратитесь в поддержку.",
-            reply_markup=get_seller_main_kb(),
-            parse_mode="HTML",
-        )
+        await edit_message_text_or_caption_safe(callback.message, "❌ <b>ОШИБКА ЗАПИСИ</b>", reply_markup=get_seller_main_kb(), parse_mode="HTML")
         await state.clear()
 
 
 @router.callback_query(F.data == "upload_cancel", StateFilter(SubmissionState.waiting_for_media))
 async def cancel_upload(callback: CallbackQuery, state: FSMContext) -> None:
     """Отмена загрузки."""
+    _media_buffer.pop(callback.from_user.id, None)
     await state.clear()
-    text = f"❌ <b>ИНТЕГРАЦИЯ ОТМЕНЕНА</b>\n{DIVIDER}\nБуфер очищен. Несохранённые файлы удалены."
-    await edit_message_text_or_caption_safe(
-        callback.message, text, reply_markup=get_seller_main_kb(), parse_mode="HTML"
-    )
+    await edit_message_text_or_caption_safe(callback.message, f"❌ <b>ИНТЕГРАЦИЯ ОТМЕНЕНА</b>\n{DIVIDER}\nБуфер очищен.", reply_markup=get_seller_main_kb(), parse_mode="HTML")
     await callback.answer()
 
 
 async def _notify_admins_about_upload(bot: Bot, seller_tg_id: int, count: int, cat_title: str) -> None:
-    """Отправка алертов админам."""
+    """Отправка алертов админам (фоново)."""
     from src.core.config import get_settings
-
     admin_ids = get_settings().admin_telegram_ids
-    if not admin_ids:
-        return
-
-    text = (
-        f"🔔 <b>НОВЫЙ ЗАЛИВ QR-CODE</b>\n"
-        f"Селлер: <a href='tg://user?id={seller_tg_id}'>ID {seller_tg_id}</a>\n"
-        f"Кластер: <code>{escape(cat_title)}</code>\n"
-        f"Объём: <code>{count}</code> шт.\n\n"
-        f"<i>Ожидают модерации.</i>"
-    )
-
+    if not admin_ids: return
+    text = f"🔔 <b>НОВЫЙ ЗАЛИВ QR-CODE</b>\nСеллер: <a href='tg://user?id={seller_tg_id}'>ID {seller_tg_id}</a>\nКластер: <code>{escape(cat_title)}</code>\nОбъём: <code>{count}</code> шт.\n\n<i>Ожидают модерации.</i>"
     for admin_id in admin_ids:
-        try:
-            await bot.send_message(chat_id=admin_id, text=text, parse_mode="HTML")
-        except Exception as e:
-            logger.error(f"Не удалось отправить уведомление админу {admin_id}: {e}")
+        try: await bot.send_message(chat_id=admin_id, text=text, parse_mode="HTML")
+        except Exception: pass

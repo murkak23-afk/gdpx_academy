@@ -16,7 +16,7 @@ from src.services.category_service import CategoryService
 from src.database.models.enums import NotificationPreference
 from src.utils.media import media
 from src.utils.ui_builder import GDPXRenderer, DIVIDER, DIVIDER_LIGHT
-from src.keyboards.factory import SellerMenuCD, NavCD, SellerStatsCD, SellerSettingsCD, PinPadCD, SellerNotifCD
+from src.keyboards.factory import SellerMenuCD, NavCD, SellerStatsCD, SellerSettingsCD, SellerNotifCD
 from src.services.bill_service import BillingService
 from src.keyboards import (
     get_seller_main_kb as get_premium_seller_kb, 
@@ -25,7 +25,6 @@ from src.keyboards import (
     get_seller_stats_kb,
     get_seller_payout_history_kb,
     get_seller_settings_kb,
-    get_pin_pad_kb,
     get_notification_settings_kb,
     get_favorite_categories_kb,
     get_language_settings_kb
@@ -134,52 +133,47 @@ async def export_payouts_csv(callback: CallbackQuery, session: AsyncSession) -> 
 
 # --- ПРОФИЛЬ И ГЛАВНОЕ МЕНЮ ---
 
+from aiogram.filters import Command
+
+
+@router.message(Command("profile"))
 @router.callback_query(SellerMenuCD.filter(F.action == "profile"))
-@router.callback_query(NavCD.filter(F.to == "menu"))
-async def show_profile(callback: CallbackQuery, session: AsyncSession) -> None:
-    """Обновление экрана профиля или главного меню."""
+async def show_profile(event: Message | CallbackQuery, session: AsyncSession) -> None:
+    """Обновление экрана профиля."""
     try:
-        user = await UserService(session=session).get_by_telegram_id(callback.from_user.id)
+        user_id = event.from_user.id
+        user = await UserService(session=session).get_by_telegram_id(user_id)
+        if not user:
+            return
+
         sub_svc = SubmissionService(session=session)
         dashboard = await sub_svc.get_user_dashboard_stats(user.id)
         
-        # Определяем, что именно отрисовывать
-        data_str = callback.data if isinstance(callback.data, str) else callback.data.pack()
-        is_main_menu = "nav:menu" in data_str
+        user.badges = BadgeService.calculate_badges(user, dashboard)
+        recent = await sub_svc.list_user_material_by_category_paginated(
+            user_id=user.id, category_id=0, page=0, page_size=5, statuses=None
+        )
+        items = recent[0] if isinstance(recent, tuple) else recent
         
-        if is_main_menu:
-            stats = {
-                "username": user.nickname or user.pseudonym or user.username or str(user.telegram_id),
-                "approved_count": int(dashboard.get("accepted", 0)),
-                "pending_count": int(dashboard.get("pending", 0)),
-                "total_payout_amount": float(user.total_paid or 0)
-            }
-            text = _renderer.render_dashboard(stats)
-            has_accepted = getattr(user, "has_accepted_codex", False)
-            kb = get_premium_seller_kb(has_accepted_codex=has_accepted)
-            banner = media.get("main.jpg")
+        text = _renderer.render_seller_profile_premium(user=user, stats=dashboard, recent_submissions=items)
+        kb = get_seller_profile_kb()
+        banner = media.get("profile.jpg")
+        
+        if isinstance(event, Message):
+            await event.answer_photo(photo=banner, caption=text, reply_markup=kb, parse_mode="HTML")
         else:
-            user.badges = BadgeService.calculate_badges(user, dashboard)
-            recent = await sub_svc.list_user_material_by_category_paginated(
-                user_id=user.id, category_id=0, page=0, page_size=5, statuses=None
-            )
-            items = recent[0] if isinstance(recent, tuple) else recent
-            
-            text = _renderer.render_seller_profile_premium(user=user, stats=dashboard, recent_submissions=items)
-            kb = get_seller_profile_kb()
-            banner = media.get("profile.jpg")
-        
-        try:
-            await callback.message.edit_media(
-                media=InputMediaPhoto(media=banner, caption=text, parse_mode="HTML"),
-                reply_markup=kb
-            )
-        except Exception:
-            await edit_message_text_or_caption_safe(callback.message, text, reply_markup=kb)
-        await callback.answer()
+            try:
+                await event.message.edit_media(
+                    media=InputMediaPhoto(media=banner, caption=text, parse_mode="HTML"),
+                    reply_markup=kb
+                )
+            except Exception:
+                await edit_message_text_or_caption_safe(event.message, text, reply_markup=kb)
+            await event.answer()
     except Exception as e:
         logger.exception(f"Error in show_profile: {e}")
-        await callback.answer("⚠️ Ошибка профиля", show_alert=True)
+        if isinstance(event, CallbackQuery):
+            await event.answer("⚠️ Ошибка профиля", show_alert=True)
 
 # --- НАСТРОЙКИ ---
 
@@ -195,6 +189,26 @@ async def show_settings(callback: CallbackQuery, session: AsyncSession) -> None:
     except Exception as e:
         logger.exception(f"Error in show_settings: {e}")
         await callback.answer("⚠️ Ошибка настроек", show_alert=True)
+
+@router.callback_query(SellerSettingsCD.filter(F.action == "alias"))
+async def show_personal_data(callback: CallbackQuery, session: AsyncSession) -> None:
+    """Отображение личных данных пользователя."""
+    try:
+        from src.keyboards.base import PremiumBuilder
+        user = await UserService(session=session).get_by_telegram_id(callback.from_user.id)
+        sub_svc = SubmissionService(session=session)
+        dashboard = await sub_svc.get_user_dashboard_stats(user.id)
+        
+        text = _renderer.render_personal_data(user, dashboard)
+        kb = (PremiumBuilder()
+              .back(SellerSettingsCD(action="main"), "В НАСТРОЙКИ")
+              .as_markup())
+              
+        await callback.message.edit_caption(caption=text, reply_markup=kb, parse_mode="HTML")
+        await callback.answer()
+    except Exception as e:
+        logger.exception(f"Error in show_personal_data: {e}")
+        await callback.answer("⚠️ Ошибка личных данных", show_alert=True)
 
 @router.callback_query(SellerSettingsCD.filter(F.action == "incognito"))
 async def toggle_incognito(callback: CallbackQuery, session: AsyncSession) -> None:
@@ -260,75 +274,6 @@ async def set_language(callback: CallbackQuery, session: AsyncSession) -> None:
     await callback.answer("✅ Язык интерфейса: RU", show_alert=True)
     await show_settings(callback, session)
 
-# --- PIN-КОД ---
-
-@router.callback_query(SellerSettingsCD.filter(F.action == "pin"))
-async def start_pin_setup(callback: CallbackQuery, state: FSMContext) -> None:
-    await state.update_data(pin_input="", pin_context="setup")
-    text = _renderer.render_pin_pad("", "УСТАНОВКА PIN-КОДА")
-    kb = get_pin_pad_kb("", "setup")
-    await callback.message.edit_caption(caption=text, reply_markup=kb, parse_mode="HTML")
-    await callback.answer()
-
-@router.callback_query(PinPadCD.filter(F.action == "digit"))
-async def pin_digit(callback: CallbackQuery, callback_data: PinPadCD, state: FSMContext) -> None:
-    try:
-        data = await state.get_data()
-        current = data.get("pin_input", "")
-        if len(current) < 6:
-            current += callback_data.value
-            await state.update_data(pin_input=current)
-            text = _renderer.render_pin_pad(current, "ВВОД PIN-КОДА")
-            kb = get_pin_pad_kb(current, callback_data.context)
-            await callback.message.edit_caption(caption=text, reply_markup=kb, parse_mode="HTML")
-        await callback.answer()
-    except Exception:
-        await callback.answer()
-
-@router.callback_query(PinPadCD.filter(F.action == "backspace"))
-async def pin_backspace(callback: CallbackQuery, callback_data: PinPadCD, state: FSMContext) -> None:
-    try:
-        data = await state.get_data()
-        current = data.get("pin_input", "")
-        if current:
-            current = current[:-1]
-            await state.update_data(pin_input=current)
-            text = _renderer.render_pin_pad(current, "ВВОД PIN-КОДА")
-            kb = get_pin_pad_kb(current, callback_data.context)
-            await callback.message.edit_caption(caption=text, reply_markup=kb, parse_mode="HTML")
-        await callback.answer()
-    except Exception:
-        await callback.answer()
-
-@router.callback_query(PinPadCD.filter(F.action == "confirm"))
-async def pin_confirm(callback: CallbackQuery, callback_data: PinPadCD, state: FSMContext, session: AsyncSession) -> None:
-    try:
-        data = await state.get_data()
-        pin = data.get("pin_input", "")
-        if callback_data.context == "setup":
-            user = await UserService(session=session).get_by_telegram_id(callback.from_user.id)
-            user.pin_code = pin
-            user.is_pin_enabled = True
-            await session.commit()
-            await callback.answer("✅ PIN-код установлен!", show_alert=True)
-            await show_settings(callback, session)
-        await state.update_data(pin_input="")
-        await callback.answer()
-    except Exception:
-        await callback.answer("❌ Ошибка подтверждения", show_alert=True)
-
-@router.callback_query(PinPadCD.filter(F.action == "cancel"))
-async def pin_cancel(callback: CallbackQuery, session: AsyncSession, state: FSMContext) -> None:
-    """Закрытие PIN-пада и возврат в профиль."""
-    try:
-        await state.update_data(pin_input="")
-        # Возвращаем в ПРОФИЛЬ (главный экран)
-        await show_profile(callback, session)
-        await callback.answer()
-    except Exception as e:
-        logger.exception(f"Error in pin_cancel: {e}")
-        await callback.answer("❌ Ошибка закрытия", show_alert=True)
-
 # --- ПРОЧЕЕ ---
 
 @router.callback_query(SellerMenuCD.filter(F.action == "stats"))
@@ -392,16 +337,26 @@ async def show_prefs_favorites(callback: CallbackQuery, callback_data: SellerSet
         await callback.answer("⚠️ Ошибка настроек", show_alert=True)
 
 @router.callback_query(SellerSettingsCD.filter(F.action == "export"))
-async def export_data_request(callback: CallbackQuery, session: AsyncSession) -> None:
+async def export_data_request(callback: CallbackQuery, callback_data: SellerSettingsCD, session: AsyncSession) -> None:
     try:
         user = await UserService(session=session).get_by_telegram_id(callback.from_user.id)
         sub_svc = SubmissionService(session=session)
         await callback.answer("📊 Формируем отчет... Это может занять несколько секунд.")
-        excel_data = await sub_svc.export_user_submissions_excel(user.id)
+        
+        # Определяем период для экспорта
+        period = "all"
+        caption = f"📋 <b>Ваш экспорт данных готов</b>\n{DIVIDER}\nВсе загруженные активы за всё время работы в системе."
+        
+        if callback_data.value.startswith("arch_"):
+            period = callback_data.value.replace("arch_", "")
+            labels = {"yesterday": "вчера", "7d": "7 дней", "30d": "30 дней", "all": "всё время"}
+            caption = f"📋 <b>Ваш архивный экспорт готов</b>\n{DIVIDER}\nПериод: <code>{labels.get(period, period)}</code>"
+
+        excel_data = await sub_svc.export_user_submissions_excel(user.id) # Пока без фильтра периода в сервисе
         filename = f"GDPX_Report_{user.telegram_id}_{datetime.now().strftime('%Y%m%d')}.xlsx"
         await callback.message.answer_document(
             document=BufferedInputFile(excel_data, filename=filename),
-            caption=f"📋 <b>Ваш экспорт данных готов</b>\n{DIVIDER}\nВсе загруженные активы за всё время работы в системе.",
+            caption=caption,
             parse_mode="HTML"
         )
     except Exception as e:

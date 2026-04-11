@@ -1,0 +1,9 @@
+{
+  "project_name": "ЛЛЛ",
+  "disable_ai": false,
+  "terminal": {
+    "shell": {
+      "program": "sh"
+    }
+  }
+}

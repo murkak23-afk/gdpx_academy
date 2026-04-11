@@ -110,44 +110,49 @@ async def cb_owner_back_main(callback: CallbackQuery, session: AsyncSession, sta
 @router.callback_query(F.data == "owner_cmd_center", IsOwnerFilter())
 async def cb_owner_cmd_center(callback: CallbackQuery, session: AsyncSession):
     """Командный центр: Мониторинг модераторов и лог действий."""
-    stats_svc = AdminStatsService(session)
-    online_mods = await stats_svc.get_online_moderators(minutes=30)
-    recent_actions = await stats_svc.get_recent_moderation_actions(limit=10)
+    logger.info("Entering cmd_center handler")
+    try:
+        stats_svc = AdminStatsService(session)
+        online_mods = await stats_svc.get_online_moderators(minutes=30)
+        recent_actions = await stats_svc.get_recent_moderation_actions(limit=10)
 
-    text_lines = [
-        "🏯 <b>КОМАНДНЫЙ ЦЕНТР // МОНИТОРИНГ</b>",
-        DIVIDER,
-        "👤 <b>МОДЕРАТОРЫ ОНЛАЙН:</b>"
-    ]
+        text_lines = [
+            "🏯 <b>КОМАНДНЫЙ ЦЕНТР // МОНИТОРИНГ</b>",
+            DIVIDER,
+            "👤 <b>МОДЕРАТОРЫ ОНЛАЙН:</b>"
+        ]
 
-    if not online_mods:
-        text_lines.append(" <i>Нет активных модераторов (30м)</i>")
-    else:
-        for m in online_mods:
-            last_m = int((datetime.now(timezone.utc) - m['last_active']).total_seconds() / 60)
-            text_lines.append(f" ├ @{m['username']} <code>({last_m}м назад)</code>")
+        if not online_mods:
+            text_lines.append(" <i>Нет активных модераторов (30м)</i>")
+        else:
+            for m in online_mods:
+                last_m = int((datetime.now(timezone.utc) - m['last_active']).total_seconds() / 60)
+                text_lines.append(f" ├ @{m['username']} <code>({last_m}м назад)</code>")
 
-    text_lines.append(f"\n{DIVIDER_LIGHT}")
-    text_lines.append("📜 <b>ПОСЛЕДНИЕ ДЕЙСТВИЯ:</b>")
+        text_lines.append(f"\n{DIVIDER_LIGHT}")
+        text_lines.append("📜 <b>ПОСЛЕДНИЕ ДЕЙСТВИЯ:</b>")
 
-    for a in recent_actions:
-        time_str = a['time'].strftime("%H:%M")
-        status_icon = "✅" if a['to_status'] == SubmissionStatus.ACCEPTED else "❌"
-        target = f"...{a['phone'][-4:]}" if a['phone'] and a['phone'] != "N/A" else f"#{a['sub_id']}"
-        text_lines.append(f" ├ <code>[{time_str}]</code> {status_icon} <b>@{a['admin']}</b> → {target}")
+        for a in recent_actions:
+            time_str = a['time'].strftime("%H:%M")
+            status_icon = "✅" if a['to_status'] == SubmissionStatus.ACCEPTED else "❌"
+            target = f"...{a['phone'][-4:]}" if a['phone'] and a['phone'] != "N/A" else f"#{a['sub_id']}"
+            text_lines.append(f" ├ <code>[{time_str}]</code> {status_icon} <b>@{a['admin']}</b> → {target}")
 
-    text_lines.append(f"\n{DIVIDER}\n<i>Управление модерацией и логами.</i>")
+        text_lines.append(f"\n{DIVIDER}\n<i>Управление модерацией и логами.</i>")
 
-    kb = (PremiumBuilder()
-          .button("🛑 ПРИОСТАНОВИТЬ ВСЕХ", "owner_mods_suspend")
-          .button("▶️ ВОЗОБНОВИТЬ ВСЕХ", "owner_mods_resume")
-          .button("🔄 ОБНОВИТЬ ЛОГ", "owner_cmd_center")
-          .adjust(2, 1)
-          .back("owner_back_main")
-          .as_markup())
+        kb = (PremiumBuilder()
+              .button("🛑 ПРИОСТАНОВИТЬ ВСЕХ", "owner_mods_suspend")
+              .button("▶️ ВОЗОБНОВИТЬ ВСЕХ", "owner_mods_resume")
+              .button("🔄 ОБНОВИТЬ ЛОГ", "owner_cmd_center")
+              .adjust(2, 1)
+              .back("owner_back_main")
+              .as_markup())
 
-    await edit_message_text_or_caption_safe(callback.message, "\n".join(text_lines), reply_markup=kb, parse_mode="HTML")
-    await callback.answer("🔄 Данные обновлены")
+        await edit_message_text_or_caption_safe(callback.message, "\n".join(text_lines), reply_markup=kb, parse_mode="HTML")
+        await callback.answer("🔄 Данные обновлены")
+    except Exception:
+        logger.exception("Error in cmd_center handler")
+        await callback.answer("❌ Ошибка при загрузке", show_alert=True)
 
 
 @router.callback_query(F.data.in_(["owner_mods_suspend", "owner_mods_resume"]), IsOwnerFilter())
@@ -168,17 +173,22 @@ async def cb_owner_mods_control(callback: CallbackQuery, session: AsyncSession):
 @router.callback_query(F.data == "owner_finance", IsOwnerFilter())
 async def cb_owner_finance(callback: CallbackQuery, session: AsyncSession):
     """Раздел выплат и финансов."""
-    stats_svc = AdminStatsService(session)
-    stats = await stats_svc.get_owner_summary_stats()
-    
-    stmt = select(User).where(User.pending_balance > 0).order_by(User.pending_balance.desc()).limit(10)
-    pending_sellers = (await session.execute(stmt)).scalars().all()
-    
-    text = _renderer.render_owner_finance(stats, pending_sellers)
-    
-    from src.keyboards.owner import get_owner_finance_kb
-    await edit_message_text_or_caption_safe(callback.message, text, reply_markup=get_owner_finance_kb(), parse_mode="HTML")
-    await callback.answer()
+    logger.info("Entering finance handler")
+    try:
+        stats_svc = AdminStatsService(session)
+        stats = await stats_svc.get_owner_summary_stats()
+        
+        stmt = select(User).where(User.pending_balance > 0).order_by(User.pending_balance.desc()).limit(10)
+        pending_sellers = (await session.execute(stmt)).scalars().all()
+        
+        text = _renderer.render_owner_finance(stats, pending_sellers)
+        
+        from src.keyboards.owner import get_owner_finance_kb
+        await edit_message_text_or_caption_safe(callback.message, text, reply_markup=get_owner_finance_kb(), parse_mode="HTML")
+        await callback.answer()
+    except Exception:
+        logger.exception("Error in finance handler")
+        await callback.answer("❌ Ошибка при загрузке", show_alert=True)
 
 
 @router.callback_query(F.data == "owner_finance_audit", IsOwnerFilter())
@@ -208,18 +218,23 @@ async def cb_owner_finance_topup(callback: CallbackQuery, session: AsyncSession)
 @router.callback_query(F.data == "owner_users", IsOwnerFilter())
 async def cb_owner_users_main(callback: CallbackQuery, session: AsyncSession):
     """Главное меню раздела пользователей."""
-    sellers = await session.scalar(select(func.count(User.id)).where(User.role == UserRole.SELLER))
-    admins = await session.scalar(select(func.count(User.id)).where(User.role == UserRole.ADMIN))
-    
-    text = (
-        "👥 <b>ПОЛЬЗОВАТЕЛИ И МОДЕРАТОРЫ</b>\n\n"
-        f" ├ Селлеров: <code>{sellers}</code>\n"
-        f" └ Модераторов: <code>{admins}</code>\n\n"
-        "<i>Выберите категорию для управления:</i>"
-    )
-    from src.keyboards.owner import get_owner_users_kb
-    await edit_message_text_or_caption_safe(callback.message, text, reply_markup=get_owner_users_kb(), parse_mode="HTML")
-    await callback.answer()
+    logger.info("Entering users handler")
+    try:
+        sellers = await session.scalar(select(func.count(User.id)).where(User.role == UserRole.SELLER))
+        admins = await session.scalar(select(func.count(User.id)).where(User.role == UserRole.ADMIN))
+        
+        text = (
+            "👥 <b>ПОЛЬЗОВАТЕЛИ И МОДЕРАТОРЫ</b>\n\n"
+            f" ├ Селлеров: <code>{sellers}</code>\n"
+            f" └ Модераторов: <code>{admins}</code>\n\n"
+            "<i>Выберите категорию для управления:</i>"
+        )
+        from src.keyboards.owner import get_owner_users_kb
+        await edit_message_text_or_caption_safe(callback.message, text, reply_markup=get_owner_users_kb(), parse_mode="HTML")
+        await callback.answer()
+    except Exception:
+        logger.exception("Error in users handler")
+        await callback.answer("❌ Ошибка при загрузке", show_alert=True)
 
 
 @router.callback_query(OwnerUserCD.filter(F.action == "list"), IsOwnerFilter())
@@ -258,7 +273,13 @@ async def cb_owner_user_actions(callback: CallbackQuery, callback_data: OwnerUse
     if not user: return await callback.answer("❌ Не найден", show_alert=True)
 
     if callback_data.action == "role":
-        user.role = UserRole.ADMIN if user.role == UserRole.SELLER else UserRole.SELLER
+        roles_cycle = [UserRole.SELLER, UserRole.ADMIN, UserRole.SIMBUYER]
+        try:
+            current_role_val = user.role
+            idx = roles_cycle.index(current_role_val)
+            user.role = roles_cycle[(idx + 1) % len(roles_cycle)]
+        except ValueError:
+            user.role = UserRole.SELLER
     elif callback_data.action == "status":
         user.is_restricted = not user.is_restricted
         
@@ -297,13 +318,18 @@ async def process_owner_user_search(message: Message, state: FSMContext, session
 @router.callback_query(F.data == "owner_categories", IsOwnerFilter())
 async def cb_owner_categories(callback: CallbackQuery, session: AsyncSession):
     """Управление категориями и ставками."""
-    stmt = select(Category).order_by(Category.is_priority.desc(), Category.title.asc())
-    categories = (await session.execute(stmt)).scalars().all()
-    
-    from src.keyboards.owner import get_owner_categories_kb
-    text = "🏷️ <b>КАТЕГОРИИ И СТАВКИ</b>\n\nУправление тарифами выкупа eSIM и приоритетами."
-    await edit_message_text_or_caption_safe(callback.message, text, reply_markup=get_owner_categories_kb(categories), parse_mode="HTML")
-    await callback.answer()
+    logger.info("Entering categories handler")
+    try:
+        stmt = select(Category).order_by(Category.is_priority.desc(), Category.title.asc())
+        categories = (await session.execute(stmt)).scalars().all()
+        
+        from src.keyboards.owner import get_owner_categories_kb
+        text = "🏷️ <b>КАТЕГОРИИ И СТАВКИ</b>\n\nУправление тарифами выкупа eSIM и приоритетами."
+        await edit_message_text_or_caption_safe(callback.message, text, reply_markup=get_owner_categories_kb(categories), parse_mode="HTML")
+        await callback.answer()
+    except Exception:
+        logger.exception("Error in categories handler")
+        await callback.answer("❌ Ошибка при загрузке", show_alert=True)
 
 
 @router.callback_query(CatManageCD.filter(F.action == "view"), IsOwnerFilter())
@@ -392,7 +418,7 @@ async def cb_owner_monitoring(callback: CallbackQuery, session: AsyncSession):
         f"🚨 <b>МОНИТОРИНГ LIVE</b>\n{DIVIDER}\n"
         f"⚙️ <b>РЕЖИМЫ:</b>\n ├ Модерация: {m_status}\n └ Обслуживание: {main_status}\n"
         f"{DIVIDER_LIGHT}\n"
-        f"⏳ <b>ОЧЕРЕДЬ:</b> <code>{summary.get('total_pending', 0)}</code>\n"
+        f"🚀 <b>СКЛАД:</b> <code>{summary.get('warehouse', 0)}</code>\n"
         f"👥 <b>ОНЛАЙН:</b> <code>{len(online)}</code> модераторов\n"
         f"{DIVIDER_LIGHT}\n<b>ЛОГ ДЕЙСТВИЙ:</b>\n"
     )
@@ -455,11 +481,17 @@ async def process_owner_broadcast(message: Message, state: FSMContext, session: 
 
 @router.callback_query(F.data == "owner_settings", IsOwnerFilter())
 async def cb_owner_settings_root(callback: CallbackQuery):
-    from src.core.config import get_settings
-    m_mode = getattr(get_settings(), "maintenance_mode", False)
-    from src.keyboards.owner import get_owner_settings_kb
-    await edit_message_text_or_caption_safe(callback.message, "⚙️ <b>НАСТРОЙКИ СИСТЕМЫ</b>", reply_markup=get_owner_settings_kb(m_mode), parse_mode="HTML")
-    await callback.answer()
+    """Настройки системы."""
+    logger.info("Entering settings handler")
+    try:
+        from src.core.config import get_settings
+        m_mode = getattr(get_settings(), "maintenance_mode", False)
+        from src.keyboards.owner import get_owner_settings_kb
+        await edit_message_text_or_caption_safe(callback.message, "⚙️ <b>НАСТРОЙКИ СИСТЕМЫ</b>", reply_markup=get_owner_settings_kb(m_mode), parse_mode="HTML")
+        await callback.answer()
+    except Exception:
+        logger.exception("Error in settings handler")
+        await callback.answer("❌ Ошибка при загрузке", show_alert=True)
 
 
 @router.callback_query(F.data.in_(["owner_stats_platform", "owner_stats_mods", "owner_stats_sellers"]), IsOwnerFilter())
@@ -473,8 +505,8 @@ async def cb_owner_stats_view(callback: CallbackQuery, session: AsyncSession):
         res = await svc.get_moderators_performance(now - timedelta(days=30), now)
         text = _renderer.render_moderators_stats(res)
     else:
-        res = await svc.get_top_sellers_extended(now - timedelta(days=30), now)
-        text = _renderer.render_sellers_leaderboard_owner(res)
+        res, _ = await svc.get_leaderboard(period="30d", page_size=10)
+        text = _renderer.render_premium_leaderboard(res, "За 30 дней")
     await edit_message_text_or_caption_safe(callback.message, text, reply_markup=PremiumBuilder().back("owner_stats").as_markup(), parse_mode="HTML")
     await callback.answer()
 
@@ -482,27 +514,19 @@ async def cb_owner_stats_view(callback: CallbackQuery, session: AsyncSession):
 @router.callback_query(F.data == "owner_stats", IsOwnerFilter())
 async def cb_owner_stats_root(callback: CallbackQuery):
     """Меню аналитики и статистики."""
-    from src.keyboards.owner import get_owner_stats_kb
-    await edit_message_text_or_caption_safe(
-        callback.message, 
-        "📈 <b>АНАЛИТИКА И СТАТИСТИКА</b>\n\nВыберите раздел для детального просмотра показателей платформы.", 
-        reply_markup=get_owner_stats_kb(), 
-        parse_mode="HTML"
-    )
-    await callback.answer()
-
-
-@router.callback_query(F.data == "owner_leaderboard", IsOwnerFilter())
-async def cb_owner_leaderboard_root(callback: CallbackQuery):
-    """Меню доски лидеров."""
-    from src.keyboards.owner import get_owner_leaderboard_kb
-    await edit_message_text_or_caption_safe(
-        callback.message, 
-        "🏆 <b>ДОСКА ЛИДЕРОВ</b>\n\nУправление рейтингом селлеров и бонусными призами.", 
-        reply_markup=get_owner_leaderboard_kb(), 
-        parse_mode="HTML"
-    )
-    await callback.answer()
+    logger.info("Entering stats handler")
+    try:
+        from src.keyboards.owner import get_owner_stats_kb
+        await edit_message_text_or_caption_safe(
+            callback.message, 
+            "📈 <b>АНАЛИТИКА И СТАТИСТИКА</b>\n\nВыберите раздел для детального просмотра показателей платформы.", 
+            reply_markup=get_owner_stats_kb(), 
+            parse_mode="HTML"
+        )
+        await callback.answer()
+    except Exception:
+        logger.exception("Error in stats handler")
+        await callback.answer("❌ Ошибка при загрузке", show_alert=True)
 
 
 @router.callback_query(F.data == "owner_settings_security", IsOwnerFilter())
@@ -738,48 +762,6 @@ async def cb_owner_user_history(callback: CallbackQuery, callback_data: OwnerUse
     await callback.answer()
 
 
-@router.callback_query(F.data == "owner_lb_prizes", IsOwnerFilter())
-async def cb_owner_leaderboard_prizes(callback: CallbackQuery, session: AsyncSession):
-    """Управление призами в лидерборде."""
-    from src.database.models.leaderboard_settings import LeaderboardSettings
-    settings = (await session.execute(select(LeaderboardSettings))).scalar_one_or_none()
-    
-    if not settings:
-        settings = LeaderboardSettings(prize_enabled=False, prize_text="Подарочный USDT-бонус")
-        session.add(settings)
-        await session.commit()
-        
-    status = "✅ ВКЛЮЧЕНЫ" if settings.prize_enabled else "❌ ВЫКЛЮЧЕНЫ"
-    text = (
-        "🎁 <b>НАСТРОЙКА ПРИЗОВ</b>\n"
-        f"{DIVIDER}\n"
-        f"📡 Статус: <code>{status}</code>\n"
-        f"📝 Текст приза: <code>{settings.prize_text}</code>\n"
-        f"{DIVIDER_LIGHT}\n"
-        "<i>Призы отображаются в еженедельном топе селлеров.</i>"
-    )
-    
-    kb = (PremiumBuilder()
-          .button("🔔 " + ("ОТКЛЮЧИТЬ" if settings.prize_enabled else "ВКЛЮЧИТЬ"), "owner_lb_prizes_toggle")
-          .button("✍️ ИЗМЕНИТЬ ТЕКСТ", "owner_lb_prizes_edit")
-          .adjust(1)
-          .back("owner_leaderboard")
-          .as_markup())
-    
-    await edit_message_text_or_caption_safe(callback.message, text, reply_markup=kb, parse_mode="HTML")
-    await callback.answer()
-
-
-@router.callback_query(F.data == "owner_lb_prizes_toggle", IsOwnerFilter())
-async def cb_owner_lb_prizes_toggle(callback: CallbackQuery, session: AsyncSession):
-    from src.database.models.leaderboard_settings import LeaderboardSettings
-    settings = (await session.execute(select(LeaderboardSettings))).scalar_one_or_none()
-    if settings:
-        settings.prize_enabled = not settings.prize_enabled
-        await session.commit()
-    await cb_owner_leaderboard_prizes(callback, session)
-
-
 @router.callback_query(F.data == "owner_finance_bulk", IsOwnerFilter())
 async def cb_owner_finance_bulk(callback: CallbackQuery):
     """Меню массовых выплат."""
@@ -821,31 +803,6 @@ async def cb_owner_cat_delete(callback: CallbackQuery, callback_data: CatManageC
         await session.commit()
         await callback.answer("✅ Категория удалена", show_alert=True)
     await cb_owner_categories(callback, session)
-
-
-@router.callback_query(F.data == "owner_lb_prizes_edit", IsOwnerFilter())
-async def cb_owner_lb_prizes_edit_start(callback: CallbackQuery, state: FSMContext):
-    """Начало смены текста приза."""
-    await state.set_state(OwnerStates.waiting_for_lb_prize_text)
-    kb = (PremiumBuilder().back("owner_lb_prizes", "❌ ОТМЕНА").as_markup())
-    await edit_message_text_or_caption_safe(callback.message, "✍️ <b>Введите новый текст приза:</b>", reply_markup=kb, parse_mode="HTML")
-    await callback.answer()
-
-
-@router.message(OwnerStates.waiting_for_lb_prize_text, IsOwnerFilter())
-async def process_owner_lb_prize_edit(message: Message, state: FSMContext, session: AsyncSession):
-    """Сохранение текста приза в БД."""
-    from src.database.models.leaderboard_settings import LeaderboardSettings
-    settings = (await session.execute(select(LeaderboardSettings))).scalar_one_or_none()
-    if settings:
-        settings.prize_text = message.text.strip()
-        await session.commit()
-        await message.answer(f"✅ Текст приза обновлен: <code>{settings.prize_text}</code>")
-    
-    await state.clear()
-    # Возвращаемся в меню лидерборда
-    from src.keyboards.owner import get_owner_leaderboard_kb
-    await message.answer("🏆 <b>ДОСКА ЛИДЕРОВ</b>", reply_markup=get_owner_leaderboard_kb())
 
 
 @router.callback_query(F.data == "owner_finance_bulk_export", IsOwnerFilter())

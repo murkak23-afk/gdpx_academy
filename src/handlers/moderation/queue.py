@@ -1,79 +1,219 @@
 from __future__ import annotations
-from datetime import datetime, timezone
-from aiogram import Router, F
-from aiogram.types import CallbackQuery
-from sqlalchemy.ext.asyncio import AsyncSession
-from aiogram.fsm.context import FSMContext
 
+import asyncio
+from datetime import datetime, timezone
+from typing import Optional
+
+from aiogram import Router, F, Bot
+from aiogram.fsm.context import FSMContext
+from aiogram.types import CallbackQuery
+from sqlalchemy import func, select, update
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import joinedload
+
+from src.callbacks.moderation import AdminQueueCD, AdminSellerQueueCD, AdminGradeCD
+from src.database.models.submission import Submission
+from src.database.models.user import User
+from src.database.models.enums import SubmissionStatus
+from src.keyboards.moderation import get_sellers_queue_kb, get_seller_workspace_kb
 from src.services.moderation_service import ModerationService
 from src.services.user_service import UserService
-from src.callbacks.moderation import AdminQueueCD, AdminSellerQueueCD
-from src.keyboards.moderation import get_sellers_queue_kb, get_seller_detail_actions_kb
+from src.services.workflow_service import WorkflowService
 from src.utils.ui_builder import DIVIDER, DIVIDER_LIGHT
+from src.utils.text_format import edit_message_text_or_caption_safe
 
 router = Router(name="moderation-queue-router")
 
+
 @router.callback_query(AdminQueueCD.filter(F.action == "start"))
 @router.callback_query(AdminSellerQueueCD.filter(F.action == "list"))
-@router.callback_query(F.data == "mod_q:refresh")
-async def on_moderation_queue(callback: CallbackQuery, session: AsyncSession, state: FSMContext):
-    """Уровень 1: Список продавцов с ожидающими активами."""
+@router.callback_query(F.data.startswith("mod_q:refresh"))
+async def on_moderation_queue(callback: CallbackQuery, session: AsyncSession, state: FSMContext, callback_data: AdminQueueCD | AdminSellerQueueCD | None = None):
+    """Уровень 1: Список продавцов (Склад, Выданные, Проверка)."""
     await state.clear() 
 
+    # Определяем статус
+    status_str = "pending"
+    if isinstance(callback_data, AdminSellerQueueCD):
+        status_str = callback_data.status
+    elif isinstance(callback_data, AdminQueueCD):
+        status_str = "pending"
+    elif callback.data.startswith("mod_q:refresh:"):
+        status_str = callback.data.split(":")[-1]
+    
+    status_map = {
+        "pending": [SubmissionStatus.PENDING],
+        "in_work": [SubmissionStatus.IN_WORK],
+        "verification": [SubmissionStatus.WAIT_CONFIRM, SubmissionStatus.IN_REVIEW]
+    }
+    status_list = status_map.get(status_str, [SubmissionStatus.PENDING])
+    
     mod_service = ModerationService(session=session)
-    sellers_data = await mod_service.get_pending_sellers()
+    sellers_data = await mod_service.get_pending_sellers(status=status_list)
+
+    ui_data = {
+        "pending": ("🚀 СКЛАД АКТИВОВ", "Ниже список агентов с новыми заявками."),
+        "in_work": ("📟 ВЫДАННЫЕ АКТИВЫ", "Агенты с активами на руках у байеров."),
+        "verification": ("✨ ПРОВЕРКА АКТИВОВ", "Активы, ожидающие ручного зачёта (SLA > 1h).")
+    }
+    title, descr = ui_data.get(status_str, ("ОЧЕРЕДЬ", "Список агентов"))
 
     if not sellers_data:
-        text = f"❖ <b>ОЧЕРЕДЬ АКТИВОВ</b>\n{DIVIDER}\n✨ <b>Все чисто! Активных заявок нет.</b>"
-        await callback.message.edit_text(text, reply_markup=get_sellers_queue_kb([]), parse_mode="HTML")
+        text = f"❖ <b>{title}</b>\n{DIVIDER}\n✨ <b>Все чисто! Активных записей нет.</b>"
+        await edit_message_text_or_caption_safe(callback.message, text, reply_markup=get_sellers_queue_kb([], status=status_str), parse_mode="HTML")
+        await callback.answer()
         return
 
     text = (
-        f"❖ <b>ОЧЕРЕДЬ АКТИВОВ</b>\n{DIVIDER}\n"
-        f"<i>Ниже список агентов, ожидающих дефектовку.\nСортировка по времени ожидания (SLA).</i>"
+        f"❖ <b>{title}</b>\n{DIVIDER}\n"
+        f"<i>{descr}\nСортировка по SLA.</i>"
     )
-    await callback.message.edit_text(text, reply_markup=get_sellers_queue_kb(sellers_data), parse_mode="HTML")
+    await edit_message_text_or_caption_safe(callback.message, text, reply_markup=get_sellers_queue_kb(sellers_data, status=status_str), parse_mode="HTML")
+    await callback.answer()
+
 
 @router.callback_query(AdminSellerQueueCD.filter(F.action == "view"))
+@router.callback_query(AdminSellerQueueCD.filter(F.action == "toggle"))
 async def show_seller_detail(callback: CallbackQuery, callback_data: AdminSellerQueueCD, session: AsyncSession, state: FSMContext):
-    """Уровень 2: Детализация по конкретному продавцу."""
-    await state.clear()
+    """Уровень 2: Универсальное рабочее пространство (Выбор + Действия)."""
+    
+    # 1. Работа с выделением
+    data = await state.get_data()
+    selected_ids = set(data.get("selected_ids", []))
+    
+    if callback_data.action == "toggle" and callback_data.val:
+        item_id = int(callback_data.val)
+        if item_id in selected_ids: selected_ids.remove(item_id)
+        else: selected_ids.add(item_id)
+        await state.update_data(selected_ids=list(selected_ids))
+
+    # 2. Получение данных
+    status_map = {
+        "pending": [SubmissionStatus.PENDING],
+        "in_work": [SubmissionStatus.IN_WORK],
+        "verification": [SubmissionStatus.WAIT_CONFIRM, SubmissionStatus.IN_REVIEW]
+    }
+    status_list = status_map.get(callback_data.status, [SubmissionStatus.PENDING])
 
     mod_service = ModerationService(session=session)
-    items = await mod_service.get_pending_for_seller(callback_data.user_id, limit=100)
+    items, total = await mod_service.get_pending_for_seller_paginated(
+        callback_data.user_id, status=status_list, page=callback_data.page, page_size=10
+    )
     
-    if not items:
-        await callback.answer("🔴 Очередь продавца уже разобрана!", show_alert=True)
-        await on_moderation_queue(callback, session, state)
-        return
+    if not items and callback_data.page == 0:
+        await callback.answer("🔴 Этот раздел уже разобран!", show_alert=True)
+        return await on_moderation_queue(callback, session, state, callback_data=callback_data)
 
-    # Загружаем селлера напрямую из сессии
-    from src.database.models.user import User
     seller = await session.get(User, callback_data.user_id)
-    
-    # Отказоустойчивая обработка: если селлер удален из БД, но активы остались
-    seller_name = "Удаленный агент"
-    if seller:
-        seller_name = f"@{seller.username}" if seller.username else f"ID:{seller.id}"
+    seller_name = f"@{seller.username}" if seller and seller.username else f"ID:{callback_data.user_id}"
 
-    lines = [
-        f"❖ <b>АКТИВЫ: {seller_name}</b>\n{DIVIDER}",
-        "<i>Инвентарь в очереди:</i>\n"
-    ]
+    ui_titles = {"pending": "СКЛАД", "in_work": "ВЫДАНО", "verification": "ПРОВЕРКА"}
+    title = ui_titles.get(callback_data.status, "АКТИВЫ")
 
-    for it in items:
-        wait_min = int((datetime.now(timezone.utc) - it.created_at).total_seconds() / 60)
-        sla = "🔴" if wait_min > 15 else "🟡" if wait_min > 8 else "🟢"
-        phone = it.phone_normalized
-        ident = f"...{phone[-4:]}" if phone else f"#{it.id}"
-        lines.append(f"{sla} <b>{it.category.title}</b> | <code>{ident}</code> | {it.fixed_payout_rate} USDT")
+    text = (
+        f"❖ <b>{title}: {seller_name}</b>\n"
+        f"{DIVIDER}\n"
+        f"<i>Выберите активы для массового действия или перейдите в детальный режим.</i>\n\n"
+        f"💎 <b>ВСЕГО:</b> <code>{total}</code> шт."
+    )
 
-    actual_count = len(await mod_service.get_pending_for_seller(callback_data.user_id, limit=999))
-
-    lines.append(f"\n{DIVIDER_LIGHT}\nВсего у продавца: <b>{actual_count} шт.</b>")
-
-    await callback.message.edit_text(
-        "\n".join(lines),
-        reply_markup=get_seller_detail_actions_kb(callback_data.user_id, actual_count),
+    await edit_message_text_or_caption_safe(
+        callback.message,
+        text,
+        reply_markup=get_seller_workspace_kb(
+            items=items, 
+            selected_ids=selected_ids, 
+            user_id=callback_data.user_id, 
+            status=callback_data.status, 
+            page=callback_data.page, 
+            total=total
+        ),
         parse_mode="HTML"
     )
+    await callback.answer()
+
+
+@router.callback_query(AdminSellerQueueCD.filter(F.action == "apply"))
+async def handle_mass_action(callback: CallbackQuery, callback_data: AdminSellerQueueCD, session: AsyncSession, state: FSMContext, bot: Bot):
+    """Применение массовых действий к выбранным айтемам."""
+    data = await state.get_data()
+    selected_ids = data.get("selected_ids", [])
+    
+    mod_svc = ModerationService(session=session)
+    wf_svc = WorkflowService(session=session)
+    admin = await UserService(session=session).get_by_telegram_id(callback.from_user.id)
+
+    if callback_data.val == "clear":
+        await state.update_data(selected_ids=[])
+        await callback.answer("🧹 Выбор очищен")
+        return await show_seller_detail(callback, callback_data, session, state)
+
+    if callback_data.val == "select_all":
+        # Выбираем только айтемы текущей страницы (для простоты и безопасности)
+        status_map = {"pending": [SubmissionStatus.PENDING], "in_work": [SubmissionStatus.IN_WORK], "verification": [SubmissionStatus.WAIT_CONFIRM, SubmissionStatus.IN_REVIEW]}
+        items, _ = await mod_svc.get_pending_for_seller_paginated(callback_data.user_id, status=status_map.get(callback_data.status), page=callback_data.page)
+        new_ids = set(selected_ids) | {i.id for i in items}
+        await state.update_data(selected_ids=list(new_ids))
+        await callback.answer(f"✔️ Выбрано: {len(new_ids)}")
+        return await show_seller_detail(callback, callback_data, session, state)
+
+    if callback_data.val == "take_next":
+        # Переход в детальный инспектор (берем первый доступный айтем)
+        actual_taken = await mod_svc.take_items_to_work(admin.id, 1, user_id=callback_data.user_id)
+        if actual_taken > 0:
+            from src.handlers.moderation.inspector import _render_next_item
+            await callback.message.delete()
+            return await _render_next_item(bot, callback.from_user.id, session, state)
+        else:
+            return await callback.answer("🔴 Нет доступных активов", show_alert=True)
+
+    # Массовые статусы: accept, reject, block
+    if not selected_ids:
+        return await callback.answer("⚠️ Ничего не выбрано!", show_alert=True)
+
+    await callback.answer(f"⏳ Обработка {len(selected_ids)} шт...")
+    
+    target_status = {
+        "accept": SubmissionStatus.ACCEPTED,
+        "reject": SubmissionStatus.REJECTED,
+        "block": SubmissionStatus.BLOCKED
+    }.get(callback_data.val)
+
+    if target_status:
+        count = await mod_svc.bulk_finalize_submissions(
+            submission_ids=selected_ids,
+            status=target_status,
+            admin_id=admin.id,
+            bot=bot
+        )
+        await session.commit()
+        await state.update_data(selected_ids=[])
+        await callback.answer(f"✅ Успешно обработано: {count} шт.", show_alert=True)
+        return await show_seller_detail(callback, callback_data, session, state)
+
+    await callback.answer("❌ Неизвестное действие")
+
+
+@router.callback_query(AdminSellerQueueCD.filter(F.action == "return_warehouse"))
+async def handle_return_warehouse(callback: CallbackQuery, callback_data: AdminSellerQueueCD, session: AsyncSession, state: FSMContext):
+    """Массовый возврат активов селлера на склад."""
+    status_map = {
+        "in_work": [SubmissionStatus.IN_WORK],
+        "verification": [SubmissionStatus.WAIT_CONFIRM, SubmissionStatus.IN_REVIEW]
+    }
+    mod_service = ModerationService(session=session)
+    items, total = await mod_service.get_pending_for_seller_paginated(callback_data.user_id, status=status_map.get(callback_data.status), page_size=999)
+    
+    if not items: return await callback.answer("🔴 Нечего возвращать", show_alert=True)
+        
+    wf_svc = WorkflowService(session)
+    admin = await UserService(session=session).get_by_telegram_id(callback.from_user.id)
+    
+    count = 0
+    for it in items:
+        res = await wf_svc.transition(submission_id=it.id, admin_id=admin.id, to_status=SubmissionStatus.PENDING, comment="Массовый возврат")
+        if res: count += 1
+        
+    await session.commit()
+    await callback.answer(f"✅ {count} шт. возвращено на склад", show_alert=True)
+    await show_seller_detail(callback, callback_data, session, state)

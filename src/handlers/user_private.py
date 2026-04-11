@@ -30,6 +30,7 @@ from src.handlers.seller import router as _seller_router
 from src.handlers.registration import router as _registration_router
 from src.handlers.academy import router as _academy_router
 from src.handlers.withdrawal import router as _withdrawal_router
+from src.handlers.leaderboard import router as _leaderboard_router
 
 # Корневой роутер для всего private-флоу пользователя.
 # Фильтр F.chat.type == ChatType.PRIVATE применяется ко всем дочерним роутерам.
@@ -40,5 +41,6 @@ user_private_router.callback_query.filter(F.message.chat.type == ChatType.PRIVAT
 # Порядок важен: registration — первым, чтобы /start и процесс регистрации перехватывались раньше seller-меню
 user_private_router.include_router(_registration_router)
 user_private_router.include_router(_academy_router)
+user_private_router.include_router(_leaderboard_router)
 user_private_router.include_router(_seller_router)
 user_private_router.include_router(_withdrawal_router)

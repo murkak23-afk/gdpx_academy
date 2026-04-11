@@ -36,6 +36,7 @@ HEADER_FINANCE = "💎 <b>FINANCE // CLEARING</b>"
 HEADER_QUEUE = "⚖️ <b>QUEUE // MODERATION</b>"
 HEADER_CATCON = "🛠 <b>CLUSTER // CONFIG</b>"
 HEADER_STATS = "📈 <b>ANALYTICS // REPORT</b>"
+HEADER_LEADERBOARD = "🏆 <b>VANGUARD // LEADERBOARD</b>"
 
 # Визуальные разделители
 DIVIDER = "▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰"

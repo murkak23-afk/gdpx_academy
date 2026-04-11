@@ -1,42 +1,42 @@
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING, List, Optional
 
-from sqlalchemy import func, or_, select, update
+from sqlalchemy import func, or_, select, update, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
 if TYPE_CHECKING:
     from aiogram import Bot
 
-from decimal import Decimal
-
-from src.core.logger import logger
 from src.database.models.category import Category
 from src.database.models.enums import SubmissionStatus
-from src.database.models.submission import ReviewAction, Submission
+from src.database.models.submission import Submission
 from src.database.models.user import User
+
+logger = logging.getLogger(__name__)
 
 
 class ModerationService:
+    """Сервис управления очередью модерации. Оптимизировано для точности статусов."""
+
     def __init__(self, session: AsyncSession):
         self._session = session
 
     async def get_pending_paginated(self, page: int, page_size: int = 10) -> tuple[list[Submission], int]:
-        """Возвращает страницу ожидающих активов и их общее количество (для Batch-режима)."""
-        from sqlalchemy import func
-        from sqlalchemy.orm import joinedload
-
-        from src.database.models.user import User
-
-        count_stmt = select(func.count(Submission.id)).where(Submission.status == SubmissionStatus.PENDING)
+        """Возвращает страницу ожидающих активов (не архивных)."""
+        count_stmt = select(func.count(Submission.id)).where(
+            Submission.status == SubmissionStatus.PENDING, 
+            Submission.is_archived == False
+        )
         total = (await self._session.execute(count_stmt)).scalar() or 0
 
         stmt = (
             select(Submission)
             .options(joinedload(Submission.category), joinedload(Submission.seller))
-            .where(Submission.status == SubmissionStatus.PENDING)
+            .where(Submission.status == SubmissionStatus.PENDING, Submission.is_archived == False)
             .order_by(Submission.category_id.asc(), Submission.created_at.asc())
             .offset(page * page_size)
             .limit(page_size)
@@ -53,210 +53,21 @@ class ModerationService:
         comment: str = None,
         bot: Optional["Bot"] = None,
     ) -> int:
-        """Транзакционно закрывает пачку заявок с начислением баланса и уведомлениями."""
-        from src.database.models.submission import ReviewAction
-        from src.database.models.user import User
-
-        stmt = select(Submission).options(joinedload(Submission.seller)).where(
-            Submission.id.in_(submission_ids),
-            Submission.status.in_([SubmissionStatus.PENDING, SubmissionStatus.IN_REVIEW]),
+        """Массовая финализация заявок через WorkflowService."""
+        from src.services.workflow_service import WorkflowService
+        
+        wf_svc = WorkflowService(self._session)
+        count = await wf_svc.bulk_transition(
+            submission_ids=submission_ids,
+            admin_id=admin_id,
+            to_status=status,
+            rejection_reason=reason,
+            comment=comment,
+            bot=bot
         )
-        subs = list((await self._session.execute(stmt)).scalars().all())
-
-        if not subs:
-            return 0
-
-        now = datetime.now(timezone.utc)
-        sellers_credit = {}
-
-        for sub in subs:
-            old_status = sub.status
-            sub.status = status
-            sub.admin_id = admin_id
-            sub.reviewed_at = now
-            sub.rejection_reason = reason
-            sub.rejection_comment = comment
-
-            if status == SubmissionStatus.ACCEPTED:
-                sub.accepted_amount = sub.fixed_payout_rate
-                sellers_credit[sub.user_id] = sellers_credit.get(sub.user_id, 0) + sub.fixed_payout_rate
-
-            self._session.add(
-                ReviewAction(
-                    submission_id=sub.id, admin_id=admin_id, from_status=old_status, to_status=status, comment=comment
-                )
-            )
-            
-            # Уведомление
-            if bot and sub.seller:
-                await self._send_status_notification(bot, sub, status, reason, comment)
-
-        if sellers_credit:
-            user_stmt = select(User).where(User.id.in_(sellers_credit.keys()))
-            users = list((await self._session.execute(user_stmt)).scalars().all())
-            for user in users:
-                user.pending_balance = (user.pending_balance or 0) + sellers_credit[user.id]
-
-        await self._session.flush()
-        return len(subs)
-
-    async def _send_status_notification(
-        self, 
-        bot: "Bot", 
-        sub: Submission, 
-        status: SubmissionStatus, 
-        reason: str | None = None, 
-        comment: str | None = None
-    ):
-        """Вспомогательный метод для отправки уведомления продавцу."""
-        try:
-            phone = sub.phone_normalized or f"#{sub.id}"
-            msg_text = ""
-
-            if status == SubmissionStatus.ACCEPTED:
-                msg_text = (
-                    f"✅ <b>Ваша симка принята!</b>\n\n"
-                    f"Номер: <code>{phone}</code>\n"
-                    f"Статус: Зачёт\n"
-                    f"Выплата начислена к балансу! 💰"
-                )
-            elif status == SubmissionStatus.REJECTED:
-                msg_text = (
-                    f"❌ <b>Симка отклонена (БРАК)</b>\n\n"
-                    f"Номер: <code>{phone}</code>\n"
-                    f"Причина: {reason or 'Не указана'}\n"
-                    f"Комментарий модератора: {comment or 'Нет'}"
-                )
-            elif status == SubmissionStatus.BLOCKED:
-                msg_text = (
-                    f"🚫 <b>Симка заблокирована</b>\n\n"
-                    f"Номер: <code>{phone}</code>\n"
-                    f"Причина: {reason or 'Не указана'}\n"
-                    f"Комментарий: {comment or 'Нет'}"
-                )
-            elif status == SubmissionStatus.NOT_A_SCAN:
-                msg_text = (
-                    f"📵 <b>Не скан</b>\n\n"
-                    f"Номер: <code>{phone}</code>\n"
-                    f"Причина: {reason or 'Не указана'}\n"
-                    f"Комментарий: {comment or 'Нет'}"
-                )
-
-            if msg_text:
-                await bot.send_message(chat_id=sub.seller.telegram_id, text=msg_text, parse_mode="HTML")
-        except Exception as e:
-            logger.error(f"Failed to send notification to seller {sub.user_id}: {e}")
-
-    async def get_queue_stats(self) -> dict:
-        """Реальная статистика очереди для дашборда."""
-        now = datetime.now(timezone.utc)
-        today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
-
-        total_stmt = select(func.count(Submission.id)).where(Submission.status == SubmissionStatus.PENDING)
-        total_pending = (await self._session.execute(total_stmt)).scalar() or 0
-
-        in_work_stmt = select(func.count(Submission.id)).where(Submission.status == SubmissionStatus.IN_REVIEW)
-        in_work = (await self._session.execute(in_work_stmt)).scalar() or 0
-
-        processed_stmt = select(func.count(Submission.id)).where(
-            Submission.status.in_(
-                [
-                    SubmissionStatus.ACCEPTED,
-                    SubmissionStatus.REJECTED,
-                    SubmissionStatus.BLOCKED,
-                    SubmissionStatus.NOT_A_SCAN,
-                ]
-            ),
-            Submission.reviewed_at >= today_start,
-        )
-        processed_today = (await self._session.execute(processed_stmt)).scalar() or 0
-
-        return {"total_pending": total_pending, "in_work": in_work, "processed_today": processed_today}
-
-    async def get_my_active_paginated(
-        self, admin_id: int, page: int, page_size: int = 10
-    ) -> tuple[list[Submission], int]:
-        """Возвращает страницу активов В РАБОТЕ у конкретного админа (для Batch-режима)."""
-        from sqlalchemy import func
-        from sqlalchemy.orm import joinedload
-
-        count_stmt = select(func.count(Submission.id)).where(
-            Submission.status == SubmissionStatus.IN_REVIEW, Submission.admin_id == admin_id
-        )
-        total = (await self._session.execute(count_stmt)).scalar() or 0
-
-        stmt = (
-            select(Submission)
-            .options(joinedload(Submission.category), joinedload(Submission.seller))
-            .where(Submission.status == SubmissionStatus.IN_REVIEW, Submission.admin_id == admin_id)
-            .order_by(Submission.category_id.asc(), Submission.created_at.asc())
-            .offset(page * page_size)
-            .limit(page_size)
-        )
-        res = await self._session.execute(stmt)
-        return list(res.scalars().all()), total
-
-    async def get_pending_queue(self, limit: int = 50) -> List[Submission]:
-        """Получает список активов, отсортированных по приоритету."""
-        stmt = (
-            select(Submission)
-            .options(joinedload(Submission.category))  # ФИКС MissingGreenlet
-            .join(Category, Submission.category_id == Category.id)
-            .where(Submission.status == SubmissionStatus.PENDING)
-            .order_by(Category.is_priority.desc(), Submission.created_at.asc())
-            .limit(limit)
-        )
-        result = await self._session.execute(stmt)
-        return list(result.scalars().all())
-
-    async def take_items_to_work(
-        self, admin_id: int, count: int, only_priority: bool = False, user_id: Optional[int] = None
-    ) -> int:
-        """Бронирует N активов за админом (по внутреннему admin_id)."""
-        query = (
-            select(Submission.id)
-            .join(Category, Submission.category_id == Category.id)
-            .where(Submission.status == SubmissionStatus.PENDING)
-        )
-        if only_priority:
-            query = query.where(Category.is_priority == True)
-        if user_id:
-            query = query.where(Submission.user_id == user_id)
-
-        query = query.order_by(Category.is_priority.desc(), Submission.created_at.asc()).limit(count)
-        ids_res = await self._session.execute(query)
-        target_ids = [r[0] for r in ids_res.all()]
-
-        if not target_ids:
-            return 0
-
-        stmt = (
-            update(Submission)
-            .where(Submission.id.in_(target_ids))
-            .values(status=SubmissionStatus.IN_REVIEW, admin_id=admin_id)
-        )
-        await self._session.execute(stmt)
-        await self._session.flush()
-        return len(target_ids)
-
-    async def get_my_active_items(self, admin_id: int) -> int:
-        """Считает количество взятых в работу активов (по внутреннему admin_id)."""
-        stmt = select(func.count(Submission.id)).where(
-            Submission.status == SubmissionStatus.IN_REVIEW, Submission.admin_id == admin_id
-        )
-        return (await self._session.execute(stmt)).scalar() or 0
-
-    async def get_next_my_item(self, admin_id: int) -> Optional[Submission]:
-        """Берет следующую карточку из тех, что уже 'в работе' у админа."""
-        stmt = (
-            select(Submission)
-            .options(joinedload(Submission.category))  # ФИКС MissingGreenlet
-            .where(Submission.status == SubmissionStatus.IN_REVIEW, Submission.admin_id == admin_id)
-            .order_by(Submission.created_at.asc())
-            .limit(1)
-        )
-        res = await self._session.execute(stmt)
-        return res.scalar_one_or_none()
+        if count > 0:
+            await self._session.commit()
+        return count
 
     async def finalize_submission(
         self,
@@ -265,81 +76,260 @@ class ModerationService:
         reason: str | None = None,
         comment: str | None = None,
         bot: Optional["Bot"] = None,
+        admin_id: int | None = None,
     ) -> bool:
-        """Финальное решение по активу (Зачёт/Брак/Блок). Возвращает True при успехе."""
-        stmt = select(Submission).options(joinedload(Submission.seller)).where(Submission.id == submission_id)
-        res = await self._session.execute(stmt)
-        sub = res.scalar_one_or_none()
+        """Финальное решение по активу через WorkflowService."""
+        from src.services.workflow_service import WorkflowService
+        
+        wf_svc = WorkflowService(self._session)
+        
+        if not admin_id:
+            sub = await self._session.get(Submission, submission_id)
+            admin_id = sub.admin_id if sub else None
 
-        # Разрешаем финализацию только если статус PENDING или IN_REVIEW
-        if not sub or sub.status not in (SubmissionStatus.PENDING, SubmissionStatus.IN_REVIEW):
-            logger.warning(f"Submission {submission_id} not reviewable. Status: {sub.status if sub else 'None'}")
+        if not admin_id:
+            logger.error(f"Cannot finalize #{submission_id} without admin_id")
             return False
 
-        old_status = sub.status
-        # Устанавливаем статус и время проверки
-        sub.status = status
-        sub.rejection_reason = reason
-        sub.rejection_comment = comment
-        sub.reviewed_at = datetime.now(timezone.utc)
-
-        try:
-            # Если ЗАЧЁТ - начисляем выплату селлеру
-            if status == SubmissionStatus.ACCEPTED:
-                amount = sub.accepted_amount or sub.fixed_payout_rate
-
-                # Начисляем на баланс
-                user_stmt = select(User).where(User.id == sub.user_id)
-                user_res = await self._session.execute(user_stmt)
-                seller = user_res.scalar_one_or_none()
-                if seller:
-                    seller.pending_balance += amount
-                    sub.accepted_amount = amount
-                    logger.info(f"Admin {sub.admin_id} accepted sub {submission_id}. Credited {amount}")
-
-            # Добавляем запись в аудит
-            self._session.add(
-                ReviewAction(
-                    submission_id=sub.id,
-                    admin_id=sub.admin_id,
-                    from_status=old_status,
-                    to_status=status,
-                    comment=comment or reason,
-                )
-            )
+        res = await wf_svc.transition(
+            submission_id=submission_id,
+            admin_id=admin_id,
+            to_status=status,
+            rejection_reason=reason,
+            comment=comment,
+            bot=bot
+        )
+        if res:
             await self._session.commit()
-
-            # --- УВЕДОМЛЕНИЕ ПРОДАВЦУ ---
-            if bot and sub.seller:
-                await self._send_status_notification(bot, sub, status, reason, comment)
-            # ----------------------------
-
             return True
-        except Exception as e:
-            await self._session.rollback()
-            logger.exception(f"Critical error in finalize_submission({submission_id}): {e}")
+        return False
+
+    async def auto_finalize_by_phone(
+        self, 
+        phone_query: str, 
+        status: SubmissionStatus, 
+        reason: str, 
+        comment: str, 
+        bot: Optional["Bot"] = None,
+        search_status: SubmissionStatus = SubmissionStatus.IN_WORK
+    ) -> bool:
+        """
+        Ищет актив по суффиксу номера в указанном статусе и финализирует его.
+        Используется в AUTO-FIX (топики).
+        """
+        suffix = phone_query[-5:]
+        if len(suffix) < 4:
+            suffix = phone_query[-4:]
+
+        stmt = (
+            select(Submission)
+            .options(joinedload(Submission.seller))
+            .where(
+                Submission.phone_normalized.like(f"%{suffix}"),
+                Submission.status == search_status,
+                Submission.is_archived == False
+            )
+            .order_by(Submission.created_at.desc())
+            .limit(1)
+        )
+        res = await self._session.execute(stmt)
+        item = res.scalar_one_or_none()
+
+        if not item:
             return False
 
-    async def get_pending_sellers(self) -> List[dict]:
-        """Группировка очереди по продавцам."""
-        from src.database.models.user import User
+        return await self.finalize_submission(
+            submission_id=item.id,
+            status=status,
+            reason=reason,
+            comment=comment,
+            bot=bot,
+            admin_id=item.admin_id or 1 # Если админ не назначен, берем системного
+        )
 
+    async def get_recent_blocked_grouped(self) -> List[dict]:
+        """Возвращает список заблокированных активов за 24ч с группировкой по продавцу и оператору."""
+        now = datetime.now(timezone.utc)
+        yesterday = now - timedelta(hours=24)
+
+        stmt = (
+            select(
+                User.username,
+                Category.title,
+                func.count(Submission.id),
+                Submission.status
+            )
+            .join(User, Submission.user_id == User.id)
+            .join(Category, Submission.category_id == Category.id)
+            .where(
+                Submission.status.in_([SubmissionStatus.BLOCKED, SubmissionStatus.NOT_A_SCAN]),
+                Submission.reviewed_at >= yesterday,
+                Submission.is_archived == False
+            )
+            .group_by(User.username, Category.title, Submission.status)
+            .order_by(User.username.asc(), Category.title.asc())
+        )
+        res = await self._session.execute(stmt)
+        
+        # Превращаем в удобный формат
+        items = []
+        for row in res.all():
+            items.append({
+                "seller": row[0] or "Unknown",
+                "operator": row[1],
+                "count": row[2],
+                "status": "БЛОК" if row[3] == SubmissionStatus.BLOCKED else "НЕ СКАН"
+            })
+        return items
+
+    async def get_reform_stats(self) -> dict:
+        """Статистика для новой структуры: Склад, Выданные, Проверка, Блокнутые."""
+        now = datetime.now(timezone.utc)
+
+        # 1. Склад (PENDING)
+        warehouse = await self._session.scalar(
+            select(func.count(Submission.id)).where(Submission.status == SubmissionStatus.PENDING, Submission.is_archived == False)
+        ) or 0
+
+        # 2. Выданные (IN_WORK)
+        issued = await self._session.scalar(
+            select(func.count(Submission.id)).where(Submission.status == SubmissionStatus.IN_WORK, Submission.is_archived == False)
+        ) or 0
+
+        # 3. Проверка (WAIT_CONFIRM + IN_REVIEW)
+        verification = await self._session.scalar(
+            select(func.count(Submission.id)).where(
+                Submission.status.in_([SubmissionStatus.WAIT_CONFIRM, SubmissionStatus.IN_REVIEW]), 
+                Submission.is_archived == False
+            )
+        ) or 0
+
+        # 4. Блокнутые (BLOCKED + NOT_A_SCAN за последние 24 часа)
+        yesterday = now - timedelta(hours=24)
+        blocked = await self._session.scalar(
+            select(func.count(Submission.id)).where(
+                Submission.status.in_([SubmissionStatus.BLOCKED, SubmissionStatus.NOT_A_SCAN]),
+                Submission.reviewed_at >= yesterday,
+                Submission.is_archived == False
+            )
+        ) or 0
+
+        return {
+            "warehouse": warehouse,
+            "issued": issued,
+            "verification": verification,
+            "blocked": blocked
+        }
+
+    async def get_queue_stats(self) -> dict:
+        """Статистика склада и проверки для дашборда."""
+        now = datetime.now(timezone.utc)
+        today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+
+        # Склад
+        warehouse = await self._session.scalar(
+            select(func.count(Submission.id)).where(
+                Submission.status == SubmissionStatus.PENDING, 
+                Submission.is_archived == False
+            )
+        ) or 0
+
+        # Проверка
+        verification = await self._session.scalar(
+            select(func.count(Submission.id)).where(
+                Submission.status.in_([SubmissionStatus.WAIT_CONFIRM, SubmissionStatus.IN_REVIEW]), 
+                Submission.is_archived == False
+            )
+        ) or 0
+
+        # Обработано сегодня
+        processed_today = await self._session.scalar(
+            select(func.count(Submission.id)).where(
+                Submission.status.in_([
+                    SubmissionStatus.ACCEPTED,
+                    SubmissionStatus.REJECTED,
+                    SubmissionStatus.BLOCKED,
+                    SubmissionStatus.NOT_A_SCAN,
+                ]),
+                Submission.reviewed_at >= today_start,
+                Submission.is_archived == False
+            )
+        ) or 0
+
+        return {
+            "warehouse": warehouse,
+            "verification": verification,
+            "processed": processed_today
+        }
+
+    async def get_waiting_confirmation_items(self, page: int = 0, page_size: int = 10) -> tuple[List[Submission], int]:
+        """Активы, которые требуют ручного зачёта, с пагинацией."""
+        one_hour_ago = datetime.now(timezone.utc) - timedelta(hours=1)
+        
+        base_query = (
+            select(Submission)
+            .where(
+                or_(
+                    and_(Submission.status == SubmissionStatus.IN_WORK, Submission.assigned_at <= one_hour_ago),
+                    Submission.status == SubmissionStatus.WAIT_CONFIRM,
+                    Submission.status == SubmissionStatus.IN_REVIEW
+                ),
+                Submission.is_archived == False
+            )
+        )
+
+        # Считаем общее количество
+        count_stmt = select(func.count()).select_from(base_query.subquery())
+        total = await self._session.scalar(count_stmt) or 0
+
+        # Получаем страницу данных
+        stmt = (
+            base_query
+            .options(joinedload(Submission.category), joinedload(Submission.seller))
+            .order_by(Submission.assigned_at.asc())
+            .offset(page * page_size)
+            .limit(page_size)
+        )
+        res = await self._session.execute(stmt)
+        return list(res.scalars().all()), total
+
+    async def get_my_active_items(self, admin_id: int) -> int:
+        """Считает количество взятых в работу активов."""
+        stmt = select(func.count(Submission.id)).where(
+            Submission.status == SubmissionStatus.IN_REVIEW, 
+            Submission.admin_id == admin_id,
+            Submission.is_archived == False
+        )
+        return (await self._session.execute(stmt)).scalar() or 0
+
+    async def get_pending_sellers(self, status: SubmissionStatus | List[SubmissionStatus] = SubmissionStatus.PENDING) -> List[dict]:
+        """Группировка очереди по продавцам (по списку статусов)."""
+        if not isinstance(status, list):
+            status = [status]
+            
         stmt = (
             select(User, func.count(Submission.id), func.min(Submission.created_at))
             .join(Submission, Submission.user_id == User.id)
-            .where(Submission.status == SubmissionStatus.PENDING)
+            .where(Submission.status.in_(status), Submission.is_archived == False)
             .group_by(User.id)
             .order_by(func.min(Submission.created_at).asc())
         )
         res = await self._session.execute(stmt)
         return [{"user_id": r[0].id, "username": r[0].username, "count": r[1], "oldest": r[2]} for r in res.all()]
 
-    async def get_pending_for_seller(self, user_id: int, limit: int = 50) -> List[Submission]:
-        """Список PENDING активов конкретного продавца."""
+    async def get_pending_for_seller(self, user_id: int, status: SubmissionStatus | List[SubmissionStatus] = SubmissionStatus.PENDING, limit: int = 50) -> List[Submission]:
+        """Список активов конкретного продавца в указанных статусах."""
+        if not isinstance(status, list):
+            status = [status]
+            
         stmt = (
             select(Submission)
-            .options(joinedload(Submission.category))  # ФИКС MissingGreenlet
-            .where(Submission.user_id == user_id, Submission.status == SubmissionStatus.PENDING)
+            .options(joinedload(Submission.category))
+            .where(
+                Submission.user_id == user_id, 
+                Submission.status.in_(status),
+                Submission.is_archived == False
+            )
             .order_by(Submission.created_at.asc())
             .limit(limit)
         )
@@ -347,26 +337,21 @@ class ModerationService:
         return list(res.scalars().all())
 
     async def search_pending_assets(self, query: str, filter_type: str = "all", limit: int = 50) -> List[Submission]:
-        """Интеллектуальный многопоточный поиск по активам."""
-        from src.database.models.user import User
-
+        """Интеллектуальный поиск по активам."""
         stmt = (
             select(Submission)
             .options(joinedload(Submission.category), joinedload(Submission.seller))
             .join(Category, Submission.category_id == Category.id)
             .join(User, Submission.user_id == User.id)
-            .where(Submission.status == SubmissionStatus.PENDING)
+            .where(Submission.status == SubmissionStatus.PENDING, Submission.is_archived == False)
         )
 
-        # Очищаем запрос от лишних символов
         clean_query = query.strip().replace("+", "").replace(" ", "")
 
         if clean_query:
-            # Если запрос похож на окончание номера (4-5 цифр)
             if clean_query.isdigit() and 4 <= len(clean_query) <= 6:
                 stmt = stmt.where(Submission.phone_normalized.like(f"%{clean_query}"))
             else:
-                # Поиск по полному вхождению номера, ID или юзернейму
                 stmt = stmt.where(
                     or_(
                         Submission.phone_normalized.contains(clean_query),
@@ -389,20 +374,92 @@ class ModerationService:
         return list(res.scalars().all())
 
     async def take_specific_items_to_work(self, admin_id: int, item_ids: List[int]) -> int:
-        """Хирургическое бронирование конкретных карточек после поиска."""
+        """Бронирование конкретных карточек (из Склада или Проверки)."""
         if not item_ids:
             return 0
         stmt = (
             update(Submission)
-            .where(Submission.id.in_(item_ids), Submission.status == SubmissionStatus.PENDING)
-            .values(status=SubmissionStatus.IN_REVIEW, admin_id=admin_id)
+            .where(
+                Submission.id.in_(item_ids), 
+                Submission.status.in_([SubmissionStatus.PENDING, SubmissionStatus.WAIT_CONFIRM]),
+                Submission.is_archived == False
+            )
+            .values(
+                status=SubmissionStatus.IN_REVIEW, 
+                admin_id=admin_id,
+                assigned_at=datetime.now(timezone.utc),
+                last_status_change=datetime.now(timezone.utc)
+            )
         )
         res = await self._session.execute(stmt)
         await self._session.flush()
         return res.rowcount
 
+    async def take_items_to_work(self, admin_id: int, limit: int, user_id: int | None = None) -> int:
+        """Массовое бронирование карточек (из Склада или Проверки)."""
+        # Сначала находим ID подходящих карточек
+        stmt = (
+            select(Submission.id)
+            .where(
+                Submission.status.in_([SubmissionStatus.PENDING, SubmissionStatus.WAIT_CONFIRM]),
+                Submission.is_archived == False
+            )
+        )
+        if user_id:
+            stmt = stmt.where(Submission.user_id == user_id)
+        
+        stmt = stmt.order_by(Submission.created_at.asc()).limit(limit).with_for_update(skip_locked=True)
+        res = await self._session.execute(stmt)
+        item_ids = [r[0] for r in res.all()]
+
+        if not item_ids:
+            return 0
+
+        # Обновляем их статус
+        upd = (
+            update(Submission)
+            .where(Submission.id.in_(item_ids))
+            .values(
+                status=SubmissionStatus.IN_REVIEW,
+                admin_id=admin_id,
+                assigned_at=datetime.now(timezone.utc),
+                last_status_change=datetime.now(timezone.utc)
+            )
+        )
+        await self._session.execute(upd)
+        await self._session.flush()
+        return len(item_ids)
+
+    async def get_pending_for_seller_paginated(
+        self, user_id: int, status: List[SubmissionStatus], page: int = 0, page_size: int = 10
+    ) -> tuple[List[Submission], int]:
+        """Возвращает карточки продавца с пагинацией и общим количеством."""
+        base_query = (
+            select(Submission)
+            .where(
+                Submission.user_id == user_id,
+                Submission.status.in_(status),
+                Submission.is_archived == False
+            )
+        )
+
+        # Считаем общее количество
+        count_stmt = select(func.count()).select_from(base_query.subquery())
+        total = await self._session.scalar(count_stmt) or 0
+
+        # Получаем страницу данных
+        stmt = (
+            base_query
+            .options(joinedload(Submission.category))
+            .order_by(Submission.created_at.asc())
+            .offset(page * page_size)
+            .limit(page_size)
+        )
+        res = await self._session.execute(stmt)
+        return list(res.scalars().all()), total
+
     async def get_admin_daily_stats(self, admin_id: int) -> tuple[int, int]:
-        """Возвращает личную статистику модератора за сегодня (зачеты, отказы)."""
+        """Личная статистика модератора за сегодня."""
         from sqlalchemy import case
 
         now = datetime.now(timezone.utc)
@@ -428,45 +485,11 @@ class ModerationService:
             return int(row[0] or 0), int(row[1] or 0)
         return 0, 0
 
-    async def auto_finalize_by_phone(
-        self, phone_query: str, status: SubmissionStatus, reason: str, comment: str, is_partial: bool = False
-    ) -> list[Submission]:
-        """Автоматическая дефектовка симок (выданных в группы), по полному номеру или суффиксу."""
-        from src.database.models.submission import ReviewAction
-
-        stmt = select(Submission).where(Submission.status == SubmissionStatus.IN_REVIEW)
-
-        if is_partial:
-            stmt = stmt.where(Submission.phone_normalized.like(f"%{phone_query}"))
-        else:
-            stmt = stmt.where(Submission.phone_normalized == phone_query)
-
-        subs = list((await self._session.execute(stmt)).scalars().all())
-        if not subs:
-            return []
-
-        now = datetime.now(timezone.utc)
-        for sub in subs:
-            old_status = sub.status
-            sub.status = status
-            sub.reviewed_at = now
-            sub.rejection_reason = reason
-            sub.rejection_comment = comment
-
-            self._session.add(
-                ReviewAction(
-                    submission_id=sub.id, admin_id=None, from_status=old_status, to_status=status, comment=comment
-                )
-            )
-
-        await self._session.flush()
-        return subs
-
     async def undo_submission_action(self, submission_id: int, admin_id: int) -> tuple[bool, str]:
-        """
-        Откатывает последнее действие модератора, если прошло не более 60 секунд.
-        Возвращает (Успех, Сообщение_для_UI).
-        """
+        """Откат действия модератора через WorkflowService."""
+        from src.database.models.submission import ReviewAction
+        from decimal import Decimal
+
         try:
             sub = await self._session.get(Submission, submission_id)
             if not sub or sub.status == SubmissionStatus.PENDING:
@@ -479,7 +502,6 @@ class ModerationService:
             if sub.reviewed_at and (now - sub.reviewed_at).total_seconds() > 60:
                 return False, "⏳ Время вышло! Откат возможен только в течение 60 секунд."
 
-            # Ищем последнюю запись в аудите
             action_stmt = (
                 select(ReviewAction)
                 .where(ReviewAction.submission_id == submission_id)
@@ -491,29 +513,24 @@ class ModerationService:
             if not last_action:
                 return False, "История действий не найдена."
 
-            # Финансовый откат
             if sub.status == SubmissionStatus.ACCEPTED:
                 seller = await self._session.get(User, sub.user_id)
                 if seller:
                     seller.pending_balance = (seller.pending_balance or Decimal("0.0")) - (
                         sub.accepted_amount or Decimal("0.0")
                     )
-                    logger.info(f"Admin {admin_id} reverted sub {submission_id}. Seller {seller.id} balance adjusted.")
                 sub.accepted_amount = None
 
-            # Возвращаем карточку в работу
             sub.status = SubmissionStatus.IN_REVIEW
             sub.reviewed_at = None
             sub.rejection_reason = None
             sub.rejection_comment = None
 
-            # Удаляем запись об ошибочном действии
             await self._session.delete(last_action)
             await self._session.commit()
 
-            logger.info(f"Undo success: Sub {submission_id} by admin {admin_id}")
             return True, "↩️ Действие успешно отменено. Карточка возвращена вам в работу."
         except Exception as e:
             await self._session.rollback()
-            logger.exception(f"Critical error in undo_submission_action({submission_id}): {e}")
+            logger.exception(f"Error in undo_submission_action: {e}")
             return False, "❌ Ошибка при отмене действия."

@@ -3,15 +3,18 @@
 from __future__ import annotations
 
 from aiogram import F, Router
+from aiogram.fsm.context import FSMContext
 from aiogram.types import (
     CallbackQuery,
     InputMediaPhoto,
+    Message,
 )
 
+from datetime import datetime, timedelta, timezone
 from src.core.config import get_settings
 from src.faq import FAQ_CARDS, get_faq_by_id
 from src.keyboards.base import PremiumBuilder
-from src.keyboards.factory import SellerInfoCD, SellerMenuCD
+from src.keyboards.factory import NavCD, SellerInfoCD, SellerMenuCD, SellerArchiveCD
 from src.keyboards.info import (
     get_back_to_info_kb,
     get_back_to_manual_level_kb,
@@ -20,61 +23,151 @@ from src.keyboards.info import (
     get_manual_levels_kb,
     get_manuals_in_level_kb,
 )
+from src.keyboards.seller import get_seller_archive_kb
 from src.manuals import MANUAL_LEVELS, get_manual_by_id, get_manuals_by_level
+from src.services.user_service import UserService
+from src.services.admin_stats_service import AdminStatsService
 from src.utils.media import media
 from src.utils.text_format import edit_message_text_or_caption_safe
-from src.utils.ui_builder import DIVIDER
+from src.utils.ui_builder import DIVIDER, DIVIDER_LIGHT
 
 router = Router(name="seller-info-router")
 
 
+@router.callback_query(SellerMenuCD.filter(F.action == "archive"))
+@router.callback_query(SellerArchiveCD.filter())
+async def on_archive_open(
+    callback: CallbackQuery, 
+    callback_data: SellerMenuCD | SellerArchiveCD, 
+    session: AsyncSession
+) -> None:
+    """Отрисовка раздела Архив с детальной статистикой."""
+    try:
+        user = await UserService(session=session).get_by_telegram_id(callback.from_user.id)
+        
+        # 1. Определение периода
+        period = "all"
+        if isinstance(callback_data, SellerArchiveCD):
+            period = callback_data.period
+            
+        # 2. Вычисление start_date для статистики (по МСК)
+        now_utc = datetime.now(timezone.utc)
+        start_date = None
+        
+        if period == "yesterday":
+            msk_tz = timezone(timedelta(hours=3))
+            today_msk = datetime.now(msk_tz).replace(hour=0, minute=0, second=0, microsecond=0)
+            yesterday_msk = today_msk - timedelta(days=1)
+            start_date = yesterday_msk.astimezone(timezone.utc)
+        elif period == "7d":
+            start_date = now_utc - timedelta(days=7)
+        elif period == "30d":
+            start_date = now_utc - timedelta(days=30)
+            
+        # 3. Сбор данных
+        stats_svc = AdminStatsService(session)
+        stats = await stats_svc.get_user_archive_stats(user.id, start_date)
+        
+        period_labels = {
+            "yesterday": "ВЧЕРА",
+            "7d": "ПОСЛЕДНИЕ 7 ДНЕЙ",
+            "30d": "ПОСЛЕДНИЕ 30 ДНЕЙ",
+            "all": "ЗА ВСЁ ВРЕМЯ"
+        }
+        
+        label = period_labels.get(period, "АРХИВ")
+        
+        # 4. Формирование текста кластеров
+        clusters_text = ""
+        if stats["clusters"]:
+            clusters_text = "\n📦 <b>КЛАСТЕРЫ В АРХИВЕ:</b>\n"
+            for c in stats["clusters"]:
+                clusters_text += f" ├ {c['title']}: <code>{c['count']}</code> шт.\n"
+        
+        text = (
+            f"📦 <b>АРХИВ // STORAGE</b>\n"
+            f"📅 <b>Период:</b> <code>{label}</code>\n"
+            f"{DIVIDER}\n"
+            f"🟢 <b>Принято:</b> <code>{stats['accepted']}</code> шт.\n"
+            f"🔴 <b>Брак:</b> <code>{stats['rejected']}</code> шт.\n"
+            f"🚫 <b>Блок:</b> <code>{stats['blocked']}</code> шт.\n"
+            f"📵 <b>Не скан:</b> <code>{stats['not_a_scan']}</code> шт.\n\n"
+            f"💰 <b>Ценность:</b> <code>{stats['total_value']:.2f}</code> USDT\n"
+            f"⭐ <b>Сред. ставка:</b> <code>{stats['avg_rate']:.2f}</code> USDT\n"
+            f"{clusters_text}"
+            f"{DIVIDER_LIGHT}\n"
+            f"<i>В архиве хранятся активы, загруженные до 00:00 МСК текущего дня.</i>"
+        )
+        
+        banner = media.get("academy.jpg")
+        kb = get_seller_archive_kb(period)
+        
+        try:
+            await callback.message.edit_media(
+                media=InputMediaPhoto(media=banner, caption=text, parse_mode="HTML"),
+                reply_markup=kb
+            )
+        except Exception:
+            await edit_message_text_or_caption_safe(callback.message, text, reply_markup=kb)
+        await callback.answer()
+        
+    except Exception as e:
+        logger.exception(f"Archive error: {e}")
+        await callback.answer("⚠️ Ошибка открытия архива", show_alert=True)
+
+
 def _info_root_text() -> str:
     return (
-        "<b>❖ GDPX // БАЗА ЗНАНИЙ</b>\n\n"
-        "Добро пожаловать в закрытую Академию GDPX. Здесь собраны все необходимые "
-        "протоколы и регламенты для эффективной работы с eSIM.\n\n"
-        "<b>СТРУКТУРА БАЗЫ:</b>\n"
-        "❂ <b>GDPX // ACADEMY //</b>\n"
-        "└ Прямой чат сообщества и оперативная поддержка.\n\n"
-        "❂ <b>F.A.Q. //</b>\n"
-        "└ Ответы на финансовые и технические вопросы.\n\n"
-        "❂ <b>МАНУАЛЫ //</b>\n"
-        "└ Пошаговые алгоритмы действий для селлеров.\n\n"
+        "<b>❖ GDPX // СТРУКТУРА БАЗЫ:</b>\n"
+        f"{DIVIDER}\n\n"
+        "Добро пожаловать в закрытую <b>Академию GDPX</b>.\n\n"
+        "- <i>Здесь собраны все необходимые протоколы\n"
+        "и регламенты для эффективной работы с eSIM.</i>\n\n"
+        "❂ <b>GDPX // ACADEMIC CHAT</b>\n"
+        "└ <i>Прямой чат сообщества и оперативная поддержка.</i>\n\n"
+        "❂ <b>F.A.Q.</b>\n"
+        "└ <i>Ответы на финансовые и технические вопросы.</i>\n\n"
+        "❂ <b>Мануалы.</b>\n"
+        "└ <i>Пошаговые алгоритмы действий для селлеров.</i>\n\n"
         f"{DIVIDER}\n"
-        "<i>Изучите материалы перед началом работы. Знания — это ваш капитал.</i>"
+        "Изучите материалы перед началом работы.\n" 
+        "Знания - ваш капитал."
     )
 
 
+from aiogram.filters import Command
 from src.core.logger import logger
 
 # --- БАЗА ЗНАНИЙ (ГЛАВНАЯ) ---
 
 
-@router.callback_query(F.data == "mod_exit")  # Возврат из подразделов (обработка селлерского меню)
 @router.callback_query(SellerMenuCD.filter(F.action == "info"))
-async def on_info_root(callback: CallbackQuery):
+async def on_info_root(event: Message | CallbackQuery, state: FSMContext):
     """Главный экран Базы Знаний."""
     try:
+        await state.clear()
         settings = get_settings()
         filename = "baza.jpg"
         banner = media.get(filename)
 
-        await callback.answer()
-        try:
-            await callback.message.edit_media(
-                media=InputMediaPhoto(media=banner, caption=_info_root_text(), parse_mode="HTML"),
-                reply_markup=get_info_root_kb(settings.brand_chat_url, settings.brand_channel_url),
-            )
-        except Exception:
-            await edit_message_text_or_caption_safe(
-                callback.message,
-                _info_root_text(),
-                reply_markup=get_info_root_kb(settings.brand_chat_url, settings.brand_channel_url),
-                parse_mode="HTML",
-            )
+        kb = get_info_root_kb(settings.brand_chat_url, settings.brand_channel_url)
+        text = _info_root_text()
+
+        if isinstance(event, Message):
+            await event.answer_photo(photo=banner, caption=text, reply_markup=kb, parse_mode="HTML")
+        else:
+            await event.answer()
+            try:
+                await event.message.edit_media(
+                    media=InputMediaPhoto(media=banner, caption=text, parse_mode="HTML"),
+                    reply_markup=kb,
+                )
+            except Exception:
+                await edit_message_text_or_caption_safe(event.message, text, reply_markup=kb)
     except Exception as e:
         logger.exception(f"Error in on_info_root: {e}")
-        await callback.answer("⚠️ Ошибка при открытии Базы Знаний", show_alert=True)
+        if isinstance(event, CallbackQuery):
+            await event.answer("⚠️ Ошибка открытия базы", show_alert=True)
 
 
 # --- F.A.Q. ---
@@ -88,18 +181,20 @@ async def on_info_faq(callback: CallbackQuery):
         banner = media.get(filename)
 
         text = (
-            f"❖ <b>GDPX // F.A.Q.</b>\n"
+            f"❖ <b>GDPX // F.A.Q. - ВОПРОСЫ</b>\n"
             f"{DIVIDER}\n"
             f"База ответов на часто задаваемые вопросы.\n"
             f"Выберите интересующую категорию:\n\n"
-            f"📡 <b>STATUS:</b> <code>STABLE</code>"
         )
 
         await callback.answer()
-        await callback.message.edit_media(
-            media=InputMediaPhoto(media=banner, caption=text, parse_mode="HTML"),
-            reply_markup=get_faq_list_kb(FAQ_CARDS),
-        )
+        try:
+            await callback.message.edit_media(
+                media=InputMediaPhoto(media=banner, caption=text, parse_mode="HTML"),
+                reply_markup=get_faq_list_kb(FAQ_CARDS),
+            )
+        except Exception:
+            await edit_message_text_or_caption_safe(callback.message, text, reply_markup=get_faq_list_kb(FAQ_CARDS))
     except Exception as e:
         logger.exception(f"Error in on_info_faq: {e}")
         await callback.answer("⚠️ Ошибка при открытии FAQ", show_alert=True)
@@ -117,10 +212,13 @@ async def on_faq_item(callback: CallbackQuery, callback_data: SellerInfoCD):
         banner = media.get(filename)
 
         await callback.answer()
-        await callback.message.edit_media(
-            media=InputMediaPhoto(media=banner, caption=card.text, parse_mode="HTML"),
-            reply_markup=get_back_to_info_kb("faq"),
-        )
+        try:
+            await callback.message.edit_media(
+                media=InputMediaPhoto(media=banner, caption=card.text, parse_mode="HTML"),
+                reply_markup=get_back_to_info_kb("faq"),
+            )
+        except Exception:
+            await edit_message_text_or_caption_safe(callback.message, card.text, reply_markup=get_back_to_info_kb("faq"))
     except Exception as e:
         logger.exception(f"Error in on_faq_item: {e}")
         await callback.answer("⚠️ Ошибка при чтении статьи", show_alert=True)
@@ -137,17 +235,19 @@ async def on_info_manuals(callback: CallbackQuery):
         banner = media.get(filename)
 
         text = (
-            f"❖ <b>GDPX // МАНУАЛЫ</b>\n"
+            f"❖ <b>GDPX // МАНУАЛЫ [3 УРОВНЯ]</b>\n"
             f"{DIVIDER}\n"
             f"Выберите уровень подготовки для изучения методологии:\n\n"
-            f"📡 <b>STATUS:</b> <code>READY</code>"
         )
 
         await callback.answer()
-        await callback.message.edit_media(
-            media=InputMediaPhoto(media=banner, caption=text, parse_mode="HTML"),
-            reply_markup=get_manual_levels_kb(MANUAL_LEVELS),
-        )
+        try:
+            await callback.message.edit_media(
+                media=InputMediaPhoto(media=banner, caption=text, parse_mode="HTML"),
+                reply_markup=get_manual_levels_kb(MANUAL_LEVELS),
+            )
+        except Exception:
+            await edit_message_text_or_caption_safe(callback.message, text, reply_markup=get_manual_levels_kb(MANUAL_LEVELS))
     except Exception as e:
         logger.exception(f"Error in on_info_manuals: {e}")
         await callback.answer("⚠️ Ошибка при открытии Мануалов", show_alert=True)
@@ -170,10 +270,13 @@ async def on_manual_level(callback: CallbackQuery, callback_data: SellerInfoCD):
         )
 
         await callback.answer()
-        await callback.message.edit_media(
-            media=InputMediaPhoto(media=banner, caption=text, parse_mode="HTML"),
-            reply_markup=get_manuals_in_level_kb(manuals),
-        )
+        try:
+            await callback.message.edit_media(
+                media=InputMediaPhoto(media=banner, caption=text, parse_mode="HTML"),
+                reply_markup=get_manuals_in_level_kb(manuals),
+            )
+        except Exception:
+            await edit_message_text_or_caption_safe(callback.message, text, reply_markup=get_manuals_in_level_kb(manuals))
     except Exception as e:
         logger.exception(f"Error in on_manual_level: {e}")
         await callback.answer("⚠️ Ошибка при открытии уровня", show_alert=True)
@@ -191,20 +294,26 @@ async def on_manual_item(callback: CallbackQuery, callback_data: SellerInfoCD):
         banner = media.get(filename)
 
         await callback.answer()
-        await callback.message.edit_media(
-            media=InputMediaPhoto(media=banner, caption=card.text, parse_mode="HTML"),
-            reply_markup=get_back_to_manual_level_kb(card.level),
-        )
+        try:
+            await callback.message.edit_media(
+                media=InputMediaPhoto(media=banner, caption=card.text, parse_mode="HTML"),
+                reply_markup=get_back_to_manual_level_kb(card.level),
+            )
+        except Exception:
+            await edit_message_text_or_caption_safe(callback.message, card.text, reply_markup=get_back_to_manual_level_kb(card.level))
     except Exception as e:
         logger.exception(f"Error in on_manual_item: {e}")
         await callback.answer("⚠️ Ошибка при чтении мануала", show_alert=True)
 
 
 # --- SUPPORT CENTER ---
+
+@router.message(Command("help"))
 @router.callback_query(SellerMenuCD.filter(F.action == "support"))
-async def on_support_center(callback: CallbackQuery):
-    """Новый раздел SUPPORT CENTER."""
+async def on_support_center(event: Message | CallbackQuery, state: FSMContext):
+    """Штаб оперативной связи (Поддержка)."""
     try:
+        await state.clear()
         filename = "support.jpg"
         banner = media.get(filename)
 
@@ -219,15 +328,22 @@ async def on_support_center(callback: CallbackQuery):
             f"⚙️ <b>АРХИТЕКТОР</b> — @brug0S\n"
             f" └ <i>Бот / Технические вопросы.</i>\n"
             f"{DIVIDER}\n"
-            f"[🟢 <b>ONLINE</b>] — <i>Пишите сразу по существу вопроса.</i>"
+            f"[<b>ONLINE</b>] — <i>Пишите сразу по существу вопроса.</i>"
         )
 
-        kb = PremiumBuilder().back("mod_exit", "❮ НАЗАД").as_markup()
+        kb = PremiumBuilder().back(NavCD(to="menu"), "❮ В ГЛАВНОЕ МЕНЮ").as_markup()
 
-        await callback.answer()
-        await callback.message.edit_media(
-            media=InputMediaPhoto(media=banner, caption=text, parse_mode="HTML"), reply_markup=kb
-        )
+        if isinstance(event, Message):
+            await event.answer_photo(photo=banner, caption=text, reply_markup=kb, parse_mode="HTML")
+        else:
+            await event.answer()
+            try:
+                await event.message.edit_media(
+                    media=InputMediaPhoto(media=banner, caption=text, parse_mode="HTML"), reply_markup=kb
+                )
+            except Exception:
+                await edit_message_text_or_caption_safe(event.message, text, reply_markup=kb)
     except Exception as e:
         logger.exception(f"Error in on_support_center: {e}")
-        await callback.answer("⚠️ Ошибка при открытии Поддержки", show_alert=True)
+        if isinstance(event, CallbackQuery):
+            await event.answer("⚠️ Ошибка при открытии Поддержки", show_alert=True)

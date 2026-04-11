@@ -105,3 +105,13 @@ async def edit_message_to_admin_home(message: Message) -> Message | None:
                 return await message.edit_reply_markup(reply_markup=None)
             except TelegramBadRequest:
                 return None
+
+
+async def delete_message_safe(message: Message | None) -> None:
+    """Тихое удаление сообщения с игнорированием ошибок."""
+    if message is None:
+        return
+    try:
+        await message.delete()
+    except Exception:
+        pass

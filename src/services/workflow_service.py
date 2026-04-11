@@ -1,23 +1,67 @@
 from __future__ import annotations
 
+import asyncio
+import logging
+import pickle
+import time
 from datetime import datetime, timezone
+from decimal import Decimal
+from typing import TYPE_CHECKING, Optional, List, Dict
 
+from sqlalchemy import func, select, update, or_, and_
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import joinedload
 
-from src.database.models.enums import RejectionReason, SubmissionStatus
+from src.database.models.category import Category
+from src.database.models.enums import PayoutStatus, RejectionReason, SubmissionStatus
+from src.database.models.publication import Payout, PublicationArchive
 from src.database.models.submission import ReviewAction, Submission
+from src.database.models.user import User
+from src.core.config import get_settings
+from src.core.cache import get_redis
+from src.utils.ui_builder import DIVIDER, DIVIDER_LIGHT
+
+if TYPE_CHECKING:
+    from aiogram import Bot
+
+logger = logging.getLogger(__name__)
+
+# Хранилище задач для дебаунса уведомлений (user_id -> Task)
+_notif_tasks: Dict[int, asyncio.Task] = {}
 
 
 class WorkflowService:
-    """Единый сервис переходов статусов карточек."""
+    """Единый сервис переходов статусов карточек (Единый Источник Истины)."""
 
-    _ALLOWED: dict[SubmissionStatus, set[SubmissionStatus]] = {
-        SubmissionStatus.PENDING: {SubmissionStatus.IN_REVIEW, SubmissionStatus.REJECTED},
+    _ALLOWED: Dict[SubmissionStatus, set[SubmissionStatus]] = {
+        SubmissionStatus.PENDING: {
+            SubmissionStatus.IN_WORK,
+            SubmissionStatus.REJECTED, 
+            SubmissionStatus.BLOCKED, 
+            SubmissionStatus.NOT_A_SCAN
+        },
+        SubmissionStatus.IN_WORK: {
+            SubmissionStatus.IN_WORK,
+            SubmissionStatus.WAIT_CONFIRM,
+            SubmissionStatus.PENDING,
+            SubmissionStatus.REJECTED,
+            SubmissionStatus.BLOCKED,
+            SubmissionStatus.NOT_A_SCAN,
+        },
+        SubmissionStatus.WAIT_CONFIRM: {
+            SubmissionStatus.IN_REVIEW,
+            SubmissionStatus.PENDING,
+            SubmissionStatus.ACCEPTED,
+            SubmissionStatus.REJECTED,
+            SubmissionStatus.BLOCKED,
+            SubmissionStatus.NOT_A_SCAN,
+        },
         SubmissionStatus.IN_REVIEW: {
             SubmissionStatus.ACCEPTED,
             SubmissionStatus.REJECTED,
             SubmissionStatus.BLOCKED,
             SubmissionStatus.NOT_A_SCAN,
+            SubmissionStatus.PENDING,
         },
     }
 
@@ -26,8 +70,6 @@ class WorkflowService:
 
     @classmethod
     def can_transition(cls, from_status: SubmissionStatus, to_status: SubmissionStatus) -> bool:
-        """Проверяет, допустим ли переход статуса."""
-
         return to_status in cls._ALLOWED.get(from_status, set())
 
     async def transition(
@@ -37,42 +79,48 @@ class WorkflowService:
         admin_id: int,
         to_status: SubmissionStatus,
         comment: str | None = None,
-        rejection_reason: RejectionReason | None = None,
+        rejection_reason: str | RejectionReason | None = None,
+        bot: Optional["Bot"] = None,
+        archive_chat_id: int | None = None,
+        archive_message_id: int | None = None,
     ) -> Submission | None:
-        """Выполняет валидный переход статуса и пишет ReviewAction."""
+        stmt = (
+            select(Submission)
+            .options(joinedload(Submission.seller), joinedload(Submission.category))
+            .where(Submission.id == submission_id)
+        )
+        res = await self._session.execute(stmt)
+        submission = res.scalar_one_or_none()
 
-        submission = await self._session.get(Submission, submission_id)
-        if submission is None:
+        if not submission:
             return None
 
         from_status = submission.status
         if not self.can_transition(from_status, to_status):
+            logger.warning(f"Invalid transition for #{submission_id}: {from_status} -> {to_status}")
             return None
 
         now = datetime.now(timezone.utc)
         submission.status = to_status
         submission.admin_id = admin_id
+        submission.last_status_change = now
 
-        if to_status == SubmissionStatus.IN_REVIEW:
+        if to_status in {SubmissionStatus.IN_REVIEW, SubmissionStatus.IN_WORK}:
             submission.assigned_at = now
+            if to_status == SubmissionStatus.IN_REVIEW and bot and submission.seller:
+                await self._send_notification(bot, submission, to_status, None, None)
 
-        if to_status in {
-            SubmissionStatus.ACCEPTED,
-            SubmissionStatus.REJECTED,
-            SubmissionStatus.BLOCKED,
-            SubmissionStatus.NOT_A_SCAN,
-        }:
+        elif to_status == SubmissionStatus.PENDING:
+            submission.assigned_at = None
+            submission.admin_id = None
+
+        elif to_status == SubmissionStatus.ACCEPTED:
+            await self._handle_accepted(submission, admin_id, bot, archive_chat_id, archive_message_id)
+
+        elif to_status in {SubmissionStatus.REJECTED, SubmissionStatus.BLOCKED, SubmissionStatus.NOT_A_SCAN}:
             submission.reviewed_at = now
-            submission.finalized_at = now
-            submission.finalized_by_admin_id = admin_id
-            submission.final_reason = comment
-            if to_status in {
-                SubmissionStatus.REJECTED,
-                SubmissionStatus.BLOCKED,
-                SubmissionStatus.NOT_A_SCAN,
-            }:
-                submission.rejection_reason = rejection_reason or RejectionReason.OTHER
-                submission.rejection_comment = comment
+            submission.rejection_reason = rejection_reason if isinstance(rejection_reason, str) else (rejection_reason.value if rejection_reason else None)
+            submission.rejection_comment = comment
 
         self._session.add(
             ReviewAction(
@@ -83,5 +131,161 @@ class WorkflowService:
                 comment=comment,
             )
         )
-        await self._session.refresh(submission)
+
+        if bot and submission.seller:
+            await self._send_notification(bot, submission, to_status, rejection_reason, comment)
+
+        await self._session.flush()
         return submission
+
+    async def bulk_transition(
+        self,
+        *,
+        submission_ids: list[int],
+        admin_id: int,
+        to_status: SubmissionStatus,
+        comment: str | None = None,
+        rejection_reason: str | RejectionReason | None = None,
+        bot: Optional["Bot"] = None,
+    ) -> int:
+        count = 0
+        for sub_id in submission_ids:
+            res = await self.transition(
+                submission_id=sub_id,
+                admin_id=admin_id,
+                to_status=to_status,
+                comment=comment,
+                rejection_reason=rejection_reason,
+                bot=bot
+            )
+            if res: count += 1
+        return count
+
+    async def _handle_accepted(self, sub: Submission, admin_id: int, bot: Bot | None, arc_cid: int | None, arc_mid: int | None):
+        now = datetime.now(timezone.utc)
+        sub.reviewed_at = now
+        sub.accepted_amount = sub.fixed_payout_rate or sub.category.payout_rate
+        seller = sub.seller
+        seller.pending_balance = Decimal(seller.pending_balance or 0) + Decimal(sub.accepted_amount)
+
+        if bot and not (arc_cid and arc_mid):
+            settings = get_settings()
+            if settings.moderation_chat_id:
+                try:
+                    text = (f"✅ <b>eSIM ACCEPTED</b>\n{DIVIDER}\n🔖 <b>ID:</b> <code>#{sub.id}</code>\n📞 <b>Номер:</b> <code>{sub.phone_normalized or 'N/A'}</code>\n🗂 <b>Категория:</b> <code>{sub.category.title}</code>\n💰 <b>Выплата:</b> <code>{sub.accepted_amount}</code> USDT")
+                    msg = await bot.send_photo(chat_id=settings.moderation_chat_id, photo=sub.telegram_file_id, caption=text, parse_mode="HTML")
+                    arc_cid, arc_mid = msg.chat.id, msg.message_id
+                except Exception as e: logger.error(f"Auto-archive error for #{sub.id}: {e}")
+
+        if arc_cid and arc_mid:
+            self._session.add(PublicationArchive(submission_id=sub.id, archive_chat_id=arc_cid, archive_message_id=arc_mid, archived_by_user_id=admin_id))
+        await self._update_daily_payout(sub)
+
+    async def _update_daily_payout(self, sub: Submission):
+        day_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+        period_key = day_start.date().isoformat()
+        stmt = select(Payout).where(Payout.user_id == sub.user_id, Payout.period_key == period_key, Payout.status == PayoutStatus.PENDING, Payout.category_id == sub.category_id)
+        res = await self._session.execute(stmt)
+        payout = res.scalar_one_or_none()
+        if payout:
+            payout.amount = Decimal(payout.amount) + Decimal(sub.accepted_amount)
+            payout.accepted_count += 1
+        else:
+            payout = Payout(user_id=sub.user_id, category_id=sub.category_id, amount=sub.accepted_amount, accepted_count=1, period_key=period_key, period_date=day_start.date(), status=PayoutStatus.PENDING, unit_price=sub.accepted_amount)
+            self._session.add(payout)
+
+    def _get_status_label(self, status_val: str) -> str:
+        """Централизованные красивые лейблы."""
+        labels = {
+            SubmissionStatus.ACCEPTED.value: "💎 <b>ЗАЧЁТ</b>",
+            SubmissionStatus.REJECTED.value: "⚠️ <b>БРАК (ОТКЛОНЕНО)</b>",
+            SubmissionStatus.BLOCKED.value: "⛔️ <b>ВАША СИМ-КАРТА ЗАБЛОКИРОВАНА</b>",
+            SubmissionStatus.NOT_A_SCAN.value: "📵 <b>НЕ ЧИТАЕТСЯ (НЕ СКАН)</b>",
+            SubmissionStatus.IN_REVIEW.value: "🔍 <b>ВЗЯТО НА ПРОВЕРКУ</b>",
+        }
+        return labels.get(status_val, f"🔘 {status_val.upper()}")
+
+    def _format_event(self, status_val: str, phone: str, reason: str | None) -> str:
+        """Форматирует одну строку события."""
+        if status_val == SubmissionStatus.BLOCKED.value:
+            res = f" 🚫 <b>Номер:</b> <code>{phone}</code>"
+            if reason: res += f"\n └ 💬 <b>Причина:</b> <code>{reason}</code>"
+            return res
+        else:
+            res = f" ├ <code>{phone}</code>"
+            if reason: res += f"\n └ 💬 <i>Причина: {reason}</i>"
+            return res
+
+    async def _send_notification(self, bot: "Bot", sub: Submission, status: SubmissionStatus, reason: str | RejectionReason | None, comment: str | None):
+        if status not in {SubmissionStatus.ACCEPTED, SubmissionStatus.REJECTED, SubmissionStatus.BLOCKED, SubmissionStatus.NOT_A_SCAN, SubmissionStatus.IN_REVIEW}:
+            return
+
+        user_id, tg_id = sub.user_id, sub.seller.telegram_id
+        reason_txt = reason if isinstance(reason, str) else (reason.value if reason else "")
+        if comment: reason_txt = f"{reason_txt} ({comment})" if reason_txt else comment
+            
+        event = {"phone": sub.phone_normalized or f"#{sub.id}", "status": status.value, "reason": reason_txt}
+
+        redis = await get_redis()
+        if not redis:
+            logger.info(f"Direct notif to {tg_id} (status: {status.value})")
+            text = (f"❖ <b>GDPX // УВЕДОМЛЕНИЕ</b>\n{DIVIDER}\n"
+                    f"{self._get_status_label(status.value)} (1 шт.)\n"
+                    f"{self._format_event(status.value, event['phone'], event['reason'])}\n\n"
+                    f"{DIVIDER_LIGHT}\n<i>Ознакомьтесь с деталями выше.</i>")
+            try: await bot.send_message(chat_id=tg_id, text=text, parse_mode="HTML")
+            except Exception as e: logger.error(f"Direct notif fail to {tg_id}: {e}")
+            return
+
+        cache_key = f"notif_v4:{user_id}"
+        try:
+            raw = await redis.get(cache_key)
+            data = pickle.loads(raw) if raw else {"msg_id": None, "events": []}
+            data["events"].append(event)
+            await redis.set(cache_key, pickle.dumps(data), ex=3600)
+            if user_id in _notif_tasks: _notif_tasks[user_id].cancel()
+            _notif_tasks[user_id] = asyncio.create_task(self._flush_notification(user_id, tg_id, bot))
+        except Exception as e: logger.error(f"Notif cache error: {e}")
+
+    async def _flush_notification(self, user_id: int, tg_id: int, bot: "Bot"):
+        try:
+            await asyncio.sleep(1.5)
+            redis = await get_redis()
+            cache_key = f"notif_v4:{user_id}"
+            raw = await redis.get(cache_key) if redis else None
+            if not raw: return
+            
+            data = pickle.loads(raw)
+            events = data.get("events", [])
+            if not events: return
+            
+            groups = {}
+            for ev in events:
+                s = ev["status"]
+                if s not in groups: groups[s] = []
+                groups[s].append(ev)
+
+            lines = ["❖ <b>GDPX // УВЕДОМЛЕНИЕ</b>", f"{DIVIDER}", ""]
+            for s_val, s_items in groups.items():
+                lines.append(f"{self._get_status_label(s_val)} (<code>{len(s_items)}</code> шт.)")
+                for it in s_items[-15:]:
+                    lines.append(self._format_event(s_val, it['phone'], it['reason']))
+                lines.append("") 
+            
+            lines.append(f"{DIVIDER_LIGHT}\n<i>Пожалуйста, ознакомьтесь с деталями выше.</i>")
+            text = "\n".join(lines).strip()
+
+            msg_id = data.get("msg_id")
+            sent = None
+            if msg_id:
+                try: sent = await bot.edit_message_text(chat_id=tg_id, message_id=msg_id, text=text, parse_mode="HTML")
+                except Exception: pass
+            
+            if not sent:
+                sent = await bot.send_message(chat_id=tg_id, text=text, parse_mode="HTML")
+                data["msg_id"] = sent.message_id
+                await redis.set(cache_key, pickle.dumps(data), ex=3600)
+                logger.info(f"Flush notif sent to {tg_id} (msg_id: {sent.message_id})")
+        except asyncio.CancelledError: pass
+        except Exception as e: logger.error(f"Flush fail: {e}")
+        finally: _notif_tasks.pop(user_id, None)

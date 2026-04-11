@@ -1,85 +1,39 @@
-from __future__ import annotations
 
-import argparse
 import asyncio
-import socket
 import sys
-from pathlib import Path
-
-# Чтобы `python scripts/make_admin.py` находил пакет `src` из корня репозитория.
-_ROOT = Path(__file__).resolve().parent.parent
-if str(_ROOT) not in sys.path:
-    sys.path.insert(0, str(_ROOT))
-
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-
-from src.core.config import get_settings
-from src.database.models.enums import UserRole
+from src.database.session import SessionFactory
 from src.database.models.user import User
+from src.database.models.enums import UserRole
 
-
-async def promote_role(telegram_id: int, role: UserRole) -> None:
-    """Назначает пользователю указанную роль по telegram_id."""
-
-    settings = get_settings()
-    engine = create_async_engine(settings.database_url, echo=False, pool_pre_ping=True)
-    session_factory = async_sessionmaker(bind=engine, expire_on_commit=False)
-
-    async with session_factory() as session:
-        result = await session.execute(select(User).where(User.telegram_id == telegram_id))
-        user = result.scalar_one_or_none()
-        if user is None:
-            print(f"Пользователь с telegram_id={telegram_id} не найден. Сначала зайди в бота через /start.")
-            await engine.dispose()
+async def set_user_role(tg_id: int, role_name: str):
+    async with SessionFactory() as session:
+        # Ищем пользователя
+        stmt = select(User).where(User.telegram_id == tg_id)
+        res = await session.execute(stmt)
+        user = res.scalar_one_or_none()
+        
+        if not user:
+            print(f"❌ Пользователь с TG ID {tg_id} не найден в базе!")
             return
 
-        user.role = role
-        await session.commit()
-        print(f"Готово: @{user.username or 'без_username'} (telegram_id={telegram_id}) теперь {role.value}.")
-
-    await engine.dispose()
-
-
-def parse_args() -> argparse.Namespace:
-    """Парсит аргументы командной строки."""
-
-    parser = argparse.ArgumentParser(description="Назначить роль пользователю (в т.ч. забрать админку → seller).")
-    parser.add_argument("--telegram-id", type=int, required=True, help="Telegram ID пользователя")
-    parser.add_argument(
-        "--role",
-        type=str,
-        default=UserRole.ADMIN.value,
-        choices=[
-            UserRole.SELLER.value,
-            UserRole.ADMIN.value,
-            UserRole.OWNER.value,
-        ],
-        help="Роль: seller — обычный продавец (снять права админа)",
-    )
-    return parser.parse_args()
-
-
-def main() -> None:
-    """Точка входа CLI-утилиты."""
-
-    args = parse_args()
-    try:
-        asyncio.run(promote_role(telegram_id=args.telegram_id, role=UserRole(args.role)))
-    except socket.gaierror as exc:
-        print(
-            "Не удаётся разрешить имя хоста PostgreSQL (DNS).\n"
-            "Скрипт на хосте не видит имя «postgres» — оно есть только внутри Docker-сети.\n\n"
-            "Вариант А — запуск с локальным .env (порт 5432 с хоста):\n"
-            "  export ENV_FILE=.env.local\n"
-            "  # в .env.local должно быть: POSTGRES_HOST=localhost\n"
-            "  python scripts/make_admin.py --telegram-id ...\n\n"
-            "Вариант Б — выполнить внутри контейнера бота:\n"
-            "  docker compose exec bot python scripts/make_admin.py --telegram-id ...\n",
-            file=sys.stderr,
-        )
-        raise SystemExit(1) from exc
-
+        try:
+            new_role = UserRole(role_name.lower())
+            user.role = new_role
+            await session.commit()
+            print(f"✅ Роль пользователя @{user.username or user.telegram_id} изменена на: {new_role.value}")
+        except ValueError:
+            valid_roles = ", ".join([r.value for r in UserRole])
+            print(f"❌ Ошибка: Роли '{role_name}' не существует.")
+            print(f"Допустимые роли: {valid_roles}")
 
 if __name__ == "__main__":
-    main()
+    if len(sys.argv) < 3:
+        print("Использование: python3 scripts/make_admin.py <TELEGRAM_ID> <ROLE>")
+        print("Пример: python3 scripts/make_admin.py 12345678 owner")
+        sys.exit(1)
+        
+    target_id = int(sys.argv[1])
+    target_role = sys.argv[2]
+    
+    asyncio.run(set_user_role(target_id, target_role))

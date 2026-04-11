@@ -57,6 +57,14 @@ class UserThrottlingMiddleware(BaseMiddleware):
         if not isinstance(event, Update):
             return await handler(event, data)
 
+        # ПРОПУСКАЕМ ГРУППОВЫЕ ЧАТЫ (для авто-фикса)
+        if event.message and event.message.chat.type in ["group", "supergroup"]:
+            return await handler(event, data)
+
+        # ПРОПУСКАЕМ МЕДИА (для скоростной загрузки)
+        if _is_bulk_upload_message(event):
+            return await handler(event, data)
+
         ctx: EventContext | None = data.get(EVENT_CONTEXT_KEY)
         uid = ctx.user_id if ctx else None
         if uid is None:

@@ -29,13 +29,13 @@ STATUS_MAP = {
 
 @router.callback_query(SellerMenuCD.filter(F.action == "assets"), StateFilter(None))
 async def list_folders(callback: CallbackQuery, session: AsyncSession) -> None:
-    """Главный дашборд 'Мои активы': статистика за СЕГОДНЯ и список кластеров."""
+    """Главный дашборд 'Мои активы': статистика за СЕГОДНЯ и список кластеров (активные)."""
     user = await UserService(session=session).get_by_telegram_id(callback.from_user.id)
     sub_service = SubmissionService(session=session)
     
     daily_stats = await sub_service.get_daily_assets_stats(user.id)
     best_cat_id = await sub_service.get_best_category_for_user(user.id)
-    folders = await sub_service.get_user_material_folders(user.id)
+    folders = await sub_service.get_user_material_folders(user.id, is_archived=False)
 
     total_earned = daily_stats["total_earned"]
     pending = daily_stats["pending"]
@@ -44,7 +44,7 @@ async def list_folders(callback: CallbackQuery, session: AsyncSession) -> None:
     rejected = daily_stats["rejected"]
 
     text = (
-        f"❖ <b>GDPX // ВАШИ АКТИВЫ</b>\n"
+        f"❖ <b>GDPX // ВАШИ СИМКИ</b>\n"
         f"{DIVIDER}\n"
         f"📊 <b>СВОДКА ЗА СЕГОДНЯ</b> (с 00:00 МСК):\n"
         f" ├ 🟢 <b>Зачтено:</b> <code>{accepted}</code> шт.\n"
@@ -61,10 +61,13 @@ async def list_folders(callback: CallbackQuery, session: AsyncSession) -> None:
     if not folders:
         text += "\n\n📭 <i>Вы еще не интегрировали ни одного актива.</i>"
         
-    await callback.message.edit_media(
-        media=InputMediaPhoto(media=banner, caption=text, parse_mode="HTML"),
-        reply_markup=get_seller_assets_folders_kb(folders, best_cat_id)
-    )
+    try:
+        await callback.message.edit_media(
+            media=InputMediaPhoto(media=banner, caption=text, parse_mode="HTML"),
+            reply_markup=get_seller_assets_folders_kb(folders, best_cat_id, is_archived=False)
+        )
+    except Exception:
+        await edit_message_text_or_caption_safe(callback.message, text, reply_markup=get_seller_assets_folders_kb(folders, best_cat_id, is_archived=False))
     await callback.answer()
 
 
@@ -90,7 +93,8 @@ async def list_items_in_category(callback: CallbackQuery, callback_data: SellerA
         category_id=callback_data.category_id,
         page=callback_data.page or 0,
         page_size=7,
-        statuses=status_filter
+        statuses=status_filter,
+        is_archived=callback_data.is_archived
     )
     
     cat_title = "Неизвестно"
@@ -99,13 +103,19 @@ async def list_items_in_category(callback: CallbackQuery, callback_data: SellerA
     if cat: 
         cat_title = cat.title
 
-    filter_name, filter_emoji = STATUS_MAP.get(callback_data.filter_key or "all", ("Все активы", "📦"))
+    filter_name, filter_emoji = STATUS_MAP.get(callback_data.filter_key or "all", ("Все симки", "📦"))
 
     text = (
-        f"❖ <b>GDPX // АКТИВЫ КЛАСТЕРА</b>\n"
+        f"❖ <b>GDPX // ОПЕРАТОР</b>\n"
         f"{DIVIDER}\n"
-        f"🗂 <b>{escape(cat_title)}</b>\n"
-        f"🔍 <b>Фильтр:</b> {filter_emoji} {filter_name} (Всего: <code>{total}</code>)\n"
+        f"🗂 <b>{escape(cat_title)}</b>"
+    )
+    
+    if callback_data.is_archived:
+        text += " (АРХИВ)"
+        
+    text += (
+        f"\n🔍 <b>Фильтр:</b> {filter_emoji} {filter_name} (Всего: <code>{total}</code>)\n"
         f"{DIVIDER_LIGHT}\n"
     )
     
@@ -115,7 +125,14 @@ async def list_items_in_category(callback: CallbackQuery, callback_data: SellerA
     await edit_message_text_or_caption_safe(
         callback.message,
         text=text,
-        reply_markup=get_seller_assets_items_kb(items, callback_data.category_id, callback_data.page or 0, total, callback_data.filter_key or "all"),
+        reply_markup=get_seller_assets_items_kb(
+            items, 
+            callback_data.category_id, 
+            callback_data.page or 0, 
+            total, 
+            callback_data.filter_key or "all",
+            is_archived=callback_data.is_archived
+        ),
         parse_mode="HTML"
     )
     await callback.answer()
@@ -165,7 +182,7 @@ async def view_item(callback: CallbackQuery, callback_data: SellerItemCD, sessio
     )
 
     if item.status.value in ["rejected", "blocked", "not_a_scan"] and item.rejection_reason:
-        text += f"\n⚠️ <b>ПРИЧИНА ОТКАЗА:</b> {item.rejection_reason.value}\n"
+        text += f"\n⚠️ <b>ПРИЧИНА ОТКАЗА:</b> {item.rejection_reason}\n"
         if item.rejection_comment:
             text += f"💬 <b>Комментарий:</b> {escape(item.rejection_comment)}\n"
 
@@ -197,3 +214,34 @@ async def delete_item_confirm(callback: CallbackQuery, callback_data: SellerItem
     except Exception as e:
         logger.exception(f"Error in delete_item_confirm: {e}")
         await callback.answer("⚠️ Произошла ошибка при отзыве актива", show_alert=True)
+
+@router.callback_query(F.data.startswith("sel_asset_pg"), StateFilter(None))
+async def process_asset_pagination(callback: CallbackQuery, session: AsyncSession):
+    """Обработка переключения страниц в списке активов (поддержка архива)."""
+    try:
+        # Формат: sel_asset_pg:p:PAGE:CAT_ID:FILTER:ARCHIVE
+        parts = callback.data.split(":")
+        if len(parts) < 4:
+            return await callback.answer()
+
+        _, action, page, query = parts
+        query_parts = query.split(":")
+
+        if len(query_parts) == 3:
+            cat_id, filter_key, archive_flag = query_parts
+            is_archived = archive_flag == "1"
+        else:
+            # Обратная совместимость для старых кнопок (без флага архива)
+            cat_id, filter_key = query_parts
+            is_archived = False
+
+        callback_data = SellerAssetCD(
+            category_id=int(cat_id),
+            page=int(page),
+            filter_key=filter_key,
+            is_archived=is_archived
+        )
+        await list_items_in_category(callback, callback_data, session)
+    except Exception as e:
+        logger.exception(f"Pagination error: {e}")
+        await callback.answer("⚠️ Ошибка навигации", show_alert=True)

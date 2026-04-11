@@ -30,8 +30,8 @@ async def on_enter_moderator_panel(event: Message | CallbackQuery, session: Asyn
     from src.handlers.moderation.entry import _render_dashboard_text
     from src.keyboards.moderation import get_mod_dashboard_kb
     
-    text, pending, in_work = await _render_dashboard_text(session, event.from_user.id)
-    kb = get_mod_dashboard_kb(pending, in_work)
+    text, stats = await _render_dashboard_text(session, event.from_user.id)
+    kb = get_mod_dashboard_kb(stats)
     
     if isinstance(event, Message):
         await event.answer(text, reply_markup=kb, parse_mode="HTML")

@@ -10,6 +10,7 @@ class UserRole(StrEnum):
     ADMIN = "admin"
     OWNER = "owner"
     SIM_ROOT = "sim_root"
+    SIMBUYER = "simbuyer"
 
 
 class UserLanguage(StrEnum):
@@ -22,6 +23,8 @@ class SubmissionStatus(StrEnum):
     """Статусы симки контента."""
 
     PENDING = "pending"
+    IN_WORK = "in_work"
+    WAIT_CONFIRM = "wait_confirm" # Потенциально отработанные (через час)
     IN_REVIEW = "in_review"
     REJECTED = "rejected"
     ACCEPTED = "accepted"
