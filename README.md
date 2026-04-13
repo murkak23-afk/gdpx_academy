@@ -72,55 +72,24 @@ tests/              # pytest unit-тесты
 
 ## Быстрый старт (Docker)
 
-> Требования: Docker ≥ 24, Docker Compose v2.
-
-### 1. Склонировать и настроить окружение
-
+### 1. Подготовка
 ```bash
-git clone https://github.com/your-org/gdpx-work-bot.git
-cd gdpx-work-bot
-
 cp .env.example .env
+# Отредактируйте .env: укажите BOT_TOKEN и настройки базы данных
 ```
 
-Открой `.env` и заполни обязательные поля:
-
-| Переменная | Описание |
-|---|---|
-| `BOT_TOKEN` | Токен из `@BotFather` |
-| `POSTGRES_PASSWORD` | Сложный пароль БД |
-| `MODERATION_CHAT_ID` | `chat_id` группы модерации (отрицательное число) |
-
-### 2. Собрать и поднять
-
+### 2. Запуск
 ```bash
 docker compose up -d --build
 ```
 
-Docker Compose поднимет три сервиса: `postgres`, `redis`, `bot`.  
-Бот автоматически применяет миграции (`alembic upgrade head`) перед запуском.
-
-### 3. Назначить первого администратора
-
+### 3. Основные команды
 ```bash
-docker compose exec bot python scripts/make_admin.py --telegram-id YOUR_TELEGRAM_ID --role admin
-```
-
-### 4. Полезные команды
-
-```bash
-# Логи бота в реальном времени
+# Просмотр логов
 docker compose logs -f bot
 
-# Health-check
-curl http://localhost:8000/health
-curl http://localhost:8000/health/ready
-
-# Остановить всё
+# Остановка проекта
 docker compose down
-
-# Остановить и удалить тома BД (осторожно!)
-docker compose down -v
 ```
 
 ---

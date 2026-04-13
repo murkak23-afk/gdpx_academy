@@ -11,7 +11,7 @@ from aiogram.exceptions import TelegramAPIError
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from src.core.config import get_settings
-from src.services.submission_service import SubmissionService
+from src.domain.submission.submission_service import SubmissionService
 
 logger = logging.getLogger(__name__)
 

@@ -1,13 +1,16 @@
 import asyncio
+
 from aiogram import Bot
+
 from src.core.config import Settings
+
 
 async def main():
     settings = Settings()
     token = settings.bot_token
     bot = Bot(token=token)
     
-    print(f"Enabling bot by deleting webhook...")
+    print("Enabling bot by deleting webhook...")
     try:
         # This will resume long polling
         await bot.delete_webhook(drop_pending_updates=True)

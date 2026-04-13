@@ -12,7 +12,7 @@ from aiogram.types import ErrorEvent
 from sqlalchemy.exc import SQLAlchemyError
 
 if TYPE_CHECKING:
-    from aiogram import Bot
+    pass
 
 logger = logging.getLogger(__name__)
 

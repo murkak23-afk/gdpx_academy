@@ -2,23 +2,47 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Header, HTTPException, Request, status, BackgroundTasks
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
+from aiogram import Dispatcher, Bot
+from aiogram.types import Update
 
 from src.core.config import get_settings
 from src.database.session import engine
-from src.services.cryptobot_service import CryptoBotService
+from src.domain.finance.cryptobot_service import CryptoBotService
+
+logger = logging.getLogger(__name__)
 
 
-def create_app() -> FastAPI:
+def create_app(bot: Bot, dispatcher: Dispatcher) -> FastAPI:
     app = FastAPI(
         title="tgpriem API",
         version="1.0.0",
-        description="Служебные эндпоинты и будущие WebApp-интеграции.",
+        description="Служебные эндпоинты и Webhook-интеграция.",
     )
+    settings = get_settings()
+
+    @app.post(settings.webhook_path)
+    async def telegram_webhook(
+        request: Request,
+        background_tasks: BackgroundTasks,
+        x_telegram_bot_api_secret_token: str | None = Header(None),
+    ) -> Any:
+        """Эндпоинт для приёма обновлений от Telegram."""
+        if x_telegram_bot_api_secret_token != settings.webhook_secret_token:
+            logger.warning("Unauthorized webhook request with invalid secret token.")
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid secret token")
+
+        update_data = await request.json()
+        update = Update.model_validate(update_data, context={"bot": bot})
+        
+        # Передаём обработку в фон, чтобы мгновенно вернуть Telegram {"ok": True}
+        background_tasks.add_task(dispatcher.feed_update, bot, update)
+        return {"ok": True}
 
     @app.get("/health")
     async def health_legacy() -> dict[str, str]:

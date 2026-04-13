@@ -1,6 +1,8 @@
 import os
 import signal
+
 import psutil
+
 
 def kill_all_python_procs():
     current_pid = os.getpid()

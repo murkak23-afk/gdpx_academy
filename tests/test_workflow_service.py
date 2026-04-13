@@ -1,5 +1,5 @@
 from src.database.models.enums import SubmissionStatus
-from src.services.workflow_service import WorkflowService
+from src.domain.submission.workflow_service import WorkflowService
 
 
 def test_transition_pending_to_in_review_allowed() -> None:

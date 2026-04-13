@@ -1,5 +1,7 @@
-import requests
 import sys
+
+import requests
+
 
 def stop_polling(token):
     url = f"https://api.telegram.org/bot{token}/setWebhook?url=https://example.com/dead_end&drop_pending_updates=true"

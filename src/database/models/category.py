@@ -9,8 +9,8 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from src.database.models.base import Base, TimestampMixin
 
 if TYPE_CHECKING:
-    from src.database.models.submission import Submission
     from src.database.models.seller_daily_quota import SellerDailyQuota
+    from src.database.models.submission import Submission
 
 
 class Category(Base, TimestampMixin):
@@ -26,10 +26,10 @@ class Category(Base, TimestampMixin):
     photo_file_id: Mapped[str | None] = mapped_column(String(256), nullable=True)
     payout_rate: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
     total_upload_limit: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
-    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
-    is_priority: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, index=True)
+    is_priority: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, index=True)
 
-    operator: Mapped[str | None] = mapped_column(String(60), nullable=True)
+    operator: Mapped[str | None] = mapped_column(String(60), nullable=True, index=True)
     sim_type: Mapped[str | None] = mapped_column(String(60), nullable=True)
     hold_condition: Mapped[str | None] = mapped_column(String(60), nullable=True)
 

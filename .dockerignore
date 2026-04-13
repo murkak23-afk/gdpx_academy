@@ -1,16 +1,19 @@
+.git
+.venv
+venv
 __pycache__
 *.pyc
-.venv
-.env*
-!.env.example
-.git
-.gitignore
-.ruff_cache
-tests/
-*.md
-Makefile
-ruff.toml
-pytest.ini
-setup-dev.sh
-run-local.sh
-scripts/
+.vscode
+.zed
+.cursor
+.blackbox
+logs/
+*.log
+bot.db
+.env
+.env.*
+! .env.example
+
+# Игнорируем только данные баз данных, но оставляем контент
+data/postgres/
+data/redis/

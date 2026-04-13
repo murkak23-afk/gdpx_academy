@@ -1,6 +1,6 @@
 from datetime import timezone
 
-from src.services.admin_stats_service import AdminStatsService
+from src.domain.moderation.admin_stats_service import AdminStatsService
 
 
 def test_period_bounds_day_starts_at_utc_midnight() -> None:

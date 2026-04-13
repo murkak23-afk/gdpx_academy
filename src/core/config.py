@@ -4,233 +4,123 @@ import os
 from functools import lru_cache
 from typing import Any
 
-from pydantic import AliasChoices, Field, field_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import AliasChoices, Field, field_validator, ConfigDict
+from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
-    """Глобальные настройки приложения из переменных окружения."""
+    """Глобальные настройки приложения (Pydantic Settings)."""
 
-    model_config = SettingsConfigDict(
-        env_file=os.getenv("ENV_FILE", ".env"),
-        env_file_encoding="utf-8",
+    model_config = ConfigDict(
+        env_file=".env",
+        extra="ignore",
         case_sensitive=False,
     )
 
+    # --- SYSTEM ---
+    env: str = Field(default="production", alias="ENV")  # production / development
+    log_level: str = Field(default="INFO", alias="LOG_LEVEL")
+
+    # --- BOT ---
     bot_token: str = Field(..., alias="BOT_TOKEN")
     bot_parse_mode: str = Field(default="HTML", alias="BOT_PARSE_MODE")
 
-    postgres_host: str = Field(default="postgres", alias="POSTGRES_HOST")
+    # --- POSTGRES ---
+    postgres_host: str = Field(default="localhost", alias="POSTGRES_HOST")
     postgres_port: int = Field(default=5432, alias="POSTGRES_PORT")
     postgres_db: str = Field(default="tgpriem", alias="POSTGRES_DB")
     postgres_user: str = Field(default="tgpriem", alias="POSTGRES_USER")
     postgres_password: str = Field(default="tgpriem", alias="POSTGRES_PASSWORD")
+    database_url_custom: str | None = Field(default=None, alias="DATABASE_URL")
 
-    redis_url: str | None = Field(
-        default=None,
-        alias="REDIS_URL",
-        description="URL Redis для FSM (например redis://localhost:6379/0). Пусто — MemoryStorage.",
-    )
+    # --- REDIS ---
+    redis_url: str | None = Field(default=None, alias="REDIS_URL")
 
+    # --- HTTP ---
     http_host: str = Field(default="0.0.0.0", alias="HTTP_HOST")
-    http_port: int = Field(default=8000, alias="HTTP_PORT")
+    http_port: int = Field(default=8167, alias="HTTP_PORT")
 
-    admin_telegram_ids: Any = Field(
-        default_factory=list,
-        validation_alias="ADMIN_TELEGRAM_IDS",
-        description="Список ID администраторов (через запятую).",
-    )
+    # --- WEBHOOK ---
+    webhook_url: str = Field(default="https://gdpx.ru/webhook", alias="WEBHOOK_URL")
+    webhook_secret_token: str = Field(default="secret-change-me-1234567890", alias="WEBHOOK_SECRET_TOKEN")
+    webhook_path: str = Field(default="/webhook", alias="WEBHOOK_PATH")
 
+    # --- CHATS ---
+    admin_telegram_ids: Any = Field(default_factory=list, alias="ADMIN_TELEGRAM_IDS")
+    owner_telegram_ids: Any = Field(default_factory=list, alias="OWNER_TELEGRAM_IDS")
+    
     moderation_chat_id: int = Field(
-        default=0,
-        validation_alias=AliasChoices("MODERATION_CHAT_ID", "ARCHIVE_CHAT_ID"),
+        default=0, 
+        validation_alias=AliasChoices("MODERATION_CHAT_ID", "ARCHIVE_CHAT_ID")
     )
+    admin_error_chat_id: int | None = Field(default=None, alias="ADMIN_ERROR_CHAT_ID")
+    alert_telegram_chat_id: int | None = Field(default=None, alias="ALERT_TELEGRAM_CHAT_ID")
+
+    # --- CRYPTO ---
     crypto_pay_token: str | None = Field(default=None, alias="CRYPTO_PAY_TOKEN")
     crypto_asset: str = Field(default="USDT", alias="CRYPTO_ASSET")
 
-    alert_telegram_chat_id: int | None = Field(
-        default=None,
-        alias="ALERT_TELEGRAM_CHAT_ID",
-        description="Чат для служебных алертов (CryptoBot и т.д.). Пусто — не слать.",
-    )
-    admin_error_chat_id: int | None = Field(
-        default=None,
-        alias="ADMIN_ERROR_CHAT_ID",
-        description="Чат для уведомлений о критических ошибках кода.",
-    )
-    maintenance_mode: bool = Field(
-        default=False,
-        alias="MAINTENANCE_MODE",
-        description="Режим обслуживания: бот доступен только владельцам.",
-    )
-    owner_telegram_ids: Any = Field(
-        default_factory=list,
-        validation_alias="OWNER_TELEGRAM_IDS",
-        description="ID владельцев, которые могут пользоваться ботом в Maintenance Mode.",
-    )
-    alert_cryptobot_cooldown_sec: int = Field(
-        default=900,
-        ge=60,
-        le=86_400,
-        alias="ALERT_CRYPTOBOT_COOLDOWN_SEC",
-        description="Минимальный интервал между одинаковыми алертами CryptoBot, сек.",
-    )
-    health_ready_include_cryptobot: bool = Field(
-        default=True,
-        alias="HEALTH_READY_INCLUDE_CRYPTOBOT",
-        description="Включать ли проверку Crypto Pay API в GET /health/ready (если задан CRYPTO_PAY_TOKEN).",
-    )
-    moderation_suspended: bool = Field(
-        default=False,
-        description="Глобальная приостановка работы всех модераторов.",
-    )
-
+    # --- SYSTEM ---
+    maintenance_mode: bool = Field(default=False, alias="MAINTENANCE_MODE")
+    sentry_dsn: str | None = Field(default=None, alias="SENTRY_DSN")
+    # --- HEALTH ---
+    health_ready_include_cryptobot: bool = Field(default=False, alias="HEALTH_READY_INCLUDE_CRYPTOBOT")
+    
+    # --- AUTO FIX ---
     auto_fix_enabled: bool = Field(default=True, alias="AUTO_FIX_ENABLED")
     auto_fix_chats: dict[int, dict[int, str]] = Field(default_factory=dict, alias="AUTO_FIX_CHATS")
     auto_fix_role: str = Field(default="simbuyer", alias="AUTO_FIX_ROLE")
 
+    # --- BRAND ---
+    brand_channel_url: str | None = Field(default=None, alias="BRAND_CHANNEL_URL")
+    brand_chat_url: str | None = Field(default=None, alias="BRAND_CHAT_URL")
+    brand_payments_url: str | None = Field(default=None, alias="BRAND_PAYMENTS_URL")
+
+    # --- VALIDATORS ---
+
+    @field_validator("maintenance_mode", "auto_fix_enabled", mode="before")
+    @classmethod
+    def _normalize_bool(cls, v: Any) -> bool:
+        if isinstance(v, str):
+            return v.lower() in ("true", "1", "yes", "on")
+        return bool(v)
+
+    @field_validator("admin_telegram_ids", "owner_telegram_ids", mode="before")
+    @classmethod
+    def _normalize_ids(cls, v: Any) -> list[int]:
+        if isinstance(v, str):
+            if not v.strip(): return []
+            return [int(x.strip()) for x in v.split(",") if x.strip()]
+        return v or []
+
     @field_validator("auto_fix_chats", mode="before")
     @classmethod
-    def parse_auto_fix_chats(cls, v: Any) -> dict[int, dict[int, str]]:
+    def _parse_json_dict(cls, v: Any) -> dict[int, dict[int, str]]:
         if isinstance(v, str):
             v = v.strip()
-            if not v:
-                return {}
+            if not v: return {}
+            import json
             try:
-                import json
                 data = json.loads(v)
-                # Преобразуем строковые ключи в int
-                return {
-                    int(chat_id): {int(topic_id): action for topic_id, action in topics.items()}
-                    for chat_id, topics in data.items()
-                }
-            except Exception as e:
-                import sys
-                sys.stderr.write(f"Failed to parse AUTO_FIX_CHATS: {e}\n")
+                return {int(k): {int(tk): tv for tk, tv in val.items()} for k, val in data.items()}
+            except:
                 return {}
         return v or {}
 
-
-    brand_channel_url: str | None = Field(
-        default=None,
-        alias="BRAND_CHANNEL_URL",
-        description="Ссылка на канал бренда (кнопка КАНАЛ / CHANNEL в меню селлера).",
-    )
-    brand_chat_url: str | None = Field(
-        default=None,
-        alias="BRAND_CHAT_URL",
-        description="Ссылка на чат/группу бренда (кнопка ЧАТ / CHAT).",
-    )
-    brand_payments_url: str | None = Field(
-        default=None,
-        alias="BRAND_PAYMENTS_URL",
-        description="Ссылка на выплаты (страница, бот, t.me — кнопка ВЫПЛАТЫ / PAYMENTS).",
-    )
-
-    support_contact_founder: str | None = Field(default=None, alias="SUPPORT_CONTACT_FOUNDER")
-    support_contact_architect: str | None = Field(default=None, alias="SUPPORT_CONTACT_ARCHITECT")
-    support_contact_helper_1: str | None = Field(default=None, alias="SUPPORT_CONTACT_HELPER_1")
-    support_contact_helper_2: str | None = Field(default=None, alias="SUPPORT_CONTACT_HELPER_2")
-    chats: str | None = Field(default=None, alias="CHATS")
-
-    @field_validator("maintenance_mode", "health_ready_include_cryptobot", "moderation_suspended", "auto_fix_enabled", mode="before")
-    @classmethod
-    def _normalize_bool(cls, value: object) -> bool:
-        if isinstance(value, bool):
-            return value
-        if isinstance(value, str):
-            val = value.strip().lower()
-            if val in ("true", "1", "yes", "on"):
-                return True
-            if val in ("false", "0", "no", "off"):
-                return False
-            # Если в строке есть 'true' (даже с опечатками типа 'trueq'), считаем за True
-            return "true" in val
-        return bool(value)
-
-    @field_validator(
-        "admin_telegram_ids", 
-        "owner_telegram_ids", 
-        mode="before"
-    )
-    @classmethod
-    def _normalize_ids_or_list(cls, value: object) -> list[Any]:
-        if value is None or value == "":
-            return []
-        if isinstance(value, (int, float)):
-            return [int(value)]
-        if isinstance(value, list):
-            return value
-        if isinstance(value, str):
-            v = value.strip()
-            if v.startswith("[") and v.endswith("]"):
-                v = v[1:-1]
-            items = [s.strip().strip("'").strip('"') for s in v.split(",") if s.strip()]
-            
-            processed = []
-            for item in items:
-                try:
-                    processed.append(int(item))
-                except ValueError:
-                    processed.append(item)
-            return processed
-        return []
-
-    @field_validator("redis_url", mode="before")
-    @classmethod
-    def _normalize_redis_url(cls, value: object) -> str | None:
-        if value is None:
-            return None
-        if isinstance(value, str):
-            stripped = value.strip()
-            return stripped if stripped else None
-        return value  # pragma: no cover
-
-    @field_validator("alert_telegram_chat_id", mode="before")
-    @classmethod
-    def _normalize_alert_chat_id(cls, value: object) -> int | None:
-        if value is None or value == "":
-            return None
-        if isinstance(value, int):
-            return None if value == 0 else value
-        if isinstance(value, str):
-            s = value.strip()
-            if not s or s == "0":
-                return None
-            return int(s)
-        return None
-
-    @field_validator("crypto_asset", mode="before")
-    @classmethod
-    def _normalize_crypto_asset(cls, value: object) -> str:
-        if value is None:
-            return "USDT"
-        if isinstance(value, str):
-            normalized = value.strip().upper()
-            return normalized or "USDT"
-        return str(value).strip().upper() or "USDT"
-
     @property
     def database_url(self) -> str:
-        """Async URL для runtime-подключения через asyncpg."""
-
-        return (
-            f"postgresql+asyncpg://{self.postgres_user}:{self.postgres_password}"
-            f"@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
-        )
+        if self.database_url_custom:
+            return self.database_url_custom
+        return f"postgresql+asyncpg://{self.postgres_user}:{self.postgres_password}@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
 
     @property
     def alembic_database_url(self) -> str:
-        """Sync URL для Alembic-миграций."""
-
-        return (
-            f"postgresql+psycopg://{self.postgres_user}:{self.postgres_password}"
-            f"@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
-        )
+        if self.database_url_custom:
+            # Превращаем asyncpg URL в psycopg URL для Alembic
+            return self.database_url_custom.replace("asyncpg", "psycopg")
+        return f"postgresql+psycopg://{self.postgres_user}:{self.postgres_password}@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
 
 
-@lru_cache(maxsize=1)
+@lru_cache()
 def get_settings() -> Settings:
-    """Кэшированный фабричный метод конфигурации."""
-
     return Settings()

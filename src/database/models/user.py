@@ -3,11 +3,11 @@ from __future__ import annotations
 from datetime import datetime
 from decimal import Decimal
 
-from sqlalchemy import BigInteger, DateTime, Enum, Numeric, String, UniqueConstraint, JSON
+from sqlalchemy import JSON, BigInteger, DateTime, Enum, Numeric, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.database.models.base import Base, TimestampMixin
-from src.database.models.enums import UserLanguage, UserRole, NotificationPreference
+from src.database.models.enums import NotificationPreference, UserLanguage, UserRole
 
 
 def _enum_values(enum_cls: type[UserLanguage] | type[UserRole] | type[NotificationPreference]) -> list[str]:
@@ -47,7 +47,7 @@ class User(Base, TimestampMixin):
         default=UserRole.SELLER,
         index=True,
     )
-    is_active: Mapped[bool] = mapped_column(nullable=False, default=True)
+    is_active: Mapped[bool] = mapped_column(nullable=False, default=True, index=True)
     is_restricted: Mapped[bool] = mapped_column(nullable=False, default=False, index=True)
     has_accepted_codex: Mapped[bool] = mapped_column(nullable=False, default=False)
     duplicate_timeout_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

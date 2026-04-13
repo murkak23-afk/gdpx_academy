@@ -7,6 +7,7 @@ from sqlalchemy import engine_from_config, pool
 from alembic import context
 from src.core.config import get_settings
 from src.database.models import Base
+import sqlalchemy as sa
 
 config = context.config
 
@@ -52,6 +53,8 @@ def run_migrations_online() -> None:
         )
 
         with context.begin_transaction():
+            # Обеспечиваем наличие типа до запуска миграций
+            connection.execute(sa.text("DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'notification_preference_enum') THEN CREATE TYPE notification_preference_enum AS ENUM ('full', 'summary', 'none'); END IF; END $$;"))
             context.run_migrations()
 
 

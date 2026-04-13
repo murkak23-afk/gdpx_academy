@@ -7,7 +7,8 @@ import logging
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy.ext.asyncio import async_sessionmaker
-from src.services.submission_service import SubmissionService
+
+from src.domain.submission.submission_service import SubmissionService
 
 logger = logging.getLogger(__name__)
 

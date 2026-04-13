@@ -4,10 +4,12 @@ import logging
 import sys
 from typing import TYPE_CHECKING, Any, Union
 
+import random
 from loguru import logger
+from src.core.config import get_settings
 
 if TYPE_CHECKING:
-    from src.services.notification_service import NotificationService
+    from src.core.notification_service import NotificationService
 
 
 class InterceptHandler(logging.Handler):
@@ -42,7 +44,19 @@ class TelegramNotificationSink:
     def __call__(self, message: Any) -> None:
         # Извлекаем данные из сообщения loguru
         record = message.record
+        msg_text = str(record["message"]).lower()
+        
+        # ЗАЩИТА ОТ РЕКУРСИИ: если ошибка связана с сетью/Telegram, не шлем алерт
+        if any(x in msg_text for x in ["timeout", "resolution", "retry after", "network error", "connector"]):
+            return
+
         exception = record.get("exception")
+        
+        # Если есть исключение — проверяем и его текст
+        if exception:
+            exc_str = str(exception.value).lower()
+            if any(x in exc_str for x in ["timeout", "resolution", "retry after", "network error", "connector"]):
+                return
 
         # Если есть исключение — отправляем детальный отчет
         if exception:
@@ -78,14 +92,24 @@ def setup_logger(notification_service: NotificationService | None = None) -> Non
     """
     Настраивает loguru: перехватывает стандартные логи, выводит в консоль и (опционально) в Telegram.
     """
+    settings = get_settings()
+    is_prod = settings.env == "production"
+    
     # 1. Очищаем дефолтные обработчики
     logging.root.handlers = [InterceptHandler()]
-    logging.root.setLevel(logging.INFO)
+    logging.root.setLevel(getattr(logging, settings.log_level.upper(), logging.INFO))
 
     # Устанавливаем обработчик для всех именованных логгеров (aiogram, sqlalchemy, etc)
     for name in logging.root.manager.loggerDict.keys():
         logging.getLogger(name).handlers = []
         logging.getLogger(name).propagate = True
+
+    # Фильтр для сэмплинга логов в продакшене
+    def sampling_filter(record):
+        if is_prod and record["level"].name == "INFO":
+            # Пропускаем только 10% INFO сообщений
+            return random.random() < 0.1
+        return True
 
     # 2. Настраиваем loguru
     config = {
@@ -93,19 +117,19 @@ def setup_logger(notification_service: NotificationService | None = None) -> Non
             {
                 "sink": sys.stderr,
                 "format": "<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - <level>{message}</level>",
-                "level": "INFO",
+                "level": settings.log_level.upper(),
+                "filter": sampling_filter if is_prod else None,
             },
         ],
     }
 
     # 3. Если передан сервис уведомлений, добавляем Telegram Sink для ошибок
-    # [!] ВРЕМЕННО ОТКЛЮЧЕНО ПО ПРОСЬБЕ ПОЛЬЗОВАТЕЛЯ (ИЗ-ЗА СПАМА О КОНФЛИКТАХ)
-    # if notification_service:
-    #     config["handlers"].append({
-    #         "sink": TelegramNotificationSink(notification_service),
-    #         "level": "ERROR",
-    #         "filter": lambda record: record["level"].name in ["ERROR", "CRITICAL"],
-    #     })
+    if notification_service and is_prod:
+         config["handlers"].append({
+             "sink": TelegramNotificationSink(notification_service),
+             "level": "ERROR",
+             "filter": lambda record: record["level"].name in ["ERROR", "CRITICAL"],
+         })
 
     logger.configure(**config)
-    logger.info("Loguru logger initialized (with Telegram Sink if service provided)")
+    logger.info(f"Loguru logger initialized (Level: {settings.log_level}, Prod sampling: {is_prod})")

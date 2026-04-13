@@ -1,12 +1,12 @@
-from src.states.admin_state import AdminBroadcastState
-from src.states.moderation_state import (
+from src.domain.moderation.admin_state import AdminBroadcastState
+from src.domain.moderation.moderation_state import (
     AdminBatchPickState,
     AdminCardFilterState,
     AdminInworkBatchState,
     AdminModerationForwardState,
 )
-from src.states.registration_state import RegistrationState
-from src.states.submission_state import SubmissionState
+from src.domain.users.registration_state import RegistrationState
+from src.domain.submission.submission_state import SubmissionState
 
 __all__ = [
     "RegistrationState",

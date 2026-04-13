@@ -1,54 +1,83 @@
 services:
-  postgres:
-    image: postgres:16-alpine
-    container_name: gdpx_postgres
+  bot:
+    build: .
+    container_name: gdpx_bot
     restart: unless-stopped
-    env_file: .env
-    ports:
-      - "127.0.0.1:5432:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
+    env_file:
+      - .env
+    environment:
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST:-postgres}:${POSTGRES_PORT:-5432}/${POSTGRES_DB}
+      - WEBHOOK_URL=${WEBHOOK_URL:-https://gdpx.ru/webhook}
+      - WEBHOOK_SECRET_TOKEN=${WEBHOOK_SECRET_TOKEN}
+    command: /bin/sh -c "alembic upgrade head && python -m src start"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+      test: ["CMD", "curl", "-f", "http://localhost:8167/health/ready"]
+      interval: 15s
+      timeout: 10s
+      retries: 3
+    depends_on:
+      redis:
+        condition: service_started
+      postgres:
+        condition: service_healthy
+    ports:
+      # Доступно только для локального Nginx (прокси)
+      - "127.0.0.1:8167:8167"
+    networks:
+      - gdpx_network
+
+  worker:
+    build: .
+    container_name: gdpx_worker
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST:-postgres}:${POSTGRES_PORT:-5432}/${POSTGRES_DB}
+    command: python -m src worker
+    healthcheck:
+      test: ["CMD-SHELL", "ps aux | grep '[p]ython -m src worker'"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    depends_on:
+      redis:
+        condition: service_started
+      postgres:
+        condition: service_healthy
+    networks:
+      - gdpx_network
 
   redis:
     image: redis:7-alpine
     container_name: gdpx_redis
     restart: unless-stopped
-    ports:
-      - "127.0.0.1:6379:6379"
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 3s
-      retries: 5
+    command: redis-server --save 60 1 --loglevel warning
+    volumes:
+      - ./data/redis:/data
+    networks:
+      - gdpx_network
 
-  bot:
-    build: .
-    container_name: gdpx_bot
+  postgres:
+    image: postgres:16-alpine
+    container_name: gdpx_postgres
     restart: unless-stopped
-    env_file: .env
-    ports:
-      - "127.0.0.1:8000:8000"
     environment:
-      POSTGRES_HOST: postgres
-      REDIS_URL: redis://redis:6379/0
-      HTTP_HOST: "0.0.0.0"
-      HTTP_PORT: "8000"
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - ./data/postgres:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')\""]
-      interval: 30s
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
       timeout: 5s
-      retries: 3
-      start_period: 45s
+      retries: 5
+    networks:
+      - gdpx_network
 
-volumes:
-  postgres_data:
+networks:
+  gdpx_network:
+    driver: bridge

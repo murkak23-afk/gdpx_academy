@@ -1,16 +1,19 @@
-FROM python:3.13-slim AS base
+FROM python:3.12-slim-bookworm
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
 
 WORKDIR /app
 
-# Зависимости отдельным слоем — кеш при изменении кода
+# Устанавливаем только Python-зависимости
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN apt-get update && apt-get install -y --no-install-recommends curl && \
+    rm -rf /var/lib/apt/lists/* && \
+    pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt
 
+# Копируем проект
 COPY . .
-RUN chmod +x docker-entrypoint.sh
 
-ENTRYPOINT ["./docker-entrypoint.sh"]
-CMD ["python", "-m", "src"]
+# Запуск
+CMD ["python", "-m", "src", "start"]

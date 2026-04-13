@@ -1,44 +1,61 @@
 from __future__ import annotations
 
+import logging
+
 from aiogram import Dispatcher
+
+from src.core.config import get_settings
 
 from src.core.error_handlers import register_error_handlers
 from src.core.fsm_storage import build_fsm_storage
 from src.database.session import SessionFactory
-from src.handlers import setup_routers
-from src.middlewares import (
+from src.presentation.routers import setup_routers
+from src.presentation.middlewares import (
     DbSessionMiddleware,
     UpdateLoggingMiddleware,
     UserThrottlingMiddleware,
+    LoadingMiddleware,
 )
-from src.middlewares.maintenance import MaintenanceMiddleware
-from src.middlewares.block_check import BlockCheckMiddleware
-from src.core.config import get_settings
+from src.presentation.middlewares.command_cleanup import CommandCleanupMiddleware
+from src.presentation.middlewares.block_check import BlockCheckMiddleware
+from src.presentation.middlewares.maintenance import MaintenanceMiddleware
+from src.core.utils.message_manager import MessageManager
+from src.core.logger import logger
 
 
 def create_dispatcher() -> Dispatcher:
     """Создаёт диспетчер и подключает middleware/роутеры/обработчик ошибок."""
 
     dispatcher = Dispatcher(storage=build_fsm_storage())
+    
+    # Инициализация SMI MessageManager
+    from src.core.bot import create_bot
+    bot = create_bot()
+    mm = MessageManager(bot)
+    
+    @dispatcher.update.outer_middleware()
+    async def smi_middleware(handler, event, data):
+        data["ui"] = mm
+        return await handler(event, data)
     settings = get_settings()
 
-    # Порядок: сначала throttling, затем логирование.
-    dispatcher.update.middleware(UserThrottlingMiddleware(interval_sec=1.0))
-    
     @dispatcher.update.outer_middleware()
     async def global_debug_middleware(handler, event, data):
         user = data.get("event_from_user")
         if user:
-            from src.core.logger import logger
             logger.info(f"!!! [GLOBAL_TRACE] !!! Update from {user.id} (@{user.username})")
         return await handler(event, data)
 
-    dispatcher.update.middleware(UpdateLoggingMiddleware())
-    
     # ПЕРЕВОДИМ В OUTER MIDDLEWARE (выполняются ВСЕГДА до роутеров)
     dispatcher.update.outer_middleware(DbSessionMiddleware(session_factory=SessionFactory))
     dispatcher.update.outer_middleware(MaintenanceMiddleware(settings=settings))
     dispatcher.update.outer_middleware(BlockCheckMiddleware())
+    dispatcher.update.outer_middleware(LoadingMiddleware())
+
+    # Порядок: сначала логирование, затем throttling.
+    dispatcher.update.middleware(UpdateLoggingMiddleware())
+    dispatcher.update.middleware(UserThrottlingMiddleware(interval_sec=1.0))
+    dispatcher.message.outer_middleware(CommandCleanupMiddleware())
 
     dispatcher.include_router(setup_routers())
     register_error_handlers(dispatcher)

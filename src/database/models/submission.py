@@ -11,10 +11,10 @@ from src.database.models.base import Base, TimestampMixin
 from src.database.models.enums import RejectionReason, SubmissionStatus
 
 if TYPE_CHECKING:
-    from src.database.models.user import User
     from src.database.models.category import Category
     from src.database.models.publication import PublicationArchive
     from src.database.models.review_action import ReviewAction
+    from src.database.models.user import User
 
 
 def _enum_values(enum_cls: type[SubmissionStatus] | type[RejectionReason]) -> list[str]:
@@ -27,6 +27,7 @@ class Submission(Base, TimestampMixin):
     __tablename__ = "submissions"
     __table_args__ = (
         Index("ix_submissions_status_created_at", "status", "created_at"),
+        Index("ix_submissions_user_status_created", "user_id", "status", "created_at"),
     )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
@@ -56,8 +57,8 @@ class Submission(Base, TimestampMixin):
     rejection_reason: Mapped[str | None] = mapped_column(String(128), nullable=True)
     rejection_comment: Mapped[str | None] = mapped_column(Text, nullable=True)
     
-    assigned_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    assigned_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
     
     fixed_payout_rate: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False, default=Decimal("0.00"))
     accepted_amount: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)
