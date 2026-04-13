@@ -52,7 +52,7 @@ async def _render_payout_history(callback: CallbackQuery, session: AsyncSession,
         days_map = {"7": 7, "30": 30, "90": 90, "all": None}
         history, total = await bill_svc.get_payout_history(user_id=user.id, days=days_map.get(period))
         
-        banner = media.get("payouts.jpg")
+        banner = media.get("viplata.jpg")
         
         lines = [
             "❖ <b>GDPX // PAYOUT HISTORY</b>",
