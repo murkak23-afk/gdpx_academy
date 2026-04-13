@@ -50,7 +50,8 @@ async def cmd_qr_delivery_menu(event: Message | CallbackQuery, session: AsyncSes
     )
     
     # ui.display сам поймет, группа это или ЛС, и сохранит позицию
-    await ui.display(event=event, text=text, reply_markup=await get_qr_delivery_main_kb())
+    chat_id = event.chat.id if isinstance(event, Message) else event.message.chat.id
+    await ui.display(event=event, text=text, reply_markup=await get_qr_delivery_main_kb(chat_id))
     if isinstance(event, CallbackQuery):
         await event.answer()
 

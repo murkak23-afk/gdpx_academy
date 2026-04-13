@@ -28,6 +28,7 @@ class Category(Base, TimestampMixin):
     total_upload_limit: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, index=True)
     is_priority: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, index=True)
+    delivery_thread_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
 
     operator: Mapped[str | None] = mapped_column(String(60), nullable=True, index=True)
     sim_type: Mapped[str | None] = mapped_column(String(60), nullable=True)

@@ -62,6 +62,7 @@ class Settings(BaseSettings):
 
     # --- SYSTEM ---
     maintenance_mode: bool = Field(default=False, alias="MAINTENANCE_MODE")
+    moderation_suspended: bool = Field(default=False, alias="MODERATION_SUSPENDED")
     sentry_dsn: str | None = Field(default=None, alias="SENTRY_DSN")
     # --- HEALTH ---
     health_ready_include_cryptobot: bool = Field(default=False, alias="HEALTH_READY_INCLUDE_CRYPTOBOT")
@@ -78,7 +79,7 @@ class Settings(BaseSettings):
 
     # --- VALIDATORS ---
 
-    @field_validator("maintenance_mode", "auto_fix_enabled", mode="before")
+    @field_validator("maintenance_mode", "moderation_suspended", "auto_fix_enabled", mode="before")
     @classmethod
     def _normalize_bool(cls, v: Any) -> bool:
         if isinstance(v, str):

@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>GDPX // DELIVERY HUB</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        :root {
+            --tg-theme-bg-color: #0f0f0f;
+            --tg-theme-text-color: #ffffff;
+            --tg-theme-hint-color: #aaaaaa;
+            --tg-theme-link-color: #00d2ff;
+            --tg-theme-button-color: #ffffff;
+            --tg-theme-button-text-color: #000000;
+            --accent-color: #00d2ff;
+            --danger-color: #ff4b2b;
+        }
+
+        body {
+            background-color: var(--tg-theme-bg-color);
+            color: var(--tg-theme-text-color);
+            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            margin: 0;
+            padding: 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            overflow-x: hidden;
+        }
+
+        .header {
+            text-align: center;
+            border-bottom: 1px solid #333;
+            padding-bottom: 15px;
+        }
+
+        .header h1 {
+            font-size: 1.2rem;
+            letter-spacing: 2px;
+            margin: 0;
+            color: var(--accent-color);
+        }
+
+        .card-container {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .category-card {
+            background: #1a1a1a;
+            border: 1px solid #333;
+            border-radius: 12px;
+            padding: 16px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: transform 0.1s;
+        }
+
+        .category-card:active {
+            transform: scale(0.98);
+            background: #222;
+        }
+
+        .category-card.selected {
+            border-color: var(--accent-color);
+            box-shadow: 0 0 10px rgba(0, 210, 255, 0.2);
+        }
+
+        .info {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .title {
+            font-weight: bold;
+            font-size: 1rem;
+        }
+
+        .stock {
+            font-size: 0.8rem;
+            color: var(--tg-theme-hint-color);
+        }
+
+        .badge {
+            background: var(--accent-color);
+            color: black;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 0.7rem;
+            font-weight: bold;
+        }
+
+        .controls {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: rgba(15, 15, 15, 0.95);
+            padding: 20px;
+            border-top: 1px solid #333;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            backdrop-filter: blur(10px);
+        }
+
+        input {
+            background: #222;
+            border: 1px solid #444;
+            color: white;
+            padding: 12px;
+            border-radius: 8px;
+            font-size: 1rem;
+            text-align: center;
+            outline: none;
+        }
+
+        input:focus {
+            border-color: var(--accent-color);
+        }
+
+        .main-button {
+            background: var(--tg-theme-button-color);
+            color: var(--tg-theme-button-text-color);
+            border: none;
+            padding: 15px;
+            border-radius: 10px;
+            font-weight: bold;
+            font-size: 1rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .main-button:disabled {
+            opacity: 0.5;
+            background: #444;
+        }
+
+        .error-msg {
+            color: var(--danger-color);
+            font-size: 0.8rem;
+            text-align: center;
+            min-height: 1em;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>❖ GDPX // DELIVERY</h1>
+    </div>
+
+    <div id="cards" class="card-container">
+        <!-- Карточки подгрузятся через JS -->
+        <div style="text-align: center; padding: 40px; color: #666;">Загрузка склада...</div>
+    </div>
+
+    <div style="height: 150px;"></div> <!-- Отступ под панель -->
+
+    <div class="controls">
+        <div id="error" class="error-msg"></div>
+        <input type="number" id="count" placeholder="Количество (шт.)" min="1">
+        <button id="submit" class="main-button" disabled>ЗАПРОСИТЬ ОТГРУЗКУ</button>
+    </div>
+
+    <script>
+        const tg = window.Telegram.WebApp;
+        tg.expand();
+        tg.ready();
+
+        let selectedId = null;
+        let categories = [];
+
+        // Функция загрузки данных
+        async function loadData() {
+            try {
+                const response = await fetch('/api/delivery/categories');
+                categories = await response.json();
+                renderCards();
+            } catch (e) {
+                document.getElementById('error').innerText = "Ошибка связи с сервером";
+            }
+        }
+
+        function renderCards() {
+            const container = document.getElementById('cards');
+            container.innerHTML = '';
+
+            categories.forEach(cat => {
+                const card = document.createElement('div');
+                card.className = `category-card ${selectedId === cat.id ? 'selected' : ''}`;
+                card.onclick = () => selectCategory(cat.id);
+
+                card.innerHTML = `
+                    <div class="info">
+                        <div class="title">${cat.title}</div>
+                        <div class="stock">В наличии: ${cat.stock} шт.</div>
+                    </div>
+                    ${cat.is_priority ? '<div class="badge">HOT</div>' : ''}
+                `;
+                container.appendChild(card);
+            });
+        }
+
+        function selectCategory(id) {
+            selectedId = id;
+            renderCards();
+            validate();
+        }
+
+        const input = document.getElementById('count');
+        const submitBtn = document.getElementById('submit');
+        const errorDiv = document.getElementById('error');
+
+        function validate() {
+            const val = parseInt(input.value);
+            const cat = categories.find(c => c.id === selectedId);
+            
+            let error = "";
+            let disabled = true;
+
+            if (!selectedId) {
+                error = "Выберите оператора";
+            } else if (!val || val <= 0) {
+                error = "Введите количество";
+            } else if (cat && val > cat.stock) {
+                error = `Недостаточно на складе (макс: ${cat.stock})`;
+            } else {
+                disabled = false;
+            }
+
+            errorDiv.innerText = error;
+            submitBtn.disabled = disabled;
+        }
+
+        input.oninput = validate;
+
+        submitBtn.onclick = async () => {
+            const val = parseInt(input.value);
+            submitBtn.disabled = true;
+            submitBtn.innerText = "ОТПРАВЛЯЕМ...";
+
+            // Извлекаем chat_id из URL
+            const urlParams = new URLSearchParams(window.location.search);
+            const chat_id = urlParams.get('chat_id');
+
+            try {
+                const response = await fetch('/api/delivery/order', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        category_id: selectedId,
+                        count: val,
+                        chat_id: parseInt(chat_id), // Передаем ID чата обратно
+                        init_data: tg.initData
+                    })
+                });
+
+                if (response.ok) {
+                    tg.HapticFeedback.notificationOccurred('success');
+                    tg.close();
+                } else {
+                    const data = await response.json();
+                    errorDiv.innerText = data.detail || "Ошибка запроса";
+                    submitBtn.disabled = false;
+                    submitBtn.innerText = "ЗАПРОСИТЬ ОТГРУЗКУ";
+                }
+            } catch (e) {
+                errorDiv.innerText = "Ошибка сети";
+                submitBtn.disabled = false;
+            }
+        };
+
+        loadData();
+    </script>
+</body>
+</html>

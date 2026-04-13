@@ -10,11 +10,19 @@ from src.presentation.common.factory import QRDeliveryCD
 
 
 @cached_keyboard(ttl=600)
-def get_qr_delivery_main_kb() -> InlineKeyboardMarkup:
-    """Главное меню системы выдачи."""
+def get_qr_delivery_main_kb(chat_id: int) -> InlineKeyboardMarkup:
+    """Главное меню системы выдачи с привязкой к чату."""
+    from aiogram.types import WebAppInfo
+    from src.core.config import get_settings
+    settings = get_settings()
+    
+    # URL нашего приложения + передаем ID текущего чата
+    base_url = settings.webhook_url.replace('/webhook', '')
+    webapp_url = f"{base_url}/delivery?chat_id={chat_id}"
+    
     return (PremiumBuilder()
-            .button("📱 ОПЕРАТОРЫ", QRDeliveryCD(action="op_list"))
-            .row()
+            .button("📱 ОПЕРАТОРЫ (КНОПКИ)", QRDeliveryCD(action="op_list"))
+            .button("🌐 DELIVERY HUB (APP)", web_app=WebAppInfo(url=webapp_url))
             .button("❌ ОТМЕНИТЬ ДЕЙСТВИЕ", QRDeliveryCD(action="cancel"))
             .adjust(1)
             .as_markup())
