@@ -104,7 +104,7 @@ async def pick_category(callback: CallbackQuery, callback_data: SellerAssetCD, s
         f"<i>Можно выделить до 50 файлов разом. После загрузки нажмите «Подтвердить интеграцию».</i>"
     )
 
-    await ui.display(event=callback, text=text, reply_markup=get_upload_finish_kb())
+    await ui.display(event=callback, text=text, reply_markup=await get_upload_finish_kb())
     await callback.answer("Приемник открыт")
 
 
@@ -177,9 +177,10 @@ async def _refresh_control_panel(user_id: int, bot: Bot, state: FSMContext, chat
         # Но нам нужен объект "Update" или "Message" чтобы вызвать ui.display
         # Костыль: передаем пустой Message(id=msg_id)
         from aiogram.types import User, Chat
-        dummy = Message(message_id=msg_id, date=None, chat=Chat(id=chat_id, type="private"), from_user=User(id=user_id, is_bot=False, first_name="..."))
-        await ui.display(event=dummy, text=text, reply_markup=get_upload_finish_kb())
-    except Exception: pass
+        dummy = Message(message_id=msg_id, date=datetime.now(), chat=Chat(id=user_id, type="private"), from_user=User(id=user_id, is_bot=False, first_name="..."))
+        await ui.display(event=dummy, text=text, reply_markup=await get_upload_finish_kb())
+    except Exception as e:
+        logger.debug(f"Debounce display failed: {e}")
     _debounce_tasks.pop(user_id, None)
 
 

@@ -56,7 +56,7 @@ async def cmd_qr_delivery_menu(callback: CallbackQuery, session: AsyncSession, s
         f"<i>Выберите оператора для начала процесса:</i>"
     )
     
-    await edit_message_text_or_caption_safe(callback.message, text, reply_markup=get_qr_delivery_main_kb(), parse_mode="HTML")
+    await edit_message_text_or_caption_safe(callback.message, text, reply_markup=await get_qr_delivery_main_kb(), parse_mode="HTML")
     await callback.answer()
 
 @router.callback_query(QRDeliveryCD.filter(F.action == "op_list"))
@@ -74,7 +74,7 @@ async def cb_delivery_op_list(callback: CallbackQuery, session: AsyncSession):
         f"Ниже список категорий, в которых есть готовые к выдаче eSIM (PENDING)."
     )
     
-    await edit_message_text_or_caption_safe(callback.message, text, reply_markup=get_qr_delivery_operators_kb(stats), parse_mode="HTML")
+    await edit_message_text_or_caption_safe(callback.message, text, reply_markup=await get_qr_delivery_operators_kb(stats), parse_mode="HTML")
     await callback.answer()
 
 @router.callback_query(QRDeliveryCD.filter(F.action == "op_pick"))
@@ -166,7 +166,7 @@ async def process_delivery_count(message: Message, state: FSMContext, session: A
         f"Успешно выдано: <code>{success_count}</code> шт.\n"
         f"Статус активов изменен на <b>IN_WORK</b>.",
         parse_mode="HTML",
-        reply_markup=get_qr_delivery_main_kb()
+        reply_markup=await get_qr_delivery_main_kb()
     )
 
 @router.callback_query(QRDeliveryCD.filter(F.action == "cancel"))
