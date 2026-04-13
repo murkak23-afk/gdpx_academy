@@ -15,6 +15,7 @@ from src.domain.users.user_service import UserService
 from src.core.utils.media import media
 from src.core.utils.text_format import edit_message_text_or_caption_safe
 from src.core.utils.ui_builder import DIVIDER, DIVIDER_LIGHT
+from src.core.utils.message_manager import MessageManager
 
 router = Router(name="seller-materials-premium-router")
 logger = logging.getLogger(__name__)
@@ -28,7 +29,7 @@ STATUS_MAP = {
 }
 
 @router.callback_query(SellerMenuCD.filter(F.action == "assets"), StateFilter(None))
-async def list_folders(callback: CallbackQuery, session: AsyncSession) -> None:
+async def list_folders(callback: CallbackQuery, session: AsyncSession, ui: MessageManager) -> None:
     """Главный дашборд 'Мои активы': статистика за СЕГОДНЯ и список кластеров (активные)."""
     # Очищаем уведомления при входе в материалы
     from src.presentation.common.notifications import clear_notifications
