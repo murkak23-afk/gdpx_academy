@@ -47,6 +47,7 @@ def create_dispatcher() -> Dispatcher:
         return await handler(event, data)
 
     # ПЕРЕВОДИМ В OUTER MIDDLEWARE (выполняются ВСЕГДА до роутеров)
+    dispatcher.update.outer_middleware(CommandCleanupMiddleware()) # ЧИСТКА КОМАНД СРАЗУ
     dispatcher.update.outer_middleware(DbSessionMiddleware(session_factory=SessionFactory))
     dispatcher.update.outer_middleware(MaintenanceMiddleware(settings=settings))
     dispatcher.update.outer_middleware(BlockCheckMiddleware())

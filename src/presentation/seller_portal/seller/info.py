@@ -46,7 +46,8 @@ router = Router(name="seller-info-router")
 async def on_archive_open(
     callback: CallbackQuery, 
     callback_data: SellerMenuCD | SellerArchiveCD, 
-    session: AsyncSession
+    session: AsyncSession,
+    ui: MessageManager
 ) -> None:
     """Отрисовка раздела Архив с детальной статистикой."""
     try:
@@ -106,16 +107,10 @@ async def on_archive_open(
             f"<i>В архиве хранятся активы, загруженные до 00:00 МСК текущего дня.</i>"
         )
         
-        banner = media.get("academy.jpg")
+        banner = media.get("archive.jpg")
         kb = await get_seller_archive_kb(period)
         
-        try:
-            await callback.message.edit_media(
-                media=InputMediaPhoto(media=banner, caption=text, parse_mode="HTML"),
-                reply_markup=kb
-            )
-        except Exception:
-            await edit_message_text_or_caption_safe(callback.message, text, reply_markup=kb)
+        await ui.display(event=callback, text=text, reply_markup=kb, photo=banner)
         await callback.answer()
         
     except Exception as e:

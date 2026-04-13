@@ -1,0 +1,74 @@
+[33m062bcda[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/prod-fix[m[33m)[m HEAD@{0}: Branch: renamed refs/heads/main to refs/heads/main
+[33m062bcda[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/prod-fix[m[33m)[m HEAD@{2}: reset: moving to HEAD
+[33m062bcda[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/prod-fix[m[33m)[m HEAD@{3}: reset: moving to HEAD
+[33m062bcda[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/prod-fix[m[33m)[m HEAD@{4}: checkout: moving from trug to main
+[33maba19f6[m[33m ([m[1;32mtrug[m[33m)[m HEAD@{5}: commit: fix: ignore database data and update webhook logic
+[33m0d70a00[m HEAD@{6}: commit: backup before hardcore refactoring
+[33m68eceaa[m HEAD@{7}: commit: backup fin
+[33m9b86204[m HEAD@{8}: commit: backup fin
+[33m16124f0[m HEAD@{9}: commit: backup fin
+[33mff8a5ee[m HEAD@{10}: commit: safer
+[33m24162b1[m HEAD@{11}: commit: feat: complete Owner Cabinet (/o) with all requested features and fixes
+[33mc4daef7[m HEAD@{12}: commit: feat: complete Owner Cabinet (/o) with all requested features and fixes
+[33m6e10cfb[m HEAD@{13}: commit: backup before role model and ghost mode implementation
+[33m8060cec[m HEAD@{14}: commit: backup before implementing Ultimate Silver Sakura Keyboard Pack
+[33m04d03df[m HEAD@{15}: commit: backup before final cleanup of old moderation + finance
+[33mcd2a0c0[m HEAD@{16}: commit: backup before final cleanup of old moderation + finance
+[33m3fbd00f[m HEAD@{17}: commit: backup before fixing CryptoBot session error
+[33me8acc19[m HEAD@{18}: commit: backup before adding API top-up command
+[33ma86a5bf[m HEAD@{19}: commit: backup before implementing Undo feature
+[33md974bd7[m HEAD@{20}: commit: backup before Phase 6 — Final Polish & Dashboard
+[33mafaf631[m HEAD@{21}: commit: backup before fixing 'Back to card' bug in inspector
+[33m5a8845c[m HEAD@{22}: commit: backup before fixing ALL MissingGreenlet errors in moderation_service
+[33md62ff97[m HEAD@{23}: commit: backup before adding get_by_id to UserService
+[33m7104fbd[m HEAD@{24}: commit: backup before adding get_by_id to UserService
+[33m225cbdf[m HEAD@{25}: commit: backup before
+[33mc29bd09[m HEAD@{26}: commit: backup before fixing
+[33md8b4f1a[m HEAD@{27}: commit: backup before generating
+[33m159d63f[m HEAD@{28}: commit: backup before full premium rewrite of
+[33m3ff706c[m HEAD@{29}: commit: backup before fixing NameError in view_category
+[33me1cc41f[m HEAD@{30}: commit: backup before fixing is_priority migration
+[33m4bb51d5[m HEAD@{31}: commit: backup before premium category management panel
+[33mc2ee4bd[m HEAD@{32}: commit: backup before FULL REWRITE of cat_constructor
+[33ma47e7a8[m HEAD@{33}: commit: backup before adding create_category to CategoryService
+[33m89f0ae7[m HEAD@{34}: commit: fix: clean duplicate _last_ts and _lock in UserThrottlingMiddleware
+[33meaf20a3[m HEAD@{35}: commit: backup before fixing bulk rate limiting
+[33m8643507[m HEAD@{36}: commit: feat: advanced error logging to admin chat with #CRITICAL_ERROR and traceback
+[33m6267e6f[m HEAD@{37}: commit: backup before advanced error logging
+[33mfd3cbe0[m HEAD@{38}: reset: moving to fd3cbe0
+[33mfd3cbe0[m HEAD@{39}: checkout: moving from trug to trug
+[33mfd3cbe0[m HEAD@{40}: commit: fix: import CALLBACK_INLINE_BACK from keyboards.constants, not keyboards.callbacks
+[33m5b4c411[m HEAD@{41}: commit: docs: Phase 5 — packaging and documentation
+[33m43a5253[m HEAD@{42}: commit: refactor: Phase 4 — deconstruct seller.py monolith into handlers/seller/ package
+[33mcd26cf6[m HEAD@{43}: reset: moving to HEAD
+[33mcd26cf6[m HEAD@{44}: commit: refactor: Phase 1-3 (Cleanup, Admin Deconstruct, Middleware UoW, TTLCache)
+[33m69dc96c[m[33m ([m[1;31morigin/trug[m[33m)[m HEAD@{45}: commit: Code cleanup: remove debug artifacts, unused functions, and unprofessional text
+[33m6088c33[m HEAD@{46}: commit: fix: report_lines/sent undefined in submission report
+[33m8d2c01e[m HEAD@{47}: commit: fix: restore inline keyboards, add back buttons to all FSM prompts and completions
+[33mb9c142f[m HEAD@{48}: commit: refactor: remove locked_by_admin, fix invisible messages
+[33me1c72d2[m HEAD@{49}: commit: wip: work in progress
+[33m3fde665[m HEAD@{50}: commit: full backup: сохранение всей текущей системы
+[33md7e52c6[m HEAD@{51}: checkout: moving from trug to trug
+[33md7e52c6[m HEAD@{52}: checkout: moving from trug to trug
+[33md7e52c6[m HEAD@{53}: reset: moving to d7e52c65fea7ea3c8dada1b8d0d91f5ba5f94a46
+[33md7e52c6[m HEAD@{54}: reset: moving to d7e52c65fea7ea3c8dada1b8d0d91f5ba5f94a46
+[33m184c753[m HEAD@{55}: checkout: moving from main to trug
+[33m062bcda[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/prod-fix[m[33m)[m HEAD@{56}: checkout: moving from 062bcdad432e7bc55ed00b568069345da99acb8f to main
+[33m062bcda[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/prod-fix[m[33m)[m HEAD@{57}: commit: chore: сохранение состояния — хендлеры, клавиатуры, миграции, ruff
+[33md7e52c6[m HEAD@{58}: commit: feat: Add manual registry for help section
+[33m184c753[m HEAD@{59}: checkout: moving from trug to 184c753fd1bad2d922742a29c7c23c0600b6ffa7
+[33m184c753[m HEAD@{60}: commit: refactor: полная чистка проекта + Docker-оптимизация
+[33m7d87e87[m HEAD@{61}: commit: gdpx_academy
+[33m43b7356[m[33m ([m[1;31mupstream/main[m[33m, [m[1;31mupstream/HEAD[m[33m, [m[1;32mdsd[m[33m, [m[1;32mcopilot/worktree-2026-03-28T18-41-23[m[33m)[m HEAD@{62}: checkout: moving from dsd to trug
+[33m43b7356[m[33m ([m[1;31mupstream/main[m[33m, [m[1;31mupstream/HEAD[m[33m, [m[1;32mdsd[m[33m, [m[1;32mcopilot/worktree-2026-03-28T18-41-23[m[33m)[m HEAD@{63}: reset: moving to HEAD
+[33m43b7356[m[33m ([m[1;31mupstream/main[m[33m, [m[1;31mupstream/HEAD[m[33m, [m[1;32mdsd[m[33m, [m[1;32mcopilot/worktree-2026-03-28T18-41-23[m[33m)[m HEAD@{64}: reset: moving to HEAD
+[33m43b7356[m[33m ([m[1;31mupstream/main[m[33m, [m[1;31mupstream/HEAD[m[33m, [m[1;32mdsd[m[33m, [m[1;32mcopilot/worktree-2026-03-28T18-41-23[m[33m)[m HEAD@{65}: checkout: moving from main to dsd
+[33m43b7356[m[33m ([m[1;31mupstream/main[m[33m, [m[1;31mupstream/HEAD[m[33m, [m[1;32mdsd[m[33m, [m[1;32mcopilot/worktree-2026-03-28T18-41-23[m[33m)[m HEAD@{66}: checkout: moving from main to main
+[33m43b7356[m[33m ([m[1;31mupstream/main[m[33m, [m[1;31mupstream/HEAD[m[33m, [m[1;32mdsd[m[33m, [m[1;32mcopilot/worktree-2026-03-28T18-41-23[m[33m)[m HEAD@{67}: commit: feat: Add visual progress indicator for FSM (Шаг X/3)
+[33m5feded2[m HEAD@{68}: commit: feat: Add inline query search for admins (find goods instantly)
+[33m787fd20[m HEAD@{69}: commit: feat: Add quick add template for sellers (70% faster)
+[33m4775da3[m HEAD@{70}: commit: feat: Add bot commands menu (/start, /profile, /sell, /stats, /help)
+[33maa4e0d0[m HEAD@{71}: commit: feat: /adm_oper для категорий, FSM waiting_for_add_price, парсер цены
+[33mc384577[m HEAD@{72}: commit: feat: admin UX, health/ready, alerts, category flows, migrations
+[33mc84bdea[m HEAD@{73}: commit: Бэкап: стабильная версия перед Enterprise-рефакторингом
+[33m5fc1e75[m HEAD@{74}: commit (initial): before handlers split

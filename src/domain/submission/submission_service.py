@@ -9,7 +9,7 @@ from sqlalchemy.orm import joinedload, load_only
 
 from src.database.models.category import Category
 from src.database.models.enums import SubmissionStatus, UserRole
-from src.database.models.submission import Submission
+from src.database.models.submission import ReviewAction, Submission
 from src.database.models.user import User
 from src.database.uow import UnitOfWork
 from src.presentation.main_operators import MAIN_OPERATOR_GROUPS, category_title_to_main_group_label
@@ -331,6 +331,50 @@ class SubmissionService:
         )
         result = await self._uow.session.execute(stmt)
         return result.rowcount
+
+    async def auto_transition_issued_to_verification(self, threshold: datetime) -> int:
+        """Авто-перевод из IN_WORK в WAIT_CONFIRM (по таймауту 1 час)."""
+        now = datetime.now(timezone.utc)
+        
+        # 1. Находим идентификаторы зависших заявок
+        stmt = (
+            select(Submission.id)
+            .where(
+                Submission.status == SubmissionStatus.IN_WORK,
+                Submission.last_status_change <= threshold
+            )
+        )
+        result = await self._uow.session.execute(stmt)
+        ids = [row[0] for row in result.all()]
+        
+        if not ids:
+            return 0
+            
+        # 2. Обновляем статус в базе одним запросом
+        update_stmt = (
+            update(Submission)
+            .where(Submission.id.in_(ids))
+            .values(
+                status=SubmissionStatus.WAIT_CONFIRM,
+                last_status_change=now
+            )
+        )
+        await self._uow.session.execute(update_stmt)
+        
+        # 3. Добавляем запись в историю для прозрачности
+        actions = [
+            ReviewAction(
+                submission_id=sid,
+                admin_id=None,
+                from_status=SubmissionStatus.IN_WORK,
+                to_status=SubmissionStatus.WAIT_CONFIRM,
+                comment="Автоматический перевод по SLA (зависло >1ч)"
+            )
+            for sid in ids
+        ]
+        self._uow.session.add_all(actions)
+        
+        return len(ids)
 
     async def delete_submission(self, submission_id: int, user_id: int) -> tuple[bool, str]:
         submission = await self.get_by_id(submission_id)

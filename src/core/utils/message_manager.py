@@ -57,7 +57,7 @@ class MessageManager:
     ) -> None:
         """
         Основной метод отображения интерфейса.
-        Пробует редактировать существующее сообщение пользователя.
+        Пробует редактировать существующее сообщение пользователя для плавности.
         """
         user_id = event.from_user.id
         main_msg_id = await self._get_main_msg_id(user_id)
@@ -67,35 +67,30 @@ class MessageManager:
         is_callback = isinstance(event, CallbackQuery)
         is_command = isinstance(event, Message)
         
-        # ЛОГИКА ПЕРЕЗАПУСКА ПРИ ПАУЗЕ > 5 МИНУТ ИЛИ КОМАНДЕ /START
-        # Если это новая команда (не колбэк) и прошло более 300 секунд ИЛИ это /start
+        # Авто-ответ на колбэк (убирает крутилку на кнопке)
+        if is_callback:
+            await self.answer_loading(event)
+
+        # ЛОГИКА ПЕРЕЗАПУСКА (только если /start или сообщение очень старое)
         force_new = False
         if is_command and main_msg_id:
             is_start = event.text and event.text.startswith("/start")
-            if is_start or (now - last_ts > 300):
-                logger.info(f"SMI: Force new message (is_start={is_start}, timeout={now - last_ts > 300})")
+            # Если прошло более 24 часов или это /start — пересоздаем интерфейс
+            if is_start or (now - last_ts > 86400):
                 force_new = True
-
-        # Если это CallbackQuery, мы ВСЕГДА считаем его сообщение главным (если оно от бота)
-        if is_callback:
-            if main_msg_id != event.message.message_id:
-                await self._set_main_msg_id(user_id, event.message.message_id)
-                main_msg_id = event.message.message_id
-            # Обновляем время активности при кликах
-            if self._redis:
-                await self._redis.set(f"smi_last_ts:{user_id}", now, ex=86400 * 3)
 
         if main_msg_id and not force_new:
             try:
-                # Определяем, нужно ли менять медиа
+                # Если было фото и пришло новое фото — редактируем медиа (ПЛАВНО)
                 if photo:
                     await self.bot.edit_message_media(
-                        media=InputMediaPhoto(media=photo, caption=text, parse_mode=parse_mode),
                         chat_id=user_id,
                         message_id=main_msg_id,
+                        media=InputMediaPhoto(media=photo, caption=text, parse_mode=parse_mode),
                         reply_markup=reply_markup,
                     )
                 else:
+                    # Если фото нет, пробуем просто сменить текст
                     await self.bot.edit_message_text(
                         chat_id=user_id,
                         message_id=main_msg_id,
@@ -103,16 +98,28 @@ class MessageManager:
                         reply_markup=reply_markup,
                         parse_mode=parse_mode,
                     )
+                
+                # Обновляем время активности
+                if self._redis:
+                    await self._redis.set(f"smi_last_ts:{user_id}", now, ex=86400 * 3)
                 return
             except TelegramBadRequest as e:
                 err = str(e).lower()
                 if "message is not modified" in err:
                     return
-                logger.debug(f"SMI Edit failed for {user_id}, sending new message: {e}")
+                # Если нельзя редактировать (например, из текста в фото), идем к отправке нового
+                logger.debug(f"SMI Edit failed (type mismatch?), sending new message...")
                 pass
 
-        # Если редактирование не удалось, ID нет или принудительно новое — отправляем
+        # ФИНАЛЬНЫЙ ЭТАП: Отправка нового сообщения
         try:
+            # Сначала удаляем старое (если оно есть), чтобы новое "всплыло" на его месте
+            if main_msg_id:
+                try:
+                    await self.bot.delete_message(user_id, main_msg_id)
+                except Exception:
+                    pass
+
             if photo:
                 new_msg = await self.bot.send_photo(
                     chat_id=user_id,
@@ -129,22 +136,10 @@ class MessageManager:
                     parse_mode=parse_mode,
                 )
 
-            # Старое сообщение пробуем удалить, чтобы не мусорить
-            if main_msg_id and main_msg_id != new_msg.message_id:
-                try:
-                    await self.bot.delete_message(user_id, main_msg_id)
-                except Exception:
-                    pass
-
             await self._set_main_msg_id(user_id, new_msg.message_id)
+            # Уведомления всегда "прилипают" снизу
             await self.ensure_notifications_below(user_id)
 
-            # Если это был CallbackQuery, пробуем удалить сообщение, на которое нажали
-            if is_callback and event.message.message_id != new_msg.message_id:
-                try:
-                    await self.bot.delete_message(user_id, event.message.message_id)
-                except Exception:
-                    pass
         except Exception as e:
             logger.error(f"SMI Critical error for {user_id}: {e}")
 

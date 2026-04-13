@@ -284,7 +284,10 @@ async def show_stats(callback: CallbackQuery, callback_data: SellerMenuCD | Sell
         
         text = _renderer.render_seller_stats(label_map.get(period, "Все время"), stats, rank_pos)
         kb = await get_seller_stats_kb(period)
-        await ui.display(event=callback, text=text, reply_markup=kb)
+        
+        # Добавляем баннер статистики
+        banner = media.get("score.jpg")
+        await ui.display(event=callback, text=text, reply_markup=kb, photo=banner)
         await callback.answer()
     except Exception as e:
         logger.exception(f"Error in show_stats: {e}")
