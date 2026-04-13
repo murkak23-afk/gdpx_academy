@@ -28,23 +28,22 @@ class MessageManager:
         if self.settings.redis_url:
             self._redis = Redis.from_url(self.settings.redis_url, decode_responses=True)
 
-    async def _get_main_msg_id(self, user_id: int) -> Optional[int]:
+    async def _get_main_msg_id(self, key: str) -> Optional[int]:
         if not self._redis:
             return None
-        val = await self._redis.get(f"smi_msg_id:{user_id}")
+        val = await self._redis.get(f"smi_msg_id:{key}")
         return int(val) if val else None
 
-    async def _set_main_msg_id(self, user_id: int, msg_id: int):
+    async def _set_main_msg_id(self, key: str, msg_id: int):
         if not self._redis:
             return
-        # Устанавливаем ID сообщения и обновляем время последнего взаимодействия
-        await self._redis.set(f"smi_msg_id:{user_id}", msg_id, ex=86400 * 3)
-        await self._redis.set(f"smi_last_ts:{user_id}", int(time.time()), ex=86400 * 3)
+        await self._redis.set(f"smi_msg_id:{key}", msg_id, ex=86400 * 3)
+        await self._redis.set(f"smi_last_ts:{key}", int(time.time()), ex=86400 * 3)
 
-    async def _get_last_ts(self, user_id: int) -> int:
+    async def _get_last_ts(self, key: str) -> int:
         if not self._redis:
             return 0
-        val = await self._redis.get(f"smi_last_ts:{user_id}")
+        val = await self._redis.get(f"smi_last_ts:{key}")
         return int(val) if val else 0
 
     async def display(
@@ -57,91 +56,103 @@ class MessageManager:
     ) -> None:
         """
         Основной метод отображения интерфейса.
-        Пробует редактировать существующее сообщение пользователя для плавности.
+        Поддерживает личные чаты, группы и топики.
         """
         user_id = event.from_user.id
-        main_msg_id = await self._get_main_msg_id(user_id)
-        last_ts = await self._get_last_ts(user_id)
+        
+        # Определяем ID чата и топика
+        if isinstance(event, CallbackQuery):
+            chat_id = event.message.chat.id
+            thread_id = event.message.message_thread_id
+        else:
+            chat_id = event.chat.id
+            thread_id = event.message_thread_id
+
+        # Ключ в Redis зависит от чата (и топика, если есть)
+        # Для ЛС chat_id == user_id
+        cache_key = str(chat_id)
+        if thread_id:
+            cache_key = f"{chat_id}:{thread_id}"
+
+        main_msg_id = await self._get_main_msg_id(cache_key)
+        last_ts = await self._get_last_ts(cache_key)
         now = int(time.time())
         
         is_callback = isinstance(event, CallbackQuery)
         is_command = isinstance(event, Message)
         
-        # Авто-ответ на колбэк (убирает крутилку на кнопке)
         if is_callback:
             await self.answer_loading(event)
 
-        # ЛОГИКА ПЕРЕЗАПУСКА (только если /start или сообщение очень старое)
         force_new = False
         if is_command and main_msg_id:
             is_start = event.text and event.text.startswith("/start")
-            # Если прошло более 24 часов или это /start — пересоздаем интерфейс
+            # Если /start или сообщение очень старое (24ч) — пересоздаем
             if is_start or (now - last_ts > 86400):
                 force_new = True
 
         if main_msg_id and not force_new:
             try:
-                # Если было фото и пришло новое фото — редактируем медиа (ПЛАВНО)
                 if photo:
                     await self.bot.edit_message_media(
-                        chat_id=user_id,
+                        chat_id=chat_id,
                         message_id=main_msg_id,
                         media=InputMediaPhoto(media=photo, caption=text, parse_mode=parse_mode),
                         reply_markup=reply_markup,
                     )
                 else:
-                    # Если фото нет, пробуем просто сменить текст
                     await self.bot.edit_message_text(
-                        chat_id=user_id,
+                        chat_id=chat_id,
                         message_id=main_msg_id,
                         text=text,
                         reply_markup=reply_markup,
                         parse_mode=parse_mode,
                     )
                 
-                # Обновляем время активности
                 if self._redis:
-                    await self._redis.set(f"smi_last_ts:{user_id}", now, ex=86400 * 3)
+                    await self._redis.set(f"smi_last_ts:{cache_key}", now, ex=86400 * 3)
                 return
             except TelegramBadRequest as e:
                 err = str(e).lower()
                 if "message is not modified" in err:
                     return
-                # Если нельзя редактировать (например, из текста в фото), идем к отправке нового
-                logger.debug(f"SMI Edit failed (type mismatch?), sending new message...")
+                logger.debug(f"SMI Edit failed for {cache_key}, sending new message...")
                 pass
 
         # ФИНАЛЬНЫЙ ЭТАП: Отправка нового сообщения
         try:
-            # Сначала удаляем старое (если оно есть), чтобы новое "всплыло" на его месте
             if main_msg_id:
                 try:
-                    await self.bot.delete_message(user_id, main_msg_id)
+                    await self.bot.delete_message(chat_id, main_msg_id)
                 except Exception:
                     pass
 
             if photo:
                 new_msg = await self.bot.send_photo(
-                    chat_id=user_id,
+                    chat_id=chat_id,
                     photo=photo,
                     caption=text,
                     reply_markup=reply_markup,
                     parse_mode=parse_mode,
+                    message_thread_id=thread_id
                 )
             else:
                 new_msg = await self.bot.send_message(
-                    chat_id=user_id,
+                    chat_id=chat_id,
                     text=text,
                     reply_markup=reply_markup,
                     parse_mode=parse_mode,
+                    message_thread_id=thread_id
                 )
 
-            await self._set_main_msg_id(user_id, new_msg.message_id)
-            # Уведомления всегда "прилипают" снизу
-            await self.ensure_notifications_below(user_id)
+            await self._set_main_msg_id(cache_key, new_msg.message_id)
+            
+            # Уведомления только для ЛС (в группах они могут мешать)
+            if chat_id == user_id:
+                await self.ensure_notifications_below(user_id)
 
         except Exception as e:
-            logger.error(f"SMI Critical error for {user_id}: {e}")
+            logger.error(f"SMI Critical error for {cache_key}: {e}")
 
     async def ensure_notifications_below(self, user_id: int):
         """Перемещает текущее уведомление в самый низ."""

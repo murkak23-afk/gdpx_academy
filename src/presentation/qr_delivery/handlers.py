@@ -66,7 +66,7 @@ async def cmd_qr_delivery_menu(event: Message | CallbackQuery, session: AsyncSes
         await event.answer()
 
 @router.callback_query(QRDeliveryCD.filter(F.action == "op_list"))
-async def cb_delivery_op_list(callback: CallbackQuery, session: AsyncSession):
+async def cb_delivery_op_list(callback: CallbackQuery, session: AsyncSession, ui: MessageManager):
     """Список операторов с доступным стоком."""
     sub_svc = SubmissionService(session=session)
     stats = await sub_svc.get_warehouse_stats_grouped() # Возвращает [{'id', 'title', 'count'}]
@@ -80,11 +80,11 @@ async def cb_delivery_op_list(callback: CallbackQuery, session: AsyncSession):
         f"Ниже список категорий, в которых есть готовые к выдаче eSIM (PENDING)."
     )
     
-    await edit_message_text_or_caption_safe(callback.message, text, reply_markup=await get_qr_delivery_operators_kb(stats), parse_mode="HTML")
+    await ui.display(event=callback, text=text, reply_markup=await get_qr_delivery_operators_kb(stats))
     await callback.answer()
 
 @router.callback_query(QRDeliveryCD.filter(F.action == "op_pick"))
-async def cb_delivery_op_pick(callback: CallbackQuery, callback_data: QRDeliveryCD, state: FSMContext, session: AsyncSession):
+async def cb_delivery_op_pick(callback: CallbackQuery, callback_data: QRDeliveryCD, state: FSMContext, session: AsyncSession, ui: MessageManager):
     """Запрос количества для выдачи."""
     cat_id = int(callback_data.val)
     
@@ -108,7 +108,7 @@ async def cb_delivery_op_pick(callback: CallbackQuery, callback_data: QRDelivery
     )
     
     kb = PremiumBuilder().back(QRDeliveryCD(action="op_list")).as_markup()
-    await edit_message_text_or_caption_safe(callback.message, text, reply_markup=kb, parse_mode="HTML")
+    await ui.display(event=callback, text=text, reply_markup=kb)
     await callback.answer()
 
 @router.message(QRDeliveryStates.waiting_for_count, F.text)
@@ -176,6 +176,6 @@ async def process_delivery_count(message: Message, state: FSMContext, session: A
     )
 
 @router.callback_query(QRDeliveryCD.filter(F.action == "cancel"))
-async def cb_delivery_cancel(callback: CallbackQuery, state: FSMContext):
+async def cb_delivery_cancel(callback: CallbackQuery, state: FSMContext, session: AsyncSession, ui: MessageManager):
     await state.clear()
-    await cmd_qr_delivery_menu(callback, None, state)
+    await cmd_qr_delivery_menu(callback, session, state, ui)
