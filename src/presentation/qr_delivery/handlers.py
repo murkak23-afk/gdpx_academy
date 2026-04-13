@@ -40,7 +40,7 @@ logger = logging.getLogger(__name__)
 
 # --- ГЛАВНОЕ МЕНЮ ВЫДАЧИ ---
 
-@router.message(Command("qr"))
+@router.message(Command("qr"), StateFilter("*")) # Добавляем фильтр любого состояния
 @router.callback_query(QRDeliveryCD.filter(F.action == "menu"))
 @router.callback_query(F.data == "qr_delivery_menu")
 async def cmd_qr_delivery_menu(event: Message | CallbackQuery, session: AsyncSession, state: FSMContext, ui: MessageManager):
