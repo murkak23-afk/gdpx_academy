@@ -196,7 +196,7 @@ async def on_info_faq(callback: CallbackQuery):
 
 
 @router.callback_query(SellerInfoCD.filter(F.type == "faq"))
-async def on_faq_item(callback: CallbackQuery, callback_data: SellerInfoCD):
+async def on_faq_item(callback: CallbackQuery, callback_data: SellerInfoCD, ui: MessageManager):
     """Просмотр конкретного вопроса FAQ."""
     try:
         card = get_faq_by_id(callback_data.id)
@@ -206,14 +206,8 @@ async def on_faq_item(callback: CallbackQuery, callback_data: SellerInfoCD):
         filename = "faq.jpg"
         banner = media.get(filename)
 
+        await ui.display(event=callback, text=card.text, reply_markup=get_back_to_info_kb("faq"), photo=banner)
         await callback.answer()
-        try:
-            await callback.message.edit_media(
-                media=InputMediaPhoto(media=banner, caption=card.text, parse_mode="HTML"),
-                reply_markup=get_back_to_info_kb("faq"),
-            )
-        except Exception:
-            await edit_message_text_or_caption_safe(callback.message, card.text, reply_markup=get_back_to_info_kb("faq"))
     except Exception as e:
         logger.exception(f"Error in on_faq_item: {e}")
         await callback.answer("⚠️ Ошибка при чтении статьи", show_alert=True)
@@ -223,10 +217,10 @@ async def on_faq_item(callback: CallbackQuery, callback_data: SellerInfoCD):
 
 
 @router.callback_query(SellerMenuCD.filter(F.action == "manuals"))
-async def on_info_manuals(callback: CallbackQuery):
+async def on_info_manuals(callback: CallbackQuery, ui: MessageManager):
     """Главный экран мануалов (выбор уровней)."""
     try:
-        filename = "info.jpg"
+        filename = "manuals.jpg"
         banner = media.get(filename)
 
         text = (
@@ -235,21 +229,15 @@ async def on_info_manuals(callback: CallbackQuery):
             f"Выберите уровень подготовки для изучения методологии:\n\n"
         )
 
+        await ui.display(event=callback, text=text, reply_markup=get_manual_levels_kb(get_manual_levels()), photo=banner)
         await callback.answer()
-        try:
-            await callback.message.edit_media(
-                media=InputMediaPhoto(media=banner, caption=text, parse_mode="HTML"),
-                reply_markup=get_manual_levels_kb(get_manual_levels()),
-            )
-        except Exception:
-            await edit_message_text_or_caption_safe(callback.message, text, reply_markup=get_manual_levels_kb(get_manual_levels()))
     except Exception as e:
         logger.exception(f"Error in on_info_manuals: {e}")
         await callback.answer("⚠️ Ошибка при открытии Мануалов", show_alert=True)
 
 
 @router.callback_query(SellerInfoCD.filter(F.type == "manual_lvl"))
-async def on_manual_level(callback: CallbackQuery, callback_data: SellerInfoCD):
+async def on_manual_level(callback: CallbackQuery, callback_data: SellerInfoCD, ui: MessageManager):
     """Список мануалов внутри уровня."""
     try:
         manual_levels = get_manual_levels()
@@ -257,7 +245,7 @@ async def on_manual_level(callback: CallbackQuery, callback_data: SellerInfoCD):
         if not level:
             return await callback.answer("❌ Уровень не найден", show_alert=True)
 
-        filename = "baza.jpg"
+        filename = "manuals.jpg"
         banner = media.get(filename)
 
         manuals = get_manuals_by_level(level.id)
@@ -265,38 +253,26 @@ async def on_manual_level(callback: CallbackQuery, callback_data: SellerInfoCD):
             f"❖ <b>{level.emoji} {level.title}</b>\n{DIVIDER}\n<i>Выберите интересующий протокол для ознакомления:</i>"
         )
 
+        await ui.display(event=callback, text=text, reply_markup=get_manuals_in_level_kb(manuals), photo=banner)
         await callback.answer()
-        try:
-            await callback.message.edit_media(
-                media=InputMediaPhoto(media=banner, caption=text, parse_mode="HTML"),
-                reply_markup=get_manuals_in_level_kb(manuals),
-            )
-        except Exception:
-            await edit_message_text_or_caption_safe(callback.message, text, reply_markup=get_manuals_in_level_kb(manuals))
     except Exception as e:
         logger.exception(f"Error in on_manual_level: {e}")
         await callback.answer("⚠️ Ошибка при открытии уровня", show_alert=True)
 
 
 @router.callback_query(SellerInfoCD.filter(F.type == "manual_item"))
-async def on_manual_item(callback: CallbackQuery, callback_data: SellerInfoCD):
+async def on_manual_item(callback: CallbackQuery, callback_data: SellerInfoCD, ui: MessageManager):
     """Просмотр текста мануала."""
     try:
         card = get_manual_by_id(callback_data.id)
         if not card:
             return await callback.answer("❌ Мануал не найден", show_alert=True)
 
-        filename = "info.jpg"
+        filename = "manuals.jpg"
         banner = media.get(filename)
 
+        await ui.display(event=callback, text=card.text, reply_markup=get_back_to_manual_level_kb(card.level), photo=banner)
         await callback.answer()
-        try:
-            await callback.message.edit_media(
-                media=InputMediaPhoto(media=banner, caption=card.text, parse_mode="HTML"),
-                reply_markup=get_back_to_manual_level_kb(card.level),
-            )
-        except Exception:
-            await edit_message_text_or_caption_safe(callback.message, card.text, reply_markup=get_back_to_manual_level_kb(card.level))
     except Exception as e:
         logger.exception(f"Error in on_manual_item: {e}")
         await callback.answer("⚠️ Ошибка при чтении мануала", show_alert=True)
@@ -306,11 +282,11 @@ async def on_manual_item(callback: CallbackQuery, callback_data: SellerInfoCD):
 
 @router.message(Command("help"))
 @router.callback_query(SellerMenuCD.filter(F.action == "support"))
-async def on_support_center(event: Message | CallbackQuery, state: FSMContext):
+async def on_support_center(event: Message | CallbackQuery, state: FSMContext, ui: MessageManager):
     """Штаб оперативной связи (Поддержка)."""
     try:
         await state.clear()
-        filename = "support.jpg"
+        filename = "support.png"
         banner = media.get(filename)
 
         text = (
@@ -329,16 +305,9 @@ async def on_support_center(event: Message | CallbackQuery, state: FSMContext):
 
         kb = PremiumBuilder().back(NavCD(to="menu"), "❮ В ГЛАВНОЕ МЕНЮ").as_markup()
 
-        if isinstance(event, Message):
-            await event.answer_photo(photo=banner, caption=text, reply_markup=kb, parse_mode="HTML")
-        else:
+        await ui.display(event=event, text=text, reply_markup=kb, photo=banner)
+        if isinstance(event, CallbackQuery):
             await event.answer()
-            try:
-                await event.message.edit_media(
-                    media=InputMediaPhoto(media=banner, caption=text, parse_mode="HTML"), reply_markup=kb
-                )
-            except Exception:
-                await edit_message_text_or_caption_safe(event.message, text, reply_markup=kb)
     except Exception as e:
         logger.exception(f"Error in on_support_center: {e}")
         if isinstance(event, CallbackQuery):

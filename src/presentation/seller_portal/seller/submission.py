@@ -55,7 +55,7 @@ async def start_submission(event: Message | CallbackQuery, state: FSMContext, se
     fav_ids = user.favorite_categories or []
 
     await state.set_state(SubmissionState.waiting_for_category)
-    banner = media.get("esim.jpg")
+    banner = media.get("esim.png")
 
     text = (
         f"{_get_upload_header()}"
