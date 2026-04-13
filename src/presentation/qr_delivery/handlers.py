@@ -3,35 +3,23 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import re
-import random
-import time
-from html import escape
 from datetime import datetime, timezone
-from typing import Optional, List, Dict
+from decimal import Decimal
+from html import escape
 
 from aiogram import Bot, F, Router
 from aiogram.filters import Command, StateFilter
 from aiogram.fsm.context import FSMContext
-from aiogram.types import CallbackQuery, Message, InlineKeyboardMarkup, InlineKeyboardButton, InputMediaPhoto, InputMediaDocument
-from aiogram.exceptions import TelegramRetryAfter
-from sqlalchemy import func, select, update
+from aiogram.types import CallbackQuery, Message
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import joinedload, selectinload
 
-from src.core.config import get_settings
-from src.database.models.category import Category
-from src.database.models.enums import SubmissionStatus, UserRole
-from src.database.models.submission import Submission
-from src.presentation.common.base import PremiumBuilder
-from src.presentation.common.factory import QRDeliveryCD, AutoFixConfirmCD, NavCD
+from src.database.models.enums import UserRole
+from src.presentation.common.factory import QRDeliveryCD, NavCD
 from .keyboards import get_qr_delivery_main_kb, get_qr_delivery_operators_kb
 from src.domain.submission.submission_service import SubmissionService
 from src.domain.users.user_service import UserService
 from src.presentation.qr_delivery.states import QRDeliveryStates
-from src.core.utils.text_format import edit_message_text_or_caption_safe
 from src.core.utils.ui_builder import DIVIDER, DIVIDER_LIGHT
-
 from src.core.utils.message_manager import MessageManager
 
 router = Router(name="qr-delivery-router")
@@ -39,16 +27,16 @@ logger = logging.getLogger(__name__)
 
 # --- ГЛАВНОЕ МЕНЮ ВЫДАЧИ ---
 
-@router.message(Command("qr"), StateFilter("*")) # Добавляем фильтр любого состояния
+@router.message(Command("qr"), StateFilter("*"))
 @router.callback_query(QRDeliveryCD.filter(F.action == "menu"))
 @router.callback_query(F.data == "qr_delivery_menu")
 async def cmd_qr_delivery_menu(event: Message | CallbackQuery, session: AsyncSession, state: FSMContext, ui: MessageManager):
-    """Главный экран системы выдачи (для менеджеров)."""
+    """Главный экран системы выдачи (поддерживает группы и топики)."""
     await state.clear()
     
-    # Проверка прав (только админ/баер)
     user_svc = UserService(session=session)
     user = await user_svc.get_by_telegram_id(event.from_user.id)
+    
     if not user or user.role not in (UserRole.ADMIN, UserRole.OWNER, UserRole.SIMBUYER):
         if isinstance(event, CallbackQuery):
             await event.answer("❌ Доступ ограничен", show_alert=True)
@@ -61,6 +49,7 @@ async def cmd_qr_delivery_menu(event: Message | CallbackQuery, session: AsyncSes
         f"<i>Выберите оператора для начала процесса:</i>"
     )
     
+    # ui.display сам поймет, группа это или ЛС, и сохранит позицию
     await ui.display(event=event, text=text, reply_markup=await get_qr_delivery_main_kb())
     if isinstance(event, CallbackQuery):
         await event.answer()
@@ -69,7 +58,7 @@ async def cmd_qr_delivery_menu(event: Message | CallbackQuery, session: AsyncSes
 async def cb_delivery_op_list(callback: CallbackQuery, session: AsyncSession, ui: MessageManager):
     """Список операторов с доступным стоком."""
     sub_svc = SubmissionService(session=session)
-    stats = await sub_svc.get_warehouse_stats_grouped() # Возвращает [{'id', 'title', 'count'}]
+    stats = await sub_svc.get_warehouse_stats_grouped()
     
     if not stats:
         return await callback.answer("📭 Склад пуст.", show_alert=True)
@@ -95,7 +84,7 @@ async def cb_delivery_op_pick(callback: CallbackQuery, callback_data: QRDelivery
     available = await sub_svc.get_category_stock_count(cat_id)
     
     if available <= 0:
-        return await callback.answer("❌ Активы этого оператора закончились.", show_alert=True)
+        return await callback.answer("❌ Активы закончились.", show_alert=True)
 
     await state.update_data(cat_id=cat_id, cat_title=cat.title, available=available)
     await state.set_state(QRDeliveryStates.waiting_for_count)
@@ -107,43 +96,35 @@ async def cb_delivery_op_pick(callback: CallbackQuery, callback_data: QRDelivery
         f"Введите количество eSIM для выдачи (числом):"
     )
     
+    from src.presentation.common.base import PremiumBuilder
     kb = PremiumBuilder().back(QRDeliveryCD(action="op_list")).as_markup()
     await ui.display(event=callback, text=text, reply_markup=kb)
     await callback.answer()
 
 @router.message(QRDeliveryStates.waiting_for_count, F.text)
-async def process_delivery_count(message: Message, state: FSMContext, session: AsyncSession, bot: Bot):
-    """Основная логика выдачи и формирования архива."""
+async def process_delivery_count(message: Message, state: FSMContext, session: AsyncSession, bot: Bot, ui: MessageManager):
+    """Выдача eSIM прямо в чат/топик."""
     data = await state.get_data()
-    cat_id = data['cat_id']
-    available = data['available']
+    cat_id, available = data['cat_id'], data['available']
     
     try:
         count = int(message.text.strip())
         if count <= 0: raise ValueError
     except:
-        return await message.answer("❌ Введите положительное целое число.")
+        return await message.answer("❌ Введите положительное число.")
 
     if count > available:
-        return await message.answer(f"❌ Недостаточно на складе. Доступно: {available}")
+        return await message.answer(f"❌ Доступно только: {available}")
 
     await state.clear()
-    wait_msg = await message.answer("⏳ <b>Инициация отгрузки...</b>\n<i>Извлекаем активы из базы данных...</i>", parse_mode="HTML")
+    wait_msg = await message.answer("⏳ <b>Инициация отгрузки...</b>", parse_mode="HTML")
 
     sub_svc = SubmissionService(session=session)
-    user_svc = UserService(session=session)
-    
-    # 1. Извлекаем айтемы
     items = await sub_svc.take_from_warehouse(cat_id, count)
     
     if not items:
-        return await wait_msg.edit_text("🔴 Ошибка: не удалось извлечь активы. Возможно, их уже кто-то забрал.")
+        return await wait_msg.edit_text("🔴 Ошибка извлечения активов.")
 
-    # 2. Обновляем статус на IN_WORK
-    # (Это делает take_from_warehouse в атомарной транзакции обычно, 
-    # но проверим реализацию сервиса позже. Допустим, он возвращает уже обновленные)
-
-    # 3. Отправляем файлы
     success_count = 0
     for item in items:
         try:
@@ -154,14 +135,15 @@ async def process_delivery_count(message: Message, state: FSMContext, session: A
                 f"{DIVIDER}\n"
                 f"👤 <b>АГЕНТ:</b> @{item.owner.username or 'id' + str(item.owner.telegram_id)}"
             )
-            
+            # Отправляем в тот же топик, где работаем
+            thread_id = message.message_thread_id
             if item.media_type == "photo":
-                await bot.send_photo(message.chat.id, item.tg_file_id, caption=caption, parse_mode="HTML")
+                await bot.send_photo(message.chat.id, item.tg_file_id, caption=caption, parse_mode="HTML", message_thread_id=thread_id)
             else:
-                await bot.send_document(message.chat.id, item.tg_file_id, caption=caption, parse_mode="HTML")
+                await bot.send_document(message.chat.id, item.tg_file_id, caption=caption, parse_mode="HTML", message_thread_id=thread_id)
             
             success_count += 1
-            await asyncio.sleep(0.3) # Анти-спам
+            await asyncio.sleep(0.3)
         except Exception as e:
             logger.error(f"Error delivery item {item.id}: {e}")
 
@@ -169,8 +151,8 @@ async def process_delivery_count(message: Message, state: FSMContext, session: A
     await message.answer(
         f"✅ <b>ОТГРУЗКА ЗАВЕРШЕНА</b>\n"
         f"{DIVIDER}\n"
-        f"Успешно выдано: <code>{success_count}</code> шт.\n"
-        f"Статус активов изменен на <b>IN_WORK</b>.",
+        f"Выдано: <code>{success_count}</code> шт.\n"
+        f"Статус изменен на <b>IN_WORK</b>.",
         parse_mode="HTML",
         reply_markup=await get_qr_delivery_main_kb()
     )
