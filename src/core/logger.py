@@ -77,11 +77,12 @@ class TelegramNotificationSink:
         else:
             # Если это просто лог уровня ERROR без исключения
             import asyncio
+            from html import escape
             try:
                 loop = asyncio.get_running_loop()
                 loop.create_task(
                     self._notification_service.send_system_alert(
-                        f"🚨 <b>Loguru ERROR:</b>\n\n{record['message']}"
+                        f"🚨 <b>Loguru ERROR:</b>\n\n{escape(str(record['message']))}"
                     )
                 )
             except RuntimeError:

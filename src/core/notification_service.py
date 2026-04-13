@@ -91,9 +91,11 @@ class NotificationService:
         try:
             from src.core.utils.message_manager import MessageManager
             mm = MessageManager(self._bot)
+            # Экранируем сообщение, чтобы символы < и > не ломали HTML
+            safe_message = escape(message) if "<b>" not in message else message
             await mm.send_notification(
                 user_id=chat_id,
-                text=f"🔔 <b>System Alert:</b>\n\n{message}",
+                text=f"🔔 <b>System Alert:</b>\n\n{safe_message}",
                 parse_mode="HTML"
             )
             return True
