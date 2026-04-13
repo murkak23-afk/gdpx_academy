@@ -8,7 +8,7 @@ from decimal import Decimal, InvalidOperation
 from aiogram import F, Router
 from aiogram.filters import Command, StateFilter
 from aiogram.fsm.context import FSMContext
-from aiogram.types import CallbackQuery, Message
+from aiogram.types import CallbackQuery, Message, InlineKeyboardButton, InlineKeyboardMarkup
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.presentation import (
@@ -48,40 +48,91 @@ async def cmd_adm_cat(message: Message, session: AsyncSession) -> None:
 async def start_creation(callback: CallbackQuery, state: FSMContext) -> None:
     """Шаг 1: Выбор оператора."""
     await state.set_state(CatConstructorState.step_operator)
-    text = _r.render_cat_constructor_step(1, 4, "ОПЕРАТОР", "Выберите оператора из списка:")
+    text = _r.render_cat_constructor_step(1, 4, "ОПЕРАТОР", "Выберите оператора из списка или введите свой вариант текстом:")
 
     await edit_message_text_or_caption_safe(
         callback.message, text, reply_markup=get_catcon_options_kb(OPERATORS, "op"), parse_mode="HTML"
     )
     await callback.answer()
 
+# --- ЛОГИКА ОПЕРАТОРА ---
+
+@router.callback_query(CatConCD.filter(F.action == "custom_op"), StateFilter(CatConstructorState.step_operator))
+async def ask_custom_operator(callback: CallbackQuery) -> None:
+    """Запрос ручного ввода оператора."""
+    text = _r.render_cat_constructor_step(1, 4, "СВОЙ ОПЕРАТОР", "Введите название оператора ответным сообщением:")
+    await edit_message_text_or_caption_safe(callback.message, text, reply_markup=get_catcon_options_kb([], "cancel"), parse_mode="HTML")
+    await callback.answer()
+
+@router.message(StateFilter(CatConstructorState.step_operator), F.text)
+async def process_custom_operator(message: Message, state: FSMContext) -> None:
+    """Прием ручного ввода оператора."""
+    val = message.text.strip()
+    if len(val) < 2:
+        return await message.answer("❌ Слишком короткое название. Попробуйте еще раз:")
+    
+    await state.update_data(operator=val)
+    await show_step_type(message, state)
 
 @router.callback_query(CatConCD.filter(F.action == "op"), StateFilter(CatConstructorState.step_operator))
 async def pick_operator(callback: CallbackQuery, callback_data: CatConCD, state: FSMContext) -> None:
-    """Шаг 2: Выбор типа."""
+    """Выбор оператора из списка."""
     await state.update_data(operator=callback_data.value)
-    await state.set_state(CatConstructorState.step_type)
-
-    text = _r.render_cat_constructor_step(2, 4, "АРХИТЕКТУРА", "Выберите тип сим-карт:")
-    await edit_message_text_or_caption_safe(
-        callback.message, text, reply_markup=get_catcon_options_kb(SIM_TYPES, "type"), parse_mode="HTML"
-    )
+    await show_step_type(callback, state)
     await callback.answer()
 
+# --- ЛОГИКА ТИПА ---
+
+async def show_step_type(event: Message | CallbackQuery, state: FSMContext) -> None:
+    """Переход к шагу выбора типа."""
+    await state.set_state(CatConstructorState.step_type)
+    text = _r.render_cat_constructor_step(2, 4, "АРХИТЕКТУРА", "Выберите тип сим-карт или введите свой вариант текстом:")
+    
+    kb = get_catcon_options_kb(SIM_TYPES, "type")
+    
+    if isinstance(event, CallbackQuery):
+        await edit_message_text_or_caption_safe(event.message, text, reply_markup=kb, parse_mode="HTML")
+    else:
+        await event.answer(text, reply_markup=kb, parse_mode="HTML")
+
+@router.callback_query(CatConCD.filter(F.action == "custom_type"), StateFilter(CatConstructorState.step_type))
+async def ask_custom_type(callback: CallbackQuery) -> None:
+    """Запрос ручного ввода типа."""
+    text = _r.render_cat_constructor_step(2, 4, "СВОЯ АРХИТЕКТУРА", "Введите тип сим-карт ответным сообщением (например: Дилерские V2):")
+    await edit_message_text_or_caption_safe(callback.message, text, reply_markup=get_catcon_options_kb([], "cancel"), parse_mode="HTML")
+    await callback.answer()
+
+@router.message(StateFilter(CatConstructorState.step_type), F.text)
+async def process_custom_type(message: Message, state: FSMContext) -> None:
+    """Прием ручного ввода типа."""
+    val = message.text.strip()
+    if len(val) < 2:
+        return await message.answer("❌ Слишком короткое название. Попробуйте еще раз:")
+    
+    await state.update_data(sim_type=val)
+    await show_step_price(message, state)
 
 @router.callback_query(CatConCD.filter(F.action == "type"), StateFilter(CatConstructorState.step_type))
 async def pick_type(callback: CallbackQuery, callback_data: CatConCD, state: FSMContext) -> None:
-    """Шаг 3: Ввод цены."""
+    """Выбор типа из списка."""
     await state.update_data(sim_type=callback_data.value)
-    await state.set_state(CatConstructorState.step_price)
+    await show_step_price(callback, state)
+    await callback.answer()
 
+# --- ЛОГИКА ЦЕНЫ ---
+
+async def show_step_price(event: Message | CallbackQuery, state: FSMContext) -> None:
+    """Переход к вводу цены."""
+    await state.set_state(CatConstructorState.step_price)
     text = _r.render_cat_constructor_step(
         3, 4, "ЛИКВИДНОСТЬ", "Введите фиксированную ставку выкупа (USDT) ответным сообщением (например 1.5):"
     )
-    await edit_message_text_or_caption_safe(
-        callback.message, text, reply_markup=get_catcon_options_kb([], "cancel"), parse_mode="HTML"
-    )
-    await callback.answer()
+    kb = get_catcon_options_kb([], "cancel")
+    
+    if isinstance(event, CallbackQuery):
+        await edit_message_text_or_caption_safe(event.message, text, reply_markup=kb, parse_mode="HTML")
+    else:
+        await event.answer(text, reply_markup=kb, parse_mode="HTML")
 
 
 @router.message(StateFilter(CatConstructorState.step_price))

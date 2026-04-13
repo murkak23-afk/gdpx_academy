@@ -222,6 +222,10 @@ def get_catcon_options_kb(options: list[str], action: str) -> InlineKeyboardMark
     builder = PremiumBuilder()
     for opt in options:
         builder.button(opt, CatConCD(action=action, value=opt))
+    
+    # Добавляем кнопку ручного ввода
+    builder.button("⌨️ СВОЙ ВАРИАНТ", CatConCD(action=f"custom_{action}"))
+    
     builder.adjust(1)
     builder.cancel(CatConCD(action="cancel"))
     return builder.as_markup()
