@@ -171,7 +171,8 @@ async def show_settings(callback: CallbackQuery, session: AsyncSession, ui: Mess
         user = await UserService(session=session).get_by_telegram_id(callback.from_user.id)
         text = _renderer.render_seller_settings(user)
         kb = await get_seller_settings_kb()
-        await ui.display(event=callback, text=text, reply_markup=kb)
+        banner = media.get("settings.png")
+        await ui.display(event=callback, text=text, reply_markup=kb, photo=banner)
         await callback.answer()
     except Exception as e:
         logger.exception(f"Error in show_settings: {e}")
@@ -286,7 +287,7 @@ async def show_stats(callback: CallbackQuery, callback_data: SellerMenuCD | Sell
         kb = await get_seller_stats_kb(period)
         
         # Добавляем баннер статистики
-        banner = media.get("score.jpg")
+        banner = media.get("state.jpg")
         await ui.display(event=callback, text=text, reply_markup=kb, photo=banner)
         await callback.answer()
     except Exception as e:

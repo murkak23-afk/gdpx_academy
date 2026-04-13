@@ -145,28 +145,20 @@ from src.core.logger import logger
 
 
 @router.callback_query(SellerMenuCD.filter(F.action == "info"))
-async def on_info_root(event: Message | CallbackQuery, state: FSMContext):
+async def on_info_root(event: Message | CallbackQuery, state: FSMContext, ui: MessageManager):
     """Главный экран Базы Знаний."""
     try:
         await state.clear()
         settings = get_settings()
-        filename = "baza.jpg"
+        filename = "info.png"
         banner = media.get(filename)
 
         kb = get_info_root_kb(settings.brand_chat_url, settings.brand_channel_url)
         text = _info_root_text()
 
-        if isinstance(event, Message):
-            await event.answer_photo(photo=banner, caption=text, reply_markup=kb, parse_mode="HTML")
-        else:
+        await ui.display(event=event, text=text, reply_markup=kb, photo=banner)
+        if isinstance(event, CallbackQuery):
             await event.answer()
-            try:
-                await event.message.edit_media(
-                    media=InputMediaPhoto(media=banner, caption=text, parse_mode="HTML"),
-                    reply_markup=kb,
-                )
-            except Exception:
-                await edit_message_text_or_caption_safe(event.message, text, reply_markup=kb)
     except Exception as e:
         logger.exception(f"Error in on_info_root: {e}")
         if isinstance(event, CallbackQuery):

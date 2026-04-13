@@ -60,18 +60,12 @@ async def list_folders(callback: CallbackQuery, session: AsyncSession) -> None:
         f"<i>Выберите кластер для просмотра детализации.</i>"
     )
     
-    banner = media.get("items.jpg")
+    banner = media.get("simki.jpg")
     
     if not folders:
         text += "\n\n📭 <i>Вы еще не интегрировали ни одного актива.</i>"
         
-    try:
-        await callback.message.edit_media(
-            media=InputMediaPhoto(media=banner, caption=text, parse_mode="HTML"),
-            reply_markup=await get_seller_assets_folders_kb(folders, best_cat_id, is_archived=False)
-        )
-    except Exception:
-        await edit_message_text_or_caption_safe(callback.message, text, reply_markup=await get_seller_assets_folders_kb(folders, best_cat_id, is_archived=False))
+    await ui.display(event=callback, text=text, reply_markup=await get_seller_assets_folders_kb(folders, best_cat_id, is_archived=False), photo=banner)
     await callback.answer()
 
 
