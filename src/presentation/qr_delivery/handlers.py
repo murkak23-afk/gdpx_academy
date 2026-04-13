@@ -32,22 +32,28 @@ from src.presentation.qr_delivery.states import QRDeliveryStates
 from src.core.utils.text_format import edit_message_text_or_caption_safe
 from src.core.utils.ui_builder import DIVIDER, DIVIDER_LIGHT
 
+from aiogram.filters import Command
+from src.core.utils.message_manager import MessageManager
+
 router = Router(name="qr-delivery-router")
 logger = logging.getLogger(__name__)
 
 # --- ГЛАВНОЕ МЕНЮ ВЫДАЧИ ---
 
+@router.message(Command("qr"))
 @router.callback_query(QRDeliveryCD.filter(F.action == "menu"))
 @router.callback_query(F.data == "qr_delivery_menu")
-async def cmd_qr_delivery_menu(callback: CallbackQuery, session: AsyncSession, state: FSMContext):
+async def cmd_qr_delivery_menu(event: Message | CallbackQuery, session: AsyncSession, state: FSMContext, ui: MessageManager):
     """Главный экран системы выдачи (для менеджеров)."""
     await state.clear()
     
     # Проверка прав (только админ/баер)
     user_svc = UserService(session=session)
-    user = await user_svc.get_by_telegram_id(callback.from_user.id)
+    user = await user_svc.get_by_telegram_id(event.from_user.id)
     if not user or user.role not in (UserRole.ADMIN, UserRole.OWNER, UserRole.SIMBUYER):
-        return await callback.answer("❌ Доступ ограничен", show_alert=True)
+        if isinstance(event, CallbackQuery):
+            await event.answer("❌ Доступ ограничен", show_alert=True)
+        return
 
     text = (
         f"❖ <b>GDPX // СИСТЕМА ВЫДАЧИ</b>\n"
@@ -56,8 +62,9 @@ async def cmd_qr_delivery_menu(callback: CallbackQuery, session: AsyncSession, s
         f"<i>Выберите оператора для начала процесса:</i>"
     )
     
-    await edit_message_text_or_caption_safe(callback.message, text, reply_markup=await get_qr_delivery_main_kb(), parse_mode="HTML")
-    await callback.answer()
+    await ui.display(event=event, text=text, reply_markup=await get_qr_delivery_main_kb())
+    if isinstance(event, CallbackQuery):
+        await event.answer()
 
 @router.callback_query(QRDeliveryCD.filter(F.action == "op_list"))
 async def cb_delivery_op_list(callback: CallbackQuery, session: AsyncSession):

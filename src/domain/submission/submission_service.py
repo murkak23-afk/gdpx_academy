@@ -337,6 +337,7 @@ class SubmissionService:
         now = datetime.now(timezone.utc)
         
         # 1. Находим идентификаторы зависших заявок
+        # Используем .value для надежности в сырых фильтрах, если БД капризничает
         stmt = (
             select(Submission.id)
             .where(
