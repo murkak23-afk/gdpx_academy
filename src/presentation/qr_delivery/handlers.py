@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 from typing import Optional, List, Dict
 
 from aiogram import Bot, F, Router
-from aiogram.filters import Command
+from aiogram.filters import Command, StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message, InlineKeyboardMarkup, InlineKeyboardButton, InputMediaPhoto, InputMediaDocument
 from aiogram.exceptions import TelegramRetryAfter
@@ -32,7 +32,6 @@ from src.presentation.qr_delivery.states import QRDeliveryStates
 from src.core.utils.text_format import edit_message_text_or_caption_safe
 from src.core.utils.ui_builder import DIVIDER, DIVIDER_LIGHT
 
-from aiogram.filters import Command
 from src.core.utils.message_manager import MessageManager
 
 router = Router(name="qr-delivery-router")
