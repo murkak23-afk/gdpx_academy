@@ -149,15 +149,23 @@ async def _background_delivery(bot: Bot, category_id: int, chat_id: int, thread_
                     f"📶 <b>ОПЕРАТОР:</b> {item.category.title}\n"
                     f"📞 <b>НОМЕР:</b> <code>{item.phone_normalized or 'N/A'}</code>\n"
                     f"{DIVIDER}\n"
-                    f"👤 <b>АГЕНТ:</b> @{item.owner.username or 'id' + str(item.owner.telegram_id)}"
+                    f"👤 <b>АГЕНТ:</b> @{item.seller.username or 'id' + str(item.seller.telegram_id)}"
                 )
                 
-                await bot.send_photo(
-                    chat_id=chat_id, 
-                    photo=item.tg_file_id, 
-                    caption=caption, 
-                    message_thread_id=thread_id
-                )
+                if item.attachment_type == "photo":
+                    await bot.send_photo(
+                        chat_id=chat_id, 
+                        photo=item.telegram_file_id, 
+                        caption=caption, 
+                        message_thread_id=thread_id
+                    )
+                else:
+                    await bot.send_document(
+                        chat_id=chat_id, 
+                        document=item.telegram_file_id, 
+                        caption=caption, 
+                        message_thread_id=thread_id
+                    )
                 await asyncio.sleep(0.3)
             except Exception as e:
                 logger.error(f"Error in background delivery for item {item.id}: {e}")
