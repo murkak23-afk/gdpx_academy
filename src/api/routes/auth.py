@@ -40,8 +40,9 @@ async def post_login(
         # Создаем токен
         token = AuthService.create_access_token(data={"sub": account.login, "user_id": account.user_id})
         
-        # Устанавливаем защищенную куку
-        response = RedirectResponse(url="/nexus", status_code=status.HTTP_303_SEE_OTHER)
+        # Устанавливаем защищенную куку и даем команду HTMX перенаправить страницу
+        response = HTMLResponse(content="<script>window.location.href='/nexus';</script>")
+        response.headers["HX-Redirect"] = "/nexus"
         response.set_cookie(
             key="nexus_session",
             value=token,
