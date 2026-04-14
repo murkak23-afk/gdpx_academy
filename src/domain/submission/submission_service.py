@@ -562,10 +562,13 @@ class SubmissionService:
         if not ids:
             return []
 
-        # 2. Теперь подгружаем полные объекты вместе с селлерами
+        # 2. Теперь подгружаем полные объекты вместе с селлерами и категориями
         stmt = (
             select(Submission)
-            .options(joinedload(Submission.seller))
+            .options(
+                joinedload(Submission.seller),
+                joinedload(Submission.category)
+            )
             .where(Submission.id.in_(ids))
         )
         items = list((await self._uow.session.execute(stmt)).scalars().all())

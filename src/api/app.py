@@ -138,34 +138,34 @@ async def _background_delivery(bot: Bot, category_id: int, chat_id: int, thread_
             sub_svc = SubmissionService(uow)
             items = await sub_svc.take_from_warehouse(category_id, count)
         
-        if not items:
-            logger.error(f"Background delivery failed: no items found for cat {category_id}")
-            return
+            if not items:
+                logger.error(f"Background delivery failed: no items found for cat {category_id}")
+                return
 
-        for item in items:
-            try:
-                caption = (
-                    f"📟 <b>eSIM #{item.id}</b>\n"
-                    f"📶 <b>ОПЕРАТОР:</b> {item.category.title}\n"
-                    f"📞 <b>НОМЕР:</b> <code>{item.phone_normalized or 'N/A'}</code>\n"
-                    f"{DIVIDER}\n"
-                    f"👤 <b>АГЕНТ:</b> @{item.seller.username or 'id' + str(item.seller.telegram_id)}"
-                )
-                
-                if item.attachment_type == "photo":
-                    await bot.send_photo(
-                        chat_id=chat_id, 
-                        photo=item.telegram_file_id, 
-                        caption=caption, 
-                        message_thread_id=thread_id
+            for item in items:
+                try:
+                    caption = (
+                        f"📟 <b>eSIM #{item.id}</b>\n"
+                        f"📶 <b>ОПЕРАТОР:</b> {item.category.title}\n"
+                        f"📞 <b>НОМЕР:</b> <code>{item.phone_normalized or 'N/A'}</code>\n"
+                        f"{DIVIDER}\n"
+                        f"👤 <b>АГЕНТ:</b> @{item.seller.username or 'id' + str(item.seller.telegram_id)}"
                     )
-                else:
-                    await bot.send_document(
-                        chat_id=chat_id, 
-                        document=item.telegram_file_id, 
-                        caption=caption, 
-                        message_thread_id=thread_id
-                    )
-                await asyncio.sleep(0.3)
-            except Exception as e:
-                logger.error(f"Error in background delivery for item {item.id}: {e}")
+                    
+                    if item.attachment_type == "photo":
+                        await bot.send_photo(
+                            chat_id=chat_id, 
+                            photo=item.telegram_file_id, 
+                            caption=caption, 
+                            message_thread_id=thread_id
+                        )
+                    else:
+                        await bot.send_document(
+                            chat_id=chat_id, 
+                            document=item.telegram_file_id, 
+                            caption=caption, 
+                            message_thread_id=thread_id
+                        )
+                    await asyncio.sleep(0.3)
+                except Exception as e:
+                    logger.error(f"Error in background delivery for item {item.id}: {e}")

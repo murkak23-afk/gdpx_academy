@@ -148,7 +148,7 @@ async def process_delivery_count(message: Message, state: FSMContext, session: A
                 f"📶 <b>ОПЕРАТОР:</b> {data['cat_title']}\n"
                 f"📞 <b>НОМЕР:</b> <code>{item.phone_normalized or 'N/A'}</code>\n"
                 f"{DIVIDER}\n"
-                f"👤 <b>АГЕНТ:</b> @{item.owner.username or 'id' + str(item.owner.telegram_id)}"
+                f"👤 <b>АГЕНТ:</b> @{item.seller.username or 'id' + str(item.seller.telegram_id)}"
             )
             thread_id = message.message_thread_id
             if item.media_type == "photo":
