@@ -62,6 +62,7 @@ class AdminMenuCD(CallbackData, prefix="adm_menu"):
 
 class AdminQueueCD(CallbackData, prefix="adm_q"):
     category_id: Optional[int] = None
+    item_id: Optional[int] = None
     action: str = "list" # list, start, pick, next, verification
     page: int = 0
 

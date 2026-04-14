@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import logging
-from fastapi import APIRouter, Request, Depends, HTTPException
+from datetime import datetime, timezone
+from fastapi import APIRouter, Request, Depends, HTTPException, Form
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy import select, func
 from src.database.session import SessionFactory
 from src.database.models.user import User
 from src.database.models.submission import Submission
+from src.database.models.category import Category
 from src.database.models.enums import SubmissionStatus
 from src.services.auth_service import AuthService
 
@@ -25,8 +27,39 @@ async def get_current_user(request: Request):
     
     return payload
 
-from src.database.models.category import Category
-from fastapi import Form
+@router.get("", response_class=HTMLResponse)
+async def get_dashboard(request: Request, user_data: dict = Depends(get_current_user)):
+    """Главная страница управления (Dashboard)."""
+    from src.api.app import templates
+    
+    async with SessionFactory() as session:
+        # 1. Сток (все PENDING)
+        stock_count = await session.scalar(
+            select(func.count(Submission.id)).where(Submission.status == SubmissionStatus.PENDING)
+        ) or 0
+        
+        # 2. Оборот за сегодня (ACCEPTED)
+        today_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+        today_accepted = await session.scalar(
+            select(func.count(Submission.id))
+            .where(Submission.status == SubmissionStatus.ACCEPTED, Submission.reviewed_at >= today_start)
+        ) or 0
+
+        # 3. Количество воркеров
+        total_workers = await session.scalar(select(func.count(User.id))) or 0
+
+        stats = {
+            "stock": stock_count,
+            "today": today_accepted,
+            "workers": total_workers
+        }
+
+        return templates.TemplateResponse("dashboard.html", {
+            "request": request, 
+            "user": {"username": user_data.get("sub")},
+            "stats": stats,
+            "active_page": "dashboard"
+        })
 
 @router.get("/inventory", response_class=HTMLResponse)
 async def get_inventory(request: Request, user_data: dict = Depends(get_current_user)):
@@ -37,7 +70,6 @@ async def get_inventory(request: Request, user_data: dict = Depends(get_current_
         result = await session.execute(stmt)
         categories = result.scalars().all()
         
-        # Для каждой категории посчитаем текущий сток (PENDING)
         stock_data = {}
         for cat in categories:
             count = await session.scalar(
@@ -50,7 +82,8 @@ async def get_inventory(request: Request, user_data: dict = Depends(get_current_
             "request": request,
             "user": {"username": user_data.get("sub")},
             "categories": categories,
-            "stock": stock_data
+            "stock": stock_data,
+            "active_page": "inventory"
         })
 
 @router.post("/inventory/update/{cat_id}")
@@ -66,14 +99,16 @@ async def update_category(
         if not cat:
             raise HTTPException(status_code=404)
         
-        if field == "payout_rate":
-            cat.payout_rate = float(value)
-        elif field == "delivery_thread_id":
-            cat.delivery_thread_id = int(value) if value else None
-        elif field == "delivery_chat_id":
-            cat.delivery_chat_id = int(value) if value else None
-        
-        await session.commit()
-        
-        # Возвращаем просто текст для HTMX, чтобы подтвердить успех
-        return HTMLResponse(content=f'<span class="text-green-500 text-xs animate-pulse">Saved</span>')
+        try:
+            if field == "payout_rate":
+                cat.payout_rate = float(value)
+            elif field == "delivery_thread_id":
+                cat.delivery_thread_id = int(value) if value else None
+            elif field == "delivery_chat_id":
+                cat.delivery_chat_id = int(value) if value else None
+            
+            await session.commit()
+            return HTMLResponse(content='<span class="text-green-500 text-[10px] font-bold animate-pulse">SAVED</span>')
+        except Exception as e:
+            logger.error(f"Error updating category {cat_id}: {e}")
+            return HTMLResponse(content='<span class="text-red-500 text-[10px] font-bold">ERROR</span>')

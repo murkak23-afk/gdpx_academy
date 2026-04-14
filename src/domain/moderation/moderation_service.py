@@ -315,6 +315,31 @@ class ModerationService:
         )
         return (await self._session.execute(stmt)).scalar() or 0
 
+    async def get_next_my_item(self, admin_id: int) -> Optional[Submission]:
+        """Возвращает следующий актив из списка 'в работе' для данного админа."""
+        stmt = (
+            select(Submission)
+            .options(joinedload(Submission.category))
+            .where(
+                Submission.status == SubmissionStatus.IN_REVIEW,
+                Submission.admin_id == admin_id,
+                Submission.is_archived == False
+            )
+            .order_by(Submission.assigned_at.asc())
+            .limit(1)
+        )
+        res = await self._session.execute(stmt)
+        return res.scalar_one_or_none()
+
+    async def rotate_item_in_queue(self, item_id: int) -> None:
+        """Перемещает актив в конец личной очереди (обновляет assigned_at)."""
+        await self._session.execute(
+            update(Submission)
+            .where(Submission.id == item_id)
+            .values(assigned_at=datetime.now(timezone.utc))
+        )
+        await self._session.flush()
+
     async def get_pending_sellers(self, status: SubmissionStatus | List[SubmissionStatus] = SubmissionStatus.PENDING) -> List[dict]:
         """Группировка очереди по продавцам (по списку статусов)."""
         if not isinstance(status, list):

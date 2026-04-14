@@ -85,8 +85,13 @@ async def _render_next_item(bot: Bot, chat_id: int, session: AsyncSession, state
     await state.set_state(ModerationStates.conveyor_active)
 
 @router.callback_query(AdminQueueCD.filter(F.action == "next"))
-async def mod_next_card(callback: CallbackQuery, session: AsyncSession, state: FSMContext, bot: Bot):
+async def mod_next_card(callback: CallbackQuery, callback_data: AdminQueueCD, session: AsyncSession, state: FSMContext, bot: Bot):
     """Переход к следующей карточке (из очереди или списка 'в работе')."""
+    if callback_data.item_id:
+        mod_svc = ModerationService(session=session)
+        await mod_svc.rotate_item_in_queue(callback_data.item_id)
+        await session.commit()
+        
     if callback.message.photo:
         await callback.message.delete()
     await _render_next_item(bot, callback.from_user.id, session, state)

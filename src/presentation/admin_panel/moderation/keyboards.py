@@ -139,8 +139,8 @@ def get_mod_inspector_kb(item_id: int, remaining: int) -> InlineKeyboardMarkup:
     builder.button("❌ БРАК", AdminGradeCD(item_id=item_id, action="reject"))
     builder.button("🚫 БЛОК", AdminGradeCD(item_id=item_id, action="block"))
     builder.button("📵 НЕ СКАН", AdminGradeCD(item_id=item_id, action="not_scan"))
-    if remaining > 0:
-        builder.button(f"⏭ ПРОПУСТИТЬ (ЕЩЁ {remaining})", AdminQueueCD(action="next"))
+    if remaining > 1:
+        builder.button(f"⏭ ПРОПУСТИТЬ (ЕЩЁ {remaining - 1})", AdminQueueCD(action="next", item_id=item_id))
     builder.button("⏸ ПРИОСТАНОВИТЬ", "mod_pause")
     builder.adjust(1, 3, 1, 1)
     return builder.as_markup()

@@ -43,11 +43,11 @@
         </div>
 
         <nav class="flex-1 py-6 space-y-1">
-            <a href="/nexus" class="flex items-center px-6 py-3 text-sm font-medium hover:bg-white/5 transition-colors sidebar-item-active">
+            <a href="/nexus" class="flex items-center px-6 py-3 text-sm font-medium hover:bg-white/5 transition-colors {% if active_page == 'dashboard' %}sidebar-item-active{% else %}text-gray-400{% endif %}">
                 <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>
                 Dashboard
             </a>
-            <a href="#" class="flex items-center px-6 py-3 text-sm font-medium text-gray-400 hover:bg-white/5 hover:text-white transition-colors">
+            <a href="/nexus/inventory" class="flex items-center px-6 py-3 text-sm font-medium hover:bg-white/5 transition-colors {% if active_page == 'inventory' %}sidebar-item-active{% else %}text-gray-400{% endif %}">
                 <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>
                 Инвентарь
             </a>
