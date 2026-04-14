@@ -546,11 +546,36 @@ class SubmissionService:
         return [{"category_id": int(cid), "title": title, "total": int(cnt)} for cid, title, cnt in rows]
 
     async def take_from_warehouse(self, category_id: int, count: int) -> list[Submission]:
-        stmt = select(Submission).options(joinedload(Submission.seller)).where(Submission.category_id == category_id, Submission.status == SubmissionStatus.PENDING).order_by(Submission.created_at.asc()).limit(count).with_for_update()
+        """Безопасное извлечение активов со склада (с блокировкой)."""
+        # 1. Сначала выбираем только ID с блокировкой FOR UPDATE
+        # Это предотвращает конфликт с OUTER JOIN
+        id_stmt = (
+            select(Submission.id)
+            .where(Submission.category_id == category_id, Submission.status == SubmissionStatus.PENDING)
+            .order_by(Submission.created_at.asc())
+            .limit(count)
+            .with_for_update()
+        )
+        id_result = await self._uow.session.execute(id_stmt)
+        ids = [row[0] for row in id_result.all()]
+        
+        if not ids:
+            return []
+
+        # 2. Теперь подгружаем полные объекты вместе с селлерами
+        stmt = (
+            select(Submission)
+            .options(joinedload(Submission.seller))
+            .where(Submission.id.in_(ids))
+        )
         items = list((await self._uow.session.execute(stmt)).scalars().all())
+        
+        # 3. Переводим в статус IN_WORK
+        now = datetime.now(timezone.utc)
         for item in items:
             item.status = SubmissionStatus.IN_WORK
-            item.assigned_at = datetime.now(timezone.utc)
+            item.assigned_at = now
+            
         return items
 
     async def get_warehouse_stats_grouped(self) -> list[dict]:
