@@ -131,10 +131,12 @@ async def _background_delivery(bot: Bot, category_id: int, chat_id: int, thread_
     from src.database.uow import UnitOfWork
     from src.domain.submission.submission_service import SubmissionService
     from src.core.utils.ui_builder import DIVIDER
+    from src.database.session import SessionFactory
 
-    async with UnitOfWork() as uow:
-        sub_svc = SubmissionService(uow)
-        items = await sub_svc.take_from_warehouse(category_id, count)
+    async with SessionFactory() as session:
+        async with UnitOfWork(session=session) as uow:
+            sub_svc = SubmissionService(uow)
+            items = await sub_svc.take_from_warehouse(category_id, count)
         
         if not items:
             logger.error(f"Background delivery failed: no items found for cat {category_id}")
