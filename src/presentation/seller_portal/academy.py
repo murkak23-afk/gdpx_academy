@@ -31,7 +31,7 @@ async def start_initiation(callback: CallbackQuery, state: FSMContext, ui: Messa
     kb = PremiumBuilder().primary(Lex.Academy.CODEX_ACCEPT_BUTTON, "academy:accept").as_markup()
 
     text = f"{Lex.Academy.CODEX_HEADER}\n\n{Lex.Academy.CODEX_TEXT}"
-    banner = media.get("academy.jpg")
+    banner = media.get("info.png")
 
     await ui.display(event=callback, text=text, reply_markup=kb, photo=banner)
     await callback.answer()
