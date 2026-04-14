@@ -344,6 +344,8 @@ async def delete_delivery_config(cfg_id: int, user_data: dict = Depends(get_curr
             return RedirectResponse(url=f"/nexus/users/{target_id}/delivery", status_code=303)
         return HTTPException(status_code=404)
 
+from src.services.delivery_service import background_delivery_task
+
 @router.post("/inventory/take", response_class=HTMLResponse)
 async def take_esim_from_inventory(
     background_tasks: BackgroundTasks,
@@ -355,46 +357,37 @@ async def take_esim_from_inventory(
     async with SessionFactory() as session:
         user = await session.get(User, user_data.get("user_id"))
         
-        # 1. Ищем конфигурацию доставки для этого пользователя и категории
-        # Мы предполагаем, что chat_id в DeliveryConfig соответствует telegram_id пользователя
+        # 1. Ищем конфигурацию доставки (персональный чат/топик симбайера)
         from src.database.models.web_control import DeliveryConfig
         stmt_cfg = select(DeliveryConfig).where(
             DeliveryConfig.category_id == category_id,
-            DeliveryConfig.chat_id == user.telegram_id
+            DeliveryConfig.user_id == user.id
         )
         cfg = (await session.execute(stmt_cfg)).scalar_one_or_none()
 
         if not cfg:
-            # Если нет специфичного топика, пробуем найти "общий" чат для этого пользователя (любой первый попавшийся)
-            stmt_fallback = select(DeliveryConfig).where(DeliveryConfig.chat_id == user.telegram_id).limit(1)
-            cfg = (await session.execute(stmt_fallback)).scalar_one_or_none()
-            
-            if not cfg:
-                msg = f"Для вас не настроен чат выдачи (DeliveryConfig). Обратитесь к OWNER."
-                return HTMLResponse(content=f'<div class="text-red-400 p-4 bg-red-900/20 border border-red-900 rounded-lg text-sm">{msg}</div>')
+            return HTMLResponse(content='<div class="text-red-400 p-4 bg-red-900/20 border border-red-900 rounded-lg text-sm">Нет настроенного маршрута (DeliveryConfig). Обратитесь к OWNER.</div>')
 
-        # 2. Проверяем наличие на складе
+        # 2. Проверяем наличие
         from src.domain.submission.submission_service import SubmissionService
         sub_svc = SubmissionService(session=session)
         available = await sub_svc.get_category_stock_count(category_id)
         
         if count > available:
-            return HTMLResponse(content=f'<div class="text-amber-400 p-4 bg-amber-900/20 border border-amber-900 rounded-lg text-sm">Недостаточно на складе. Доступно: {available}</div>')
+            return HTMLResponse(content=f'<div class="text-amber-400 p-4 bg-amber-900/20 border border-amber-900 rounded-lg text-sm">Недостаточно на складе.</div>')
 
-        # 3. Запускаем фоновую задачу выдачи (ту же, что используется в боте)
-        # Мы используем chat_id и thread_id из конфига
-        background_tasks.add_task(_background_delivery, bot, category_id, cfg.chat_id, cfg.thread_id, count)
+        # 3. Запускаем общую задачу выдачи
+        background_tasks.add_task(background_delivery_task, bot, category_id, cfg.chat_id, cfg.thread_id, count)
         
-        # Записываем в аудит
+        # Логируем
         await log_admin_action(
             admin_id=user.id,
             action="TAKE_ESIM_WEB",
             target_type="category",
             target_id=category_id,
-            details=f"Запрошено {count} шт. в чат {cfg.chat_id} (thread {cfg.thread_id})"
+            details=f"Запрос {count} шт. -> Чат {cfg.chat_id}"
         )
         
-        # Возвращаем успех - HTMX перенаправит в "Мои eSIM"
         return HTMLResponse(content='<script>window.location.href="/nexus/my-esim"</script>')
     """Страница управления пользователями (для OWNER и ADMIN)."""
     from src.api.app import templates

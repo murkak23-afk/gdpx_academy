@@ -69,6 +69,8 @@ def create_app(bot: Bot, dispatcher: Dispatcher) -> FastAPI:
             result = await session.execute(stmt)
             return [{"id": r[0], "title": r[1], "is_priority": r[2], "stock": r[3]} for r in result.all()]
 
+from src.services.delivery_service import background_delivery_task
+
     @app.post("/api/delivery/order")
     async def process_delivery_order(order: DeliveryOrder, background_tasks: BackgroundTasks):
         # ЭТОТ ПРИНТ ТЫ ДОЛЖЕН УВИДЕТЬ В ЛОГАХ
@@ -94,7 +96,7 @@ def create_app(bot: Bot, dispatcher: Dispatcher) -> FastAPI:
             if order.count > available:
                 raise HTTPException(status_code=400, detail=f"Недостаточно на складе. Доступно: {available}")
 
-            background_tasks.add_task(_background_delivery, bot, cfg.category_id, order.chat_id, cfg.thread_id, order.count)
+            background_tasks.add_task(background_delivery_task, bot, cfg.category_id, order.chat_id, cfg.thread_id, order.count)
             return {"status": "ok"}
 
     @app.post(settings.webhook_path)
