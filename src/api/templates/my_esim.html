@@ -75,20 +75,20 @@
                             <div class="flex items-center justify-end gap-3">
                                 
                                 <!-- Блок -->
-                                <button hx-post="/api/nexus/esim/{{ item.id }}/action/block"
+                                <button hx-post="/nexus/esim/{{ item.id }}/action/block"
                                         hx-target="#row-{{ item.id }}"
                                         hx-swap="outerHTML swap:1s"
-                                        class="px-4 py-2 bg-[#0a0a0f]/80 border border-nexus-sakura/50 text-nexus-sakura rounded-[10px] text-[12px] font-bold uppercase tracking-widest 
-                                               hover:bg-nexus-sakura hover:text-white hover:shadow-[0_0_20px_rgba(255,0,234,0.4)] transition-all duration-300 active:scale-95 backdrop-blur-md">
+                                        class="px-4 py-2 bg-[#0a0a0f]/80 border border-nexus-error/50 text-nexus-error rounded-[10px] text-[12px] font-bold uppercase tracking-widest 
+                                               hover:bg-nexus-error hover:text-white hover:shadow-[0_0_20px_rgba(255,59,48,0.4)] transition-all duration-300 active:scale-95 backdrop-blur-md">
                                     БЛОК
                                 </button>
 
                                 <!-- Не скан -->
-                                <button hx-post="/api/nexus/esim/{{ item.id }}/action/not_scan"
+                                <button hx-post="/nexus/esim/{{ item.id }}/action/not_scan"
                                         hx-target="#row-{{ item.id }}"
                                         hx-swap="outerHTML swap:1s"
-                                        class="px-4 py-2 bg-gradient-to-r from-nexus-cyan to-nexus-sakura text-white rounded-[10px] text-[12px] font-bold uppercase tracking-widest 
-                                               shadow-[0_0_15px_rgba(0,217,255,0.3)] hover:shadow-[0_0_30px_rgba(255,0,234,0.5)] opacity-90 hover:opacity-100 transition-all duration-300 active:scale-95">
+                                        class="px-4 py-2 bg-white/10 border border-white/10 text-white rounded-[10px] text-[12px] font-bold uppercase tracking-widest 
+                                               hover:bg-white/20 hover:border-white/30 transition-all duration-300 active:scale-95">
                                     НЕ СКАН
                                 </button>
                                 
