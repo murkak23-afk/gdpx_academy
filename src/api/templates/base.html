@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="ru" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}GDPX // CONTROL PANEL{% endblock %}</title>
+    
+    <!-- Стек: Tailwind + HTMX + Alpine.js -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        accent: '#00d2ff',
+                        premium: '#1a1a1a',
+                        sakura: '#ffb7c5'
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        [x-cloak] { display: none !important; }
+        body { background-color: #0a0a0a; color: #e5e7eb; }
+        .premium-border { border: 1px solid #333; }
+        .sakura-shadow { box-shadow: 0 0 15px rgba(0, 210, 255, 0.1); }
+        
+        /* Стили для HTMX индикатора загрузки */
+        .htmx-indicator { display: none; }
+        .htmx-request .htmx-indicator { display: block; }
+        .htmx-request.htmx-indicator { display: block; }
+    </style>
+</head>
+<body class="font-sans antialiased">
+    
+    <!-- Навигация (Navbar) -->
+    <nav class="border-b border-gray-800 bg-premium/80 backdrop-blur-md sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between h-16 items-center">
+                <div class="flex items-center gap-2">
+                    <span class="text-accent font-bold text-xl tracking-tighter">❖ GDPX // NEXUS</span>
+                </div>
+                <div class="flex items-center gap-4">
+                    {% if user %}
+                        <span class="text-sm text-gray-400">@{{ user.username }}</span>
+                        <a href="/auth/logout" class="text-xs bg-red-900/20 text-red-400 px-3 py-1 rounded-full border border-red-900/50 hover:bg-red-900/40 transition">ВЫХОД</a>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Основной контент -->
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {% block content %}{% endblock %}
+    </main>
+
+    <!-- Глобальные уведомления (Toast) -->
+    <div x-data="{ show: false, message: '' }" 
+         x-on:notify.window="show = true; message = $event.detail; setTimeout(() => show = false, 3000)"
+         x-show="show" x-cloak x-transition
+         class="fixed bottom-5 right-5 z-50 bg-accent text-black px-6 py-3 rounded-lg shadow-lg font-bold">
+        <span x-text="message"></span>
+    </div>
+
+</body>
+</html>
