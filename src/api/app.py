@@ -37,6 +37,10 @@ def create_app(bot: Bot, dispatcher: Dispatcher) -> FastAPI:
     app = FastAPI(title="tgpriem API", version="1.0.0")
     settings = get_settings()
 
+    # Монтируем статику
+    from fastapi.staticfiles import StaticFiles
+    app.mount("/assets", StaticFiles(directory=str(BASE_DIR.parent / "presentation" / "assets")), name="assets")
+
     @app.exception_handler(HTTPException)
     async def auth_exception_handler(request: Request, exc: HTTPException):
         if exc.status_code == 303:
