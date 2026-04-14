@@ -52,6 +52,8 @@ def create_app(bot: Bot, dispatcher: Dispatcher) -> FastAPI:
     app.include_router(nexus.router)
     app.include_router(tickets.router)
 
+    from src.services.delivery_service import background_delivery_task
+
     @app.get("/delivery")
     async def delivery_page(request: Request):
         return templates.TemplateResponse("delivery.html", {"request": request})
@@ -69,35 +71,32 @@ def create_app(bot: Bot, dispatcher: Dispatcher) -> FastAPI:
             result = await session.execute(stmt)
             return [{"id": r[0], "title": r[1], "is_priority": r[2], "stock": r[3]} for r in result.all()]
 
-from src.services.delivery_service import background_delivery_task
-
-@app.post("/api/delivery/order")
-async def process_delivery_order(order: DeliveryOrder, background_tasks: BackgroundTasks):
-    # ЭТОТ ПРИНТ ТЫ ДОЛЖЕН УВИДЕТЬ В ЛОГАХ
-    print(f"!!! ORDER RECEIVED: Chat={order.chat_id}, Cat={order.category_id}, Count={order.count}")
-    
-    async with SessionFactory() as session:
-        from src.database.models.web_control import DeliveryConfig
-        stmt_cfg = select(DeliveryConfig).where(
-            DeliveryConfig.category_id == order.category_id,
-            DeliveryConfig.chat_id == order.chat_id
-        )
-        cfg = (await session.execute(stmt_cfg)).scalar_one_or_none()
-
-        if not cfg:
-            msg = f"Маршрут не найден. ChatID: {order.chat_id}, CatID: {order.category_id}"
-            print(f"!!! ERROR: {msg}")
-            raise HTTPException(status_code=400, detail=msg)
+    @app.post("/api/delivery/order")
+    async def process_delivery_order(order: DeliveryOrder, background_tasks: BackgroundTasks):
+        print(f"!!! ORDER RECEIVED: Chat={order.chat_id}, Cat={order.category_id}, Count={order.count}")
         
-        from src.domain.submission.submission_service import SubmissionService
-        sub_svc = SubmissionService(session=session)
-        available = await sub_svc.get_category_stock_count(order.category_id)
-        
-        if order.count > available:
-            raise HTTPException(status_code=400, detail=f"Недостаточно на складе. Доступно: {available}")
+        async with SessionFactory() as session:
+            from src.database.models.web_control import DeliveryConfig
+            stmt_cfg = select(DeliveryConfig).where(
+                DeliveryConfig.category_id == order.category_id,
+                DeliveryConfig.chat_id == order.chat_id
+            )
+            cfg = (await session.execute(stmt_cfg)).scalar_one_or_none()
 
-        background_tasks.add_task(background_delivery_task, bot, cfg.category_id, order.chat_id, cfg.thread_id, order.count)
-        return {"status": "ok"}
+            if not cfg:
+                msg = f"Маршрут не найден. ChatID: {order.chat_id}, CatID: {order.category_id}"
+                print(f"!!! ERROR: {msg}")
+                raise HTTPException(status_code=400, detail=msg)
+            
+            from src.domain.submission.submission_service import SubmissionService
+            sub_svc = SubmissionService(session=session)
+            available = await sub_svc.get_category_stock_count(order.category_id)
+            
+            if order.count > available:
+                raise HTTPException(status_code=400, detail=f"Недостаточно на складе. Доступно: {available}")
+
+            background_tasks.add_task(background_delivery_task, bot, cfg.category_id, order.chat_id, cfg.thread_id, order.count)
+            return {"status": "ok"}
 
     @app.post(settings.webhook_path)
     async def telegram_webhook(request: Request, background_tasks: BackgroundTasks, x_tg_token: str | None = Header(None, alias="X-Telegram-Bot-Api-Secret-Token")):
@@ -109,51 +108,3 @@ async def process_delivery_order(order: DeliveryOrder, background_tasks: Backgro
         return {"ok": True}
 
     return app
-
-async def _background_delivery(bot: Bot, category_id: int, chat_id: int, thread_id: int, count: int):
-    from src.database.uow import UnitOfWork
-    from src.domain.submission.submission_service import SubmissionService
-    from src.core.utils.ui_builder import DIVIDER
-
-    async with SessionFactory() as session:
-        async with UnitOfWork(session=session) as uow:
-            sub_svc = SubmissionService(uow)
-            items = await sub_svc.take_from_warehouse(category_id, count)
-
-            if not items: return
-
-            # Получаем цену для этого чата (покупателя)
-            from src.database.models.user import User
-            from src.database.models.web_control import SimbuyerPrice
-            buyer_stmt = select(User).where(User.telegram_id == chat_id)
-            buyer = (await session.execute(buyer_stmt)).scalar_one_or_none()
-
-            price_val = 0
-            if buyer:
-                price_stmt = select(SimbuyerPrice.price).where(and_(SimbuyerPrice.user_id == buyer.id, SimbuyerPrice.category_id == category_id))
-                price_val = (await session.execute(price_stmt)).scalar() or 0
-
-            for item in items:
-                # Фиксируем цену покупки
-                item.purchase_price = price_val
-                item.delivered_to_chat = chat_id
-                item.delivered_to_thread = thread_id
-
-                try:
-                    caption = (
-                        f"📟 <b>eSIM #{item.id}</b>\n"
-                        f"📶 <b>ОПЕРАТОР:</b> {item.category.title}\n"
-                        f"📞 <b>НОМЕР:</b> <code>{item.phone_normalized or 'N/A'}</code>\n"
-                        f"{DIVIDER}\n"
-                        f"👤 <b>АГЕНТ:</b> @{item.seller.username or 'id' + str(item.seller.telegram_id)}"
-                    )
-                    # Шлем в персональный чат
-                    await bot.send_photo(
-                        chat_id=chat_id, 
-                        photo=item.telegram_file_id, 
-                        caption=caption, 
-                        message_thread_id=thread_id if thread_id != 0 else None
-                    )
-                    await asyncio.sleep(0.3)
-                except Exception as e:
-                    print(f"!!! SEND ERROR: {e}")
