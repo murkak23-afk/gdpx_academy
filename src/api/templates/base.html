@@ -10,9 +10,18 @@
     <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
     
     <style>
-        :root { --neon-cyan: #00d2ff; --neon-sakura: #ffb7c5; }
-        body { background: #050505; color: #e5e7eb; font-family: 'Inter', sans-serif; }
-        .cyber-panel { background: rgba(10, 10, 10, 0.8); backdrop-filter: blur(20px); border: 1px solid rgba(255,255,255,0.05); }
+        [x-cloak] { display: none !important; }
+        body { 
+            background: radial-gradient(circle at top right, #0a111a, #050505 60%); 
+            color: #e5e7eb; 
+            font-family: 'Inter', sans-serif; 
+        }
+        .cyber-panel { 
+            background: rgba(10, 10, 10, 0.6); 
+            backdrop-filter: blur(20px); 
+            border: 1px solid rgba(255,255,255,0.05); 
+        }
+        .bg-premium { background: rgba(0,0,0,0.3) !important; }
         .logo-glow { filter: drop-shadow(0 0 10px var(--neon-cyan)) drop-shadow(0 0 20px rgba(255, 183, 197, 0.3)); }
         .neon-border { border: 1px solid var(--neon-cyan); box-shadow: 0 0 10px rgba(0, 210, 255, 0.2); }
         .text-neon { text-shadow: 0 0 10px var(--neon-cyan); }
