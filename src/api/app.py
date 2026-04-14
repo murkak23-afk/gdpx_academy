@@ -27,7 +27,7 @@ class DeliveryOrder(BaseModel):
     category_id: int
     count: int
     chat_id: int
-    init_data: str
+    init_data: str | None = None # Делаем опциональным
 
 def create_app(bot: Bot, dispatcher: Dispatcher) -> FastAPI:
     app = FastAPI(

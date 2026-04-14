@@ -16,15 +16,15 @@ def get_qr_delivery_main_kb() -> InlineKeyboardMarkup:
             .as_markup())
 
 def get_qr_delivery_webapp_kb(chat_id: int) -> InlineKeyboardMarkup:
-    """Отдельная клавиатура для входа в WebApp (Максимально чистая)."""
+    """Клавиатура для входа в Хаб (используем URL для совместимости с группами)."""
     from src.core.config import get_settings
     settings = get_settings()
-    # Убедимся, что URL корректный
+    # Чистим базовый URL
     base_url = settings.webhook_url.split('/webhook')[0]
     webapp_url = f"{base_url}/delivery?chat_id={chat_id}"
     
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🌐 ОТКРЫТЬ DELIVERY HUB", web_app=WebAppInfo(url=webapp_url))]
+        [InlineKeyboardButton(text="🌐 ОТКРЫТЬ DELIVERY HUB", url=webapp_url)]
     ])
 
 def get_qr_delivery_operators_kb(categories: list) -> InlineKeyboardMarkup:
