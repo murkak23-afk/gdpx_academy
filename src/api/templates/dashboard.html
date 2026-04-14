@@ -23,10 +23,10 @@
         <div class="bg-white/[0.03] backdrop-blur-2xl p-10 rounded-[32px] border border-white/10 shadow-[0_15px_40px_rgba(0,0,0,0.4)] hover:shadow-[0_20px_60px_rgba(0,217,255,0.1)] transition-all group overflow-hidden relative flex flex-col justify-between min-h-[220px]">
             <div class="absolute -top-12 -right-12 w-24 h-24 bg-nexus-cyan/5 rounded-full blur-[40px]"></div>
             <div>
-                <div class="text-white/20 text-[10px] font-bold uppercase tracking-[0.3em] mb-4">Stock Availability</div>
+                <div class="text-white/20 text-[10px] font-bold uppercase tracking-[0.3em] mb-4">Доступно на складе</div>
                 <div class="flex items-baseline gap-3">
                     <span class="text-[52px] font-bold text-white group-hover:scale-105 transition-transform duration-500">{{ stats.stock }}</span>
-                    <span class="text-nexus-cyan/40 text-[14px] font-medium tracking-widest uppercase">PENDING</span>
+                    <span class="text-nexus-cyan/40 text-[14px] font-medium tracking-widest uppercase">В ОЖИДАНИИ</span>
                 </div>
             </div>
             <div class="mt-auto">
@@ -40,34 +40,34 @@
         <div class="bg-white/[0.03] backdrop-blur-2xl p-10 rounded-[32px] border border-white/10 shadow-[0_15px_40px_rgba(0,0,0,0.4)] hover:shadow-[0_20px_60px_rgba(255,0,234,0.1)] transition-all group overflow-hidden relative flex flex-col justify-between min-h-[220px]">
             <div class="absolute -top-12 -right-12 w-24 h-24 bg-nexus-sakura/5 rounded-full blur-[40px]"></div>
             <div>
-                <div class="text-white/20 text-[10px] font-bold uppercase tracking-[0.3em] mb-4">Daily Revenue (USDT)</div>
+                <div class="text-white/20 text-[10px] font-bold uppercase tracking-[0.3em] mb-4">Доход за день (USDT)</div>
                 <div class="flex items-baseline gap-3">
                     <span class="text-[52px] font-bold text-white group-hover:scale-105 transition-transform duration-500">{{ stats.today_amount }}</span>
-                    <span class="text-nexus-sakura/40 text-[14px] font-medium tracking-widest uppercase">ACCEPTED</span>
+                    <span class="text-nexus-sakura/40 text-[14px] font-medium tracking-widest uppercase">ПРИНЯТО</span>
                 </div>
             </div>
             <div class="mt-auto flex items-center gap-2 text-[11px] text-nexus-sakura/80 font-bold uppercase tracking-wider">
                 <span class="w-1.5 h-1.5 rounded-full bg-nexus-sakura animate-pulse"></span>
-                LIVE TRACKING
+                В РЕАЛЬНОМ ВРЕМЕНИ
             </div>
         </div>
 
         <!-- Оборот (Count) -->
         <div class="bg-white/[0.03] backdrop-blur-2xl p-8 rounded-[32px] border border-white/10 shadow-[0_15px_40px_rgba(0,0,0,0.4)] hover:shadow-[0_20px_60px_rgba(255,255,255,0.05)] transition-all group overflow-hidden relative">
-            <div class="text-white/20 text-[10px] font-bold uppercase tracking-[0.3em] mb-4">Today Operations</div>
+            <div class="text-white/20 text-[10px] font-bold uppercase tracking-[0.3em] mb-4">Операции за сегодня</div>
             <div class="flex items-baseline gap-3">
                 <span class="text-[48px] font-bold text-white group-hover:scale-105 transition-transform duration-500">{{ stats.today_count }}</span>
-                <span class="text-white/40 text-[14px] font-medium tracking-widest uppercase">Scan Units</span>
+                <span class="text-white/40 text-[14px] font-medium tracking-widest uppercase">Сканов</span>
             </div>
             <p class="mt-4 text-[12px] text-white/30 tracking-wide">Последние 24 часа активности</p>
         </div>
 
         <!-- Воркеры -->
         <div class="bg-white/[0.03] backdrop-blur-2xl p-8 rounded-[32px] border border-white/10 shadow-[0_15px_40px_rgba(0,0,0,0.4)] hover:shadow-[0_20px_60px_rgba(0,217,255,0.05)] transition-all group overflow-hidden relative">
-            <div class="text-white/20 text-[10px] font-bold uppercase tracking-[0.3em] mb-4">Active Agents</div>
+            <div class="text-white/20 text-[10px] font-bold uppercase tracking-[0.3em] mb-4">Активные Агенты</div>
             <div class="flex items-baseline gap-3">
                 <span class="text-[48px] font-bold text-white group-hover:scale-105 transition-transform duration-500">{{ stats.workers }}</span>
-                <span class="text-nexus-cyan/40 text-[14px] font-medium tracking-widest uppercase">Total</span>
+                <span class="text-nexus-cyan/40 text-[14px] font-medium tracking-widest uppercase">Всего</span>
             </div>
             <div class="mt-4 text-[12px] text-nexus-cyan font-bold tracking-[0.1em] uppercase">Команда в строю</div>
         </div>
@@ -78,7 +78,7 @@
     <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
         <a href="/nexus/tickets" class="group bg-gradient-to-br from-white/5 to-transparent p-10 rounded-[40px] border border-white/10 hover:border-nexus-cyan/50 hover:shadow-[0_0_50px_rgba(0,217,255,0.1)] transition-all relative overflow-hidden">
             <div class="relative z-10">
-                <h3 class="text-2xl font-bold text-white mb-2 group-hover:text-nexus-cyan transition-colors tracking-tight">Support Center</h3>
+                <h3 class="text-2xl font-bold text-white mb-2 group-hover:text-nexus-cyan transition-colors tracking-tight">Центр Поддержки</h3>
                 <p class="text-white/40 text-[14px] leading-relaxed max-w-[240px]">Решение споров и общение с симбайерами по активам.</p>
             </div>
             <svg class="absolute -bottom-6 -right-6 w-32 h-32 text-white/5 group-hover:text-nexus-cyan/10 transition-all duration-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/></svg>
@@ -87,7 +87,7 @@
         {% if user.role == 'owner' or user.role == 'admin' %}
         <a href="/nexus/categories" class="group bg-gradient-to-br from-white/5 to-transparent p-10 rounded-[40px] border border-white/10 hover:border-nexus-sakura/50 hover:shadow-[0_0_50px_rgba(255,0,234,0.1)] transition-all relative overflow-hidden">
             <div class="relative z-10">
-                <h3 class="text-2xl font-bold text-white mb-2 group-hover:text-nexus-sakura transition-colors tracking-tight">Assets Market</h3>
+                <h3 class="text-2xl font-bold text-white mb-2 group-hover:text-nexus-sakura transition-colors tracking-tight">Рынок Активов</h3>
                 <p class="text-white/40 text-[14px] leading-relaxed max-w-[240px]">Управление категориями, лимитами и базовыми ценами.</p>
             </div>
             <svg class="absolute -bottom-6 -right-6 w-32 h-32 text-white/5 group-hover:text-nexus-sakura/10 transition-all duration-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>
@@ -95,7 +95,7 @@
 
         <a href="/nexus/users" class="group bg-gradient-to-br from-white/5 to-transparent p-10 rounded-[40px] border border-white/10 hover:border-white/30 hover:shadow-[0_0_50px_rgba(255,255,255,0.05)] transition-all relative overflow-hidden">
             <div class="relative z-10">
-                <h3 class="text-2xl font-bold text-white mb-2 group-hover:text-white transition-colors tracking-tight">Team Management</h3>
+                <h3 class="text-2xl font-bold text-white mb-2 group-hover:text-white transition-colors tracking-tight">Управление Командой</h3>
                 <p class="text-white/40 text-[14px] leading-relaxed max-w-[240px]">Контроль доступа, изменение ролей и блокировка воркеров.</p>
             </div>
             <svg class="absolute -bottom-6 -right-6 w-32 h-32 text-white/5 group-hover:text-white/10 transition-all duration-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
