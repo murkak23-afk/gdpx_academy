@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Request, Depends, HTTPException, Form
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy import select, func
+from sqlalchemy.orm import joinedload
 from src.database.session import SessionFactory
 from src.database.models.user import User
 from src.database.models.submission import Submission
