@@ -67,9 +67,12 @@ async def get_reports(request: Request, user_data: dict = Depends(get_current_us
     """Страница истории отгрузок (отчеты)."""
     from src.api.app import templates
     async with SessionFactory() as session:
-        from src.domain.users.user_service import UserService
-        user_svc = UserService(session)
-        user = await user_svc.get_by_telegram_id(user_data.get("user_id"))
+        from src.database.models.user import User
+        # Ищем пользователя по внутреннему ID из базы (так как он в токене)
+        user = await session.get(User, user_data.get("user_id"))
+        
+        if not user:
+            raise HTTPException(status_code=303, detail="User not found")
         
         from src.database.models.submission import Submission
         from src.database.models.enums import UserRole
