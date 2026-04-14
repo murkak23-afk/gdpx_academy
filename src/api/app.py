@@ -20,8 +20,12 @@ from src.database.models.category import Category
 from src.database.models.submission import Submission
 from src.database.models.enums import SubmissionStatus
 
+from pathlib import Path
 logger = logging.getLogger(__name__)
-templates = Jinja2Templates(directory="src/api/templates")
+
+# Вычисляем абсолютный путь к папке шаблонов
+BASE_DIR = Path(__file__).resolve().parent
+templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 
 class DeliveryOrder(BaseModel):
     category_id: int
