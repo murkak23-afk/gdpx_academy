@@ -123,7 +123,13 @@ async def _background_delivery(bot: Bot, category_id: int, chat_id: int, thread_
                         f"{DIVIDER}\n"
                         f"👤 <b>АГЕНТ:</b> @{item.seller.username or 'id' + str(item.seller.telegram_id)}"
                     )
-                    await bot.send_photo(chat_id=chat_id, photo=item.telegram_file_id, caption=caption, message_thread_id=thread_id)
+                    # Шлем в персональный чат
+                    await bot.send_photo(
+                        chat_id=chat_id, 
+                        photo=item.telegram_file_id, 
+                        caption=caption, 
+                        message_thread_id=thread_id if thread_id != 0 else None
+                    )
                     await asyncio.sleep(0.3)
                 except Exception as e:
                     print(f"!!! SEND ERROR: {e}")

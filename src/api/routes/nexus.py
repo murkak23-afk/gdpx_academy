@@ -61,6 +61,36 @@ async def get_dashboard(request: Request, user_data: dict = Depends(get_current_
             "active_page": "dashboard"
         })
 
+@router.get("/reports", response_class=HTMLResponse)
+async def get_reports(request: Request, user_data: dict = Depends(get_current_user)):
+    """Страница истории отгрузок (отчеты)."""
+    from src.api.app import templates
+    async with SessionFactory() as session:
+        from src.domain.users.user_service import UserService
+        user_svc = UserService(session)
+        user = await user_svc.get_by_telegram_id(user_data.get("user_id"))
+        
+        from src.database.models.submission import Submission
+        from src.database.models.enums import UserRole
+        
+        stmt = select(Submission).options(joinedload(Submission.category), joinedload(Submission.seller))
+        
+        # Если зашел симбайер — фильтруем только его отгрузки
+        if user.role == UserRole.SIMBUYER:
+            stmt = stmt.where(Submission.delivered_to_chat == user.telegram_id) # Или другой критерий привязки
+        
+        stmt = stmt.where(Submission.delivered_to_chat.is_not(None)).order_by(Submission.updated_at.desc()).limit(100)
+        
+        result = await session.execute(stmt)
+        shipments = result.scalars().all()
+
+        return templates.TemplateResponse("reports.html", {
+            "request": request,
+            "user": {"username": user_data.get("sub")},
+            "shipments": shipments,
+            "active_page": "reports"
+        })
+
 @router.get("/inventory", response_class=HTMLResponse)
 async def get_inventory(request: Request, user_data: dict = Depends(get_current_user)):
     """Страница управления кластерами."""
