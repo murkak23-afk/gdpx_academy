@@ -4,7 +4,59 @@ from fastapi import APIRouter, Request, Depends, Form
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy import select
 from src.database.session import SessionFactory
-from src.database.models.web_control import SupportTicket
+from sqlalchemy.orm import joinedload
+from src.database.models.web_control import SupportTicket, ChatMessage
+
+@router.get("/{ticket_id}", response_class=HTMLResponse)
+async def view_ticket(ticket_id: int, request: Request, user_data: dict = Depends(get_current_user)):
+    """Страница переписки внутри конкретного тикета."""
+    from src.api.app import templates
+    async with SessionFactory() as session:
+        # Подгружаем тикет и связанные сообщения (отсортированные по времени)
+        stmt = select(SupportTicket).options(
+            joinedload(SupportTicket.messages).joinedload(ChatMessage.sender)
+        ).where(SupportTicket.id == ticket_id)
+        
+        ticket = (await session.execute(stmt)).scalar_one_or_none()
+        
+        if not ticket:
+            raise HTTPException(status_code=404, detail="Тикет не найден")
+
+        # Чтобы сообщения шли сверху вниз (старые -> новые)
+        messages = sorted(ticket.messages, key=lambda m: m.created_at)
+
+        return templates.TemplateResponse("ticket_chat.html", {
+            "request": request, 
+            "user": {"username": user_data.get("sub"), "user_id": user_data.get("user_id")},
+            "ticket": ticket,
+            "messages": messages,
+            "active_page": "tickets"
+        })
+
+@router.post("/{ticket_id}/message", response_class=HTMLResponse)
+async def send_message(
+    ticket_id: int,
+    text: str = Form(...),
+    user_data: dict = Depends(get_current_user)
+):
+    """HTMX-обработчик отправки нового сообщения."""
+    from src.api.app import templates
+    async with SessionFactory() as session:
+        new_msg = ChatMessage(
+            ticket_id=ticket_id,
+            sender_id=user_data.get("user_id"),
+            text=text
+        )
+        session.add(new_msg)
+        await session.commit()
+        await session.refresh(new_msg, ["sender"]) # Подгружаем отправителя
+
+        # Возвращаем только HTML-кусочек нового сообщения для вставки в чат
+        return templates.TemplateResponse("components/chat_message.html", {
+            "request": Request({"type": "http"}), # Заглушка для рендера фрагмента
+            "msg": new_msg,
+            "current_user_id": user_data.get("user_id")
+        })
 from src.api.routes.nexus import get_current_user
 
 router = APIRouter(prefix="/nexus/tickets", tags=["Tickets"])

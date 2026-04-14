@@ -8,37 +8,24 @@
     <!-- Заголовок -->
     <div class="flex justify-between items-end">
         <div>
-            <h1 class="text-[32px] font-semibold text-nexus-text tracking-tight">История активов</h1>
-            <p class="text-nexus-muted mt-2">Детальный лог обработанных eSIM и их статусов</p>
+            <h1 class="text-[32px] font-semibold text-white tracking-tight drop-shadow-[0_0_10px_rgba(0,217,255,0.3)]">История активов</h1>
+            <p class="text-nexus-cyan mt-2 font-medium tracking-wider">Детальный лог обработанных eSIM и их статусов</p>
         </div>
         <div class="flex gap-3">
-            <button class="px-5 py-2.5 bg-white border border-slate-200 text-slate-700 rounded-xl text-sm font-semibold hover:bg-slate-50 transition-colors shadow-sm">
+            <button class="px-5 py-2.5 bg-[#0a0a0f]/80 border border-white/10 text-white/80 rounded-xl text-sm font-semibold hover:bg-white/10 hover:text-white transition-colors shadow-[0_0_15px_rgba(0,0,0,0.5)] backdrop-blur-md">
                 ФИЛЬТР
             </button>
-            <button class="px-5 py-2.5 bg-slate-900 text-white rounded-xl text-sm font-semibold hover:bg-slate-800 transition-colors shadow-sm">
+            <button class="px-5 py-2.5 bg-gradient-to-r from-nexus-cyan to-nexus-sakura text-white rounded-xl text-sm font-semibold hover:shadow-[0_0_20px_rgba(255,0,234,0.4)] transition-all opacity-90 hover:opacity-100">
                 ЭКСПОРТ CSV
             </button>
         </div>
     </div>
 
-    <!-- KPI карточки (Заглушка для будущего расширения) -->
-    <div class="grid grid-cols-4 gap-4 mb-6">
-        <div class="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm flex items-center justify-between">
-            <div>
-                <div class="text-[12px] font-bold text-slate-400 uppercase tracking-wider mb-1">Всего обработано</div>
-                <div class="text-2xl font-bold text-slate-800">{{ shipments|length }}</div>
-            </div>
-            <div class="w-10 h-10 rounded-full bg-slate-50 flex items-center justify-center">
-                <svg class="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"/></svg>
-            </div>
-        </div>
-    </div>
-
-    <!-- Таблица -->
-    <div class="bg-white rounded-[24px] border border-slate-100 shadow-[0_8px_30px_rgb(0,0,0,0.04)] overflow-hidden">
+    <!-- Таблица (Glassmorphism) -->
+    <div class="bg-[#0a0a0f]/60 backdrop-blur-xl rounded-[24px] border border-white/10 shadow-[0_8px_30px_rgba(0,0,0,0.5)] overflow-hidden">
         <div class="overflow-x-auto">
             <table class="w-full text-left border-collapse">
-                <thead class="bg-slate-50/50 border-b border-slate-100 text-[11px] font-semibold text-slate-400 uppercase tracking-[0.15em]">
+                <thead class="bg-white/5 border-b border-white/10 text-[11px] font-semibold text-white/60 uppercase tracking-[0.15em]">
                     <tr>
                         <th class="px-8 py-5">Референс</th>
                         <th class="px-8 py-5">Категория</th>
@@ -48,25 +35,25 @@
                         <th class="px-8 py-5 text-right">Контекст</th>
                     </tr>
                 </thead>
-                <tbody class="divide-y divide-slate-50 text-sm">
+                <tbody class="divide-y divide-white/5 text-sm">
                     {% for item in shipments %}
-                    <tr class="hover:bg-[#F0FAFF] transition-colors duration-300 group">
+                    <tr class="hover:bg-white/5 transition-colors duration-300 group">
                         
                         <!-- Референс -->
                         <td class="px-8 py-5">
-                            <div class="font-mono text-slate-800 font-semibold">#{{ item.id }}</div>
-                            <div class="text-[11px] text-slate-400 mt-1">{{ item.updated_at.strftime('%d.%m.%Y %H:%M') }}</div>
+                            <div class="font-mono text-white font-semibold drop-shadow-[0_0_5px_rgba(255,255,255,0.3)]">#{{ item.id }}</div>
+                            <div class="text-[11px] text-white/40 mt-1">{{ item.updated_at.strftime('%d.%m.%Y %H:%M') }}</div>
                         </td>
 
                         <!-- Категория -->
                         <td class="px-8 py-5">
-                            <span class="text-[13px] font-semibold text-slate-700">{{ item.category.title }}</span>
+                            <span class="text-[13px] font-semibold text-white/80">{{ item.category.title }}</span>
                         </td>
 
                         <!-- Номер SIM -->
                         <td class="px-8 py-5">
                             <div class="flex items-center gap-2">
-                                <span class="font-mono text-nexus-cyan font-bold tracking-wider bg-nexus-cyan/5 px-2 py-1 rounded-md border border-nexus-cyan/10">
+                                <span class="font-mono text-nexus-cyan font-bold tracking-wider bg-nexus-cyan/10 px-2.5 py-1 rounded-md border border-nexus-cyan/30 shadow-[0_0_10px_rgba(0,217,255,0.15)]">
                                     {{ item.phone_normalized or 'HIDDEN' }}
                                 </span>
                             </div>
@@ -75,23 +62,25 @@
                         <!-- Статус -->
                         <td class="px-8 py-5">
                             {% if item.status.value == 'accepted' %}
-                                <span class="px-3 py-1 bg-nexus-success/10 text-nexus-success border border-nexus-success/20 rounded-[8px] text-[10px] font-bold uppercase tracking-wider">УСПЕХ</span>
+                                <span class="px-3 py-1 bg-nexus-success/10 text-nexus-success border border-nexus-success/30 rounded-[8px] text-[10px] font-bold uppercase tracking-wider shadow-[0_0_10px_rgba(0,200,83,0.2)]">УСПЕХ</span>
                             {% elif item.status.value == 'blocked' or item.status.value == 'not_a_scan' %}
-                                <span class="px-3 py-1 bg-nexus-error/10 text-nexus-error border border-nexus-error/20 rounded-[8px] text-[10px] font-bold uppercase tracking-wider">{{ item.status.value }}</span>
+                                <span class="px-3 py-1 bg-nexus-error/10 text-nexus-error border border-nexus-error/30 rounded-[8px] text-[10px] font-bold uppercase tracking-wider shadow-[0_0_10px_rgba(255,59,48,0.2)]">{{ item.status.value }}</span>
+                            {% elif item.status.value == 'in_work' %}
+                                <span class="px-3 py-1 bg-nexus-cyan/10 text-nexus-cyan border border-nexus-cyan/30 rounded-[8px] text-[10px] font-bold uppercase tracking-wider shadow-[0_0_10px_rgba(0,217,255,0.2)]">В РАБОТЕ</span>
                             {% else %}
-                                <span class="px-3 py-1 bg-slate-100 text-slate-500 border border-slate-200 rounded-[8px] text-[10px] font-bold uppercase tracking-wider">{{ item.status.value }}</span>
+                                <span class="px-3 py-1 bg-white/10 text-white/60 border border-white/20 rounded-[8px] text-[10px] font-bold uppercase tracking-wider">{{ item.status.value }}</span>
                             {% endif %}
                         </td>
 
                         <!-- Получатель -->
                         <td class="px-8 py-5">
                             {% if item.delivered_to_chat %}
-                                <div class="text-[12px] text-slate-600 font-mono font-medium">{{ item.delivered_to_chat }}</div>
+                                <div class="text-[12px] text-white/70 font-mono font-medium">{{ item.delivered_to_chat }}</div>
                                 {% if item.delivered_to_thread %}
-                                    <div class="text-[10px] text-slate-400 mt-0.5">Topic: {{ item.delivered_to_thread }}</div>
+                                    <div class="text-[10px] text-nexus-cyan/60 mt-0.5">Topic: {{ item.delivered_to_thread }}</div>
                                 {% endif %}
                             {% else %}
-                                <div class="text-[12px] text-slate-400 italic">Direct / Оффлайн</div>
+                                <div class="text-[12px] text-white/40 italic">Direct / Оффлайн</div>
                             {% endif %}
                         </td>
 
@@ -101,8 +90,8 @@
                                 <input type="hidden" name="submission_id" value="{{ item.id }}">
                                 <input type="hidden" name="subject" value="Вопрос по eSIM #{{ item.id }} ({{ item.phone_normalized or 'Скрыто' }})">
                                 <button type="submit" 
-                                        class="px-4 py-2 bg-slate-50 text-nexus-cyan rounded-[10px] text-[12px] font-semibold uppercase tracking-wider 
-                                               hover:bg-nexus-cyan/10 transition-all duration-300 active:scale-95 border border-slate-100 hover:border-nexus-cyan/30"
+                                        class="px-4 py-2 bg-nexus-cyan/10 text-nexus-cyan rounded-[10px] text-[12px] font-bold uppercase tracking-widest 
+                                               hover:bg-nexus-cyan hover:text-black hover:shadow-[0_0_20px_rgba(0,217,255,0.5)] transition-all duration-300 active:scale-95 border border-nexus-cyan/30"
                                         title="Создать тикет поддержки по этой SIM">
                                     Обсудить
                                 </button>
@@ -113,13 +102,13 @@
                     
                     {% if not shipments %}
                     <tr>
-                        <td colspan="6" class="px-8 py-24 text-center">
+                        <td colspan="6" class="px-8 py-24 text-center border-t border-white/5">
                             <div class="flex flex-col items-center justify-center">
-                                <div class="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mb-4">
-                                    <svg class="w-8 h-8 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 002-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>
+                                <div class="w-16 h-16 bg-white/5 border border-white/10 rounded-full flex items-center justify-center mb-4 shadow-[0_0_20px_rgba(0,0,0,0.5)]">
+                                    <svg class="w-8 h-8 text-white/30" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 002-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>
                                 </div>
-                                <h3 class="text-lg font-semibold text-slate-800">Нет истории отгрузок</h3>
-                                <p class="text-sm text-slate-500 mt-2 max-w-sm">Здесь будут отображаться все обработанные и завершенные сделки.</p>
+                                <h3 class="text-lg font-semibold text-white tracking-wide">Нет истории отгрузок</h3>
+                                <p class="text-sm text-white/40 mt-2 max-w-sm tracking-wider">Здесь будут отображаться все обработанные и завершенные сделки.</p>
                             </div>
                         </td>
                     </tr>
