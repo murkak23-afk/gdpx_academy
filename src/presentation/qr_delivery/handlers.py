@@ -151,10 +151,10 @@ async def process_delivery_count(message: Message, state: FSMContext, session: A
                 f"👤 <b>АГЕНТ:</b> @{item.seller.username or 'id' + str(item.seller.telegram_id)}"
             )
             thread_id = message.message_thread_id
-            if item.media_type == "photo":
-                await bot.send_photo(message.chat.id, item.tg_file_id, caption=caption, parse_mode="HTML", message_thread_id=thread_id)
+            if item.attachment_type == "photo":
+                await bot.send_photo(message.chat.id, item.telegram_file_id, caption=caption, parse_mode="HTML", message_thread_id=thread_id)
             else:
-                await bot.send_document(message.chat.id, item.tg_file_id, caption=caption, parse_mode="HTML", message_thread_id=thread_id)
+                await bot.send_document(message.chat.id, item.telegram_file_id, caption=caption, parse_mode="HTML", message_thread_id=thread_id)
             
             success_count += 1
             await asyncio.sleep(0.3)
