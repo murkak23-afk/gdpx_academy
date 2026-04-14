@@ -62,6 +62,61 @@ async def get_dashboard(request: Request, user_data: dict = Depends(get_current_
             "active_page": "dashboard"
         })
 
+@router.get("/my-esim", response_class=HTMLResponse)
+async def get_my_esim(request: Request, user_data: dict = Depends(get_current_user)):
+    """Экран: Мои eSIM (в работе)."""
+    from src.api.app import templates
+    async with SessionFactory() as session:
+        from src.database.models.user import User
+        user = await session.get(User, user_data.get("user_id"))
+        
+        from src.database.models.submission import Submission
+        from src.database.models.enums import UserRole, SubmissionStatus
+        from sqlalchemy.orm import joinedload
+        
+        stmt = select(Submission).options(joinedload(Submission.category), joinedload(Submission.seller)).where(Submission.status == SubmissionStatus.IN_WORK)
+        
+        # Симбайер видит только свои
+        if user.role == UserRole.SIMBUYER:
+            stmt = stmt.where(Submission.delivered_to_chat == user.telegram_id)
+            
+        stmt = stmt.order_by(Submission.updated_at.desc())
+        result = await session.execute(stmt)
+        active_esims = result.scalars().all()
+
+        return templates.TemplateResponse("my_esim.html", {
+            "request": request,
+            "user": user,
+            "esims": active_esims,
+            "active_page": "my-esim"
+        })
+
+@router.post("/esim/{sub_id}/action/{action}")
+async def process_esim_action(
+    sub_id: int, 
+    action: str, # 'block' or 'not_scan'
+    user_data: dict = Depends(get_current_user)
+):
+    """HTMX обработчик для кнопок БЛОК и НЕ СКАН."""
+    async with SessionFactory() as session:
+        from src.database.models.submission import Submission
+        from src.database.models.enums import SubmissionStatus
+        
+        sub = await session.get(Submission, sub_id)
+        if not sub:
+            raise HTTPException(status_code=404)
+            
+        # Меняем статус
+        if action == "block":
+            sub.status = SubmissionStatus.BLOCKED
+        elif action == "not_scan":
+            sub.status = SubmissionStatus.NOT_A_SCAN
+            
+        await session.commit()
+        
+        # Возвращаем пустую строку для удаления строки из таблицы, или обновленный бейдж
+        return HTMLResponse(content="")
+
 @router.get("/reports", response_class=HTMLResponse)
 async def get_reports(request: Request, user_data: dict = Depends(get_current_user)):
     """Страница истории отгрузок (отчеты)."""

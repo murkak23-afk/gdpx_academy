@@ -3,17 +3,15 @@
             hover:shadow-[0_20px_40px_rgba(0,212,255,0.12)] hover:-translate-y-1.5 transition-all duration-500 ease-out flex flex-col justify-between h-[300px]">
     
     <!-- Заголовок: eSIM слева, Имя справа в виде премиального бейджа -->
-    <div class="flex justify-between items-center">
-        <!-- Левый бейдж: "eSIM" (Премиум стиль) -->
-        <div class="px-4 py-1.5 bg-gradient-to-r from-nexus-cyan/5 to-nexus-sakura/5 border border-nexus-cyan/20 rounded-[10px] shadow-[0_0_10px_rgba(0,212,255,0.1)] group-hover:shadow-[0_0_20px_rgba(192,38,255,0.2)] transition-shadow duration-500">
-            <span class="text-[13px] font-semibold bg-gradient-to-r from-nexus-cyan to-nexus-sakura bg-clip-text text-transparent tracking-widest uppercase">
-                eSIM
-            </span>
+    <div class="flex justify-between items-center gap-2">
+        <!-- Левый бейдж: "eSIM" -->
+        <div class="px-3 py-1 bg-slate-50/80 border border-slate-100 rounded-lg shadow-sm shrink-0">
+            <span class="text-[10px] font-medium text-slate-400 tracking-[0.25em] uppercase">eSIM</span>
         </div>
         
         <!-- Правый бейдж: Стеклянный градиентный бейдж для оператора -->
-        <div class="px-4 py-1.5 bg-gradient-to-r from-nexus-cyan/5 to-nexus-sakura/5 border border-nexus-cyan/20 rounded-[10px] shadow-[0_0_10px_rgba(0,212,255,0.1)] group-hover:shadow-[0_0_20px_rgba(192,38,255,0.2)] transition-shadow duration-500">
-            <span class="text-[13px] font-semibold bg-gradient-to-r from-nexus-cyan to-nexus-sakura bg-clip-text text-transparent tracking-widest uppercase">
+        <div class="px-3 py-1.5 bg-gradient-to-r from-nexus-cyan/5 to-nexus-sakura/5 border border-nexus-cyan/20 rounded-[10px] shadow-[0_0_10px_rgba(0,212,255,0.1)] group-hover:shadow-[0_0_20px_rgba(192,38,255,0.2)] transition-shadow duration-500 min-w-0 flex-1 flex justify-end">
+            <span class="text-[12px] font-semibold bg-gradient-to-r from-nexus-cyan to-nexus-sakura bg-clip-text text-transparent tracking-widest uppercase truncate text-right">
                 {{ category.title }}
             </span>
         </div>

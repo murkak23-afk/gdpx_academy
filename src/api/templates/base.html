@@ -45,20 +45,21 @@
         
         <nav class="flex-1 space-y-2">
             <!-- Ролевое меню -->
-            {% if user.role == 'ADMIN' %}
-            <a href="/nexus" class="block py-3 px-4 rounded-xl hover:bg-white/5 transition">Dashboard</a>
-            <a href="/nexus/admin" class="block py-3 px-4 rounded-xl hover:bg-white/5 transition">Управление ботами</a>
+            {% if user and user.role == 'ADMIN' %}
+            <a href="/nexus" class="block py-3 px-4 rounded-xl transition-all {% if active_page == 'dashboard' %}sidebar-active font-semibold shadow-neon{% else %}text-slate-400 hover:bg-white/5 hover:text-white{% endif %}">Дашборд</a>
+            <a href="/nexus/admin" class="block py-3 px-4 rounded-xl transition-all {% if active_page == 'admin' %}sidebar-active font-semibold shadow-neon{% else %}text-slate-400 hover:bg-white/5 hover:text-white{% endif %}">Управление ботами</a>
             {% endif %}
             
-            <a href="/nexus/inventory" class="block py-3 px-4 rounded-xl hover:bg-white/5 transition">Склад</a>
-            <a href="/nexus/my-esim" class="block py-3 px-4 rounded-xl hover:bg-white/5 transition">Мои eSIM</a>
-            <a href="/nexus/reports" class="block py-3 px-4 rounded-xl hover:bg-white/5 transition">Статистика</a>
+            <a href="/nexus/inventory" class="block py-3 px-4 rounded-xl transition-all {% if active_page == 'inventory' %}sidebar-active font-semibold shadow-neon{% else %}text-slate-400 hover:bg-white/5 hover:text-white{% endif %}">Склад</a>
+            <a href="/nexus/my-esim" class="block py-3 px-4 rounded-xl transition-all {% if active_page == 'my-esim' %}sidebar-active font-semibold shadow-neon{% else %}text-slate-400 hover:bg-white/5 hover:text-white{% endif %}">Мои eSIM</a>
+            <a href="/nexus/reports" class="block py-3 px-4 rounded-xl transition-all {% if active_page == 'reports' %}sidebar-active font-semibold shadow-neon{% else %}text-slate-400 hover:bg-white/5 hover:text-white{% endif %}">Статистика</a>
         </nav>
 
+        {% if user %}
         <div class="mt-auto border-t border-white/10 pt-6 px-2">
             <div class="flex items-center gap-3">
                 <div class="w-10 h-10 rounded-full bg-nexus-cyan/20 flex items-center justify-center font-bold text-nexus-cyan">
-                    {{ user.username[0]|upper }}
+                    {{ user.username[0]|upper if user.username else 'U' }}
                 </div>
                 <div>
                     <div class="text-sm font-semibold">{{ user.username }}</div>
@@ -66,6 +67,7 @@
                 </div>
             </div>
         </div>
+        {% endif %}
     </aside>
 
     <!-- Main -->
