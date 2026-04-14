@@ -5,7 +5,6 @@
 
 {% block content %}
 <div class="space-y-8">
-    <!-- Header -->
     <div class="flex justify-between items-end">
         <div>
             <h1 class="text-[32px] font-semibold text-[#111111] tracking-tight">Склад eSIM</h1>
@@ -13,7 +12,6 @@
         </div>
     </div>
 
-    <!-- Grid -->
     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         {% for cat in categories %}
             {{ cards.inventory_card(cat, stock[cat.id]) }}
@@ -21,20 +19,77 @@
     </div>
 </div>
 
-<!-- Modal -->
-<div id="modal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/20 backdrop-blur-sm transition-opacity">
-    <div class="bg-white p-8 rounded-[16px] shadow-2xl w-full max-w-sm">
-        <h3 class="text-xl font-bold mb-4">Подтверждение действия</h3>
-        <p class="text-slate-600 mb-6">Вы уверены, что хотите взять SIM-карты из этого кластера в работу?</p>
-        <div class="flex gap-3">
-            <button onclick="closeModal()" class="flex-1 py-3 rounded-lg border border-slate-200 hover:bg-slate-50 transition">Отмена</button>
-            <button class="flex-1 py-3 rounded-lg bg-nexus-cyan text-white font-bold hover:shadow-neon transition">Подтвердить</button>
+<div id="modal" x-data="{ count: 1, maxCount: 1 }"
+     class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-md transition-opacity">
+    <div class="bg-white p-8 rounded-[20px] shadow-2xl w-full max-w-md border border-slate-100" @click.stop>
+        <div class="flex justify-between items-center mb-6">
+            <h3 class="text-xl font-bold text-slate-900 tracking-tight" id="modal-title">Запрос активов</h3>
+            <button onclick="closeModal()" class="text-slate-400 hover:text-slate-700 transition">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+            </button>
         </div>
+
+        <form id="order-form" 
+              hx-post="/api/delivery/order" 
+              hx-ext="json-enc"
+              hx-trigger="submit"
+              hx-swap="outerHTML"
+              hx-target="#modal-response"
+              @submit="document.getElementById('submit-btn').disabled = true; document.getElementById('submit-btn').innerHTML = 'ОБРАБОТКА...'">
+            
+            <input type="hidden" name="category_id" id="modal-category-id">
+            <input type="hidden" name="chat_id" value="-1003724834316">
+            
+            <div class="mb-8">
+                <label class="block text-[13px] font-semibold text-slate-500 uppercase tracking-wider mb-3">Количество (штук)</label>
+                <div class="flex items-center justify-between border-2 border-slate-100 rounded-xl p-2 bg-slate-50">
+                    <button type="button" @click="if(count > 1) count--" class="w-10 h-10 rounded-lg flex items-center justify-center text-slate-500 hover:bg-white hover:shadow-sm hover:text-nexus-cyan transition-all">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 12H4"/></svg>
+                    </button>
+                    
+                    <input type="number" name="count" x-model="count" class="w-20 text-center text-2xl font-bold bg-transparent border-none outline-none text-slate-900" min="1" :max="maxCount">
+                    
+                    <button type="button" @click="if(count < maxCount) count++" class="w-10 h-10 rounded-lg flex items-center justify-center text-slate-500 hover:bg-white hover:shadow-sm hover:text-nexus-cyan transition-all">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+                    </button>
+                </div>
+                <p class="text-[12px] text-slate-500 text-center mt-3">Доступно: <span id="modal-max-stock" class="font-bold text-slate-700">0</span></p>
+            </div>
+
+            <div id="modal-response" class="mb-6"></div>
+
+            <div class="flex gap-3">
+                <button type="button" onclick="closeModal()" class="flex-1 py-3.5 rounded-xl border border-slate-200 text-slate-600 font-medium hover:bg-slate-50 transition-colors">Отмена</button>
+                <button type="submit" id="submit-btn" class="flex-1 py-3.5 rounded-xl bg-nexus-cyan text-white font-bold hover:shadow-neon transition-all hover:-translate-y-0.5 active:scale-95">Подтвердить</button>
+            </div>
+        </form>
     </div>
 </div>
 
 <script>
-    function openModal(id) { document.getElementById('modal').classList.remove('hidden'); }
-    function closeModal() { document.getElementById('modal').classList.add('hidden'); }
+    const script = document.createElement('script');
+    script.src = "https://unpkg.com/htmx.org/dist/ext/json-enc.js";
+    document.head.appendChild(script);
+
+    function openModal(id, title, maxStock) { 
+        document.getElementById('modal-category-id').value = id;
+        document.getElementById('modal-title').innerText = title;
+        document.getElementById('modal-max-stock').innerText = maxStock;
+        
+        const modalEl = document.getElementById('modal');
+        if (modalEl.__x) {
+            modalEl.__x.$data.count = 1;
+            modalEl.__x.$data.maxCount = parseInt(maxStock);
+        }
+
+        modalEl.classList.remove('hidden'); 
+    }
+    
+    function closeModal() { 
+        document.getElementById('modal').classList.add('hidden'); 
+        document.getElementById('submit-btn').disabled = false;
+        document.getElementById('submit-btn').innerHTML = 'Подтвердить';
+        document.getElementById('modal-response').innerHTML = '';
+    }
 </script>
 {% endblock %}
