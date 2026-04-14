@@ -1,4 +1,4 @@
-"""FastAPI-приложение: healthcheck и WebApp-хаб. v1.0.2"""
+"""FastAPI-приложение: healthcheck и WebApp-хаб. v1.0.3"""
 
 from __future__ import annotations
 
@@ -7,12 +7,14 @@ import logging
 from typing import Any
 
 from fastapi import FastAPI, Header, HTTPException, Request, status, BackgroundTasks
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
+from fastapi.exception_handlers import http_exception_handler
 from pydantic import BaseModel
 from sqlalchemy import select, func
 from aiogram import Dispatcher, Bot
 from aiogram.types import Update
+from pathlib import Path
 
 from src.core.config import get_settings
 from src.database.session import engine, SessionFactory
@@ -20,10 +22,9 @@ from src.database.models.category import Category
 from src.database.models.submission import Submission
 from src.database.models.enums import SubmissionStatus
 
-from pathlib import Path
 logger = logging.getLogger(__name__)
 
-# Вычисляем абсолютный путь к папке шаблонов
+# Настройка шаблонов с абсолютным путем
 BASE_DIR = Path(__file__).resolve().parent
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 
@@ -31,34 +32,32 @@ class DeliveryOrder(BaseModel):
     category_id: int
     count: int
     chat_id: int
-    init_data: str | None = None # Делаем опциональным
+    init_data: str | None = None
 
 def create_app(bot: Bot, dispatcher: Dispatcher) -> FastAPI:
     app = FastAPI(
         title="tgpriem API",
         version="1.0.0",
-        description="Служебные эндпоинты и Webhook-интеграция.",
+        description="Служебные эндпоинты и WebApp-хаб.",
     )
     settings = get_settings()
 
-    # --- WEBAPP ROUTERS ---
-    from src.api.routes import auth, nexus
-    app.include_router(auth.router)
-    app.include_router(nexus.router)
-
-    from fastapi.responses import RedirectResponse
-    from fastapi.exception_handlers import http_exception_handler
+    # --- ГЛОБАЛЬНЫЕ ОБРАБОТЧИКИ ОШИБОК ---
     @app.exception_handler(HTTPException)
     async def auth_exception_handler(request: Request, exc: HTTPException):
         if exc.status_code == 303:
             return RedirectResponse(url="/auth/login")
         return await http_exception_handler(request, exc)
 
+    # --- WEBAPP ROUTERS ---
+    from src.api.routes import auth, nexus
+    app.include_router(auth.router)
+    app.include_router(nexus.router)
+
     # --- WEBAPP ENDPOINTS ---
 
     @app.get("/delivery")
     async def delivery_page(request: Request):
-        """Отображение страницы WebApp."""
         return templates.TemplateResponse("delivery.html", {"request": request})
 
     @app.get("/api/delivery/categories")
@@ -87,27 +86,25 @@ def create_app(bot: Bot, dispatcher: Dispatcher) -> FastAPI:
     async def process_delivery_order(order: DeliveryOrder, background_tasks: BackgroundTasks):
         """Прием заказа из WebApp и запуск выдачи."""
         async with SessionFactory() as session:
-            # 1. Ищем конфигурацию маршрута для этого чата и категории
             from src.database.models.web_control import DeliveryConfig
             stmt_cfg = select(DeliveryConfig).where(
                 DeliveryConfig.category_id == order.category_id,
                 DeliveryConfig.chat_id == order.chat_id
             )
-            cfg_result = await session.execute(stmt_cfg)
-            cfg = cfg_result.scalar_one_or_none()
+            cfg = (await session.execute(stmt_cfg)).scalar_one_or_none()
 
             if not cfg:
                 raise HTTPException(status_code=400, detail="Для вашего чата не настроен маршрут выдачи этого оператора")
-
-            # 2. Проверяем наличие
+            
+            # ЛЕНИВЫЙ ИМПОРТ
+            from src.domain.submission.submission_service import SubmissionService
             sub_svc = SubmissionService(session=session)
+            
             available = await sub_svc.get_category_stock_count(order.category_id)
             if order.count > available:
                 raise HTTPException(status_code=400, detail=f"Недостаточно на складе. Доступно: {available}")
 
-            # Запускаем выдачу в фоне, используя thread_id из конфига
             background_tasks.add_task(_background_delivery, bot, cfg.category_id, order.chat_id, cfg.thread_id, order.count)
-
             return {"status": "ok"}
 
     # --- SYSTEM ENDPOINTS ---
@@ -118,14 +115,11 @@ def create_app(bot: Bot, dispatcher: Dispatcher) -> FastAPI:
         background_tasks: BackgroundTasks,
         x_telegram_bot_api_secret_token: str | None = Header(None),
     ) -> Any:
-        """Эндпоинт для приёма обновлений от Telegram."""
         if x_telegram_bot_api_secret_token != settings.webhook_secret_token:
-            logger.warning("Unauthorized webhook request with invalid secret token.")
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid secret token")
 
         update_data = await request.json()
         update = Update.model_validate(update_data, context={"bot": bot})
-        
         background_tasks.add_task(dispatcher.feed_update, bot, update)
         return {"ok": True}
 
@@ -138,7 +132,6 @@ def create_app(bot: Bot, dispatcher: Dispatcher) -> FastAPI:
             checks["database"] = "ok"
         except Exception as exc:
             checks["database"] = f"error: {type(exc).__name__}"
-
         db_ok = checks.get("database") == "ok"
         body = {"status": "ready" if db_ok else "not_ready", "checks": checks}
         return JSONResponse(status_code=200 if db_ok else 503, content=body)
@@ -147,11 +140,9 @@ def create_app(bot: Bot, dispatcher: Dispatcher) -> FastAPI:
 
 async def _background_delivery(bot: Bot, category_id: int, chat_id: int, thread_id: int, count: int):
     """Фоновая задача: достает eSIM и шлет в персональный чат и топик категории."""
-    # ЛЕНИВЫЕ ИМПОРТЫ
     from src.database.uow import UnitOfWork
     from src.domain.submission.submission_service import SubmissionService
     from src.core.utils.ui_builder import DIVIDER
-    from src.database.session import SessionFactory
 
     async with SessionFactory() as session:
         async with UnitOfWork(session=session) as uow:
@@ -173,19 +164,9 @@ async def _background_delivery(bot: Bot, category_id: int, chat_id: int, thread_
                     )
                     
                     if item.attachment_type == "photo":
-                        await bot.send_photo(
-                            chat_id=chat_id, 
-                            photo=item.telegram_file_id, 
-                            caption=caption, 
-                            message_thread_id=thread_id
-                        )
+                        await bot.send_photo(chat_id=chat_id, photo=item.telegram_file_id, caption=caption, message_thread_id=thread_id)
                     else:
-                        await bot.send_document(
-                            chat_id=chat_id, 
-                            document=item.telegram_file_id, 
-                            caption=caption, 
-                            message_thread_id=thread_id
-                        )
+                        await bot.send_document(chat_id=chat_id, document=item.telegram_file_id, caption=caption, message_thread_id=thread_id)
                     await asyncio.sleep(0.3)
                 except Exception as e:
                     logger.error(f"Error in background delivery for item {item.id}: {e}")

@@ -12,7 +12,7 @@ from src.database.models.enums import SubmissionStatus, UserRole
 from src.database.models.submission import ReviewAction, Submission
 from src.database.models.user import User
 from src.database.uow import UnitOfWork
-from src.presentation.main_operators import MAIN_OPERATOR_GROUPS, category_title_to_main_group_label
+# from src.presentation.main_operators import MAIN_OPERATOR_GROUPS, category_title_to_main_group_label
 from src.core.cache import cached, invalidate_cache_pattern
 from src.core.cache.keyboard_cache import invalidate_kb_cache
 from src.core.utils.phone_norm import (
