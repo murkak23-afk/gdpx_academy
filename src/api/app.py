@@ -36,6 +36,7 @@ class DeliveryOrder(BaseModel):
 def create_app(bot: Bot, dispatcher: Dispatcher) -> FastAPI:
     app = FastAPI(title="tgpriem API", version="1.0.0")
     settings = get_settings()
+    app.state.bot = bot
 
     # Монтируем статику
     from fastapi.staticfiles import StaticFiles

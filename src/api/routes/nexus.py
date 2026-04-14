@@ -17,7 +17,6 @@ from src.core.utils.audit_logger import log_admin_action
 
 from fastapi import APIRouter, Request, Depends, HTTPException, Form, BackgroundTasks
 from src.services.delivery_service import background_delivery_task
-from src.api.app import bot
 from src.database.uow import UnitOfWork
 from src.domain.submission.submission_service import SubmissionService
 
