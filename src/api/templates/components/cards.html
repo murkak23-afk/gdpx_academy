@@ -4,12 +4,14 @@
     
     <!-- Заголовок: eSIM слева, Имя справа в виде премиального бейджа -->
     <div class="flex justify-between items-center">
-        <!-- Левый бейдж: "eSIM" -->
-        <div class="px-3 py-1 bg-slate-50/80 border border-slate-100 rounded-lg shadow-sm">
-            <span class="text-[10px] font-medium text-slate-400 tracking-[0.25em] uppercase">eSIM</span>
+        <!-- Левый бейдж: "eSIM" (Премиум стиль) -->
+        <div class="px-4 py-1.5 bg-gradient-to-r from-nexus-cyan/5 to-nexus-sakura/5 border border-nexus-cyan/20 rounded-[10px] shadow-[0_0_10px_rgba(0,212,255,0.1)] group-hover:shadow-[0_0_20px_rgba(192,38,255,0.2)] transition-shadow duration-500">
+            <span class="text-[13px] font-semibold bg-gradient-to-r from-nexus-cyan to-nexus-sakura bg-clip-text text-transparent tracking-widest uppercase">
+                eSIM
+            </span>
         </div>
         
-        <!-- Правый бейдж (Гениальная идея): Стеклянный градиентный бейдж для оператора -->
+        <!-- Правый бейдж: Стеклянный градиентный бейдж для оператора -->
         <div class="px-4 py-1.5 bg-gradient-to-r from-nexus-cyan/5 to-nexus-sakura/5 border border-nexus-cyan/20 rounded-[10px] shadow-[0_0_10px_rgba(0,212,255,0.1)] group-hover:shadow-[0_0_20px_rgba(192,38,255,0.2)] transition-shadow duration-500">
             <span class="text-[13px] font-semibold bg-gradient-to-r from-nexus-cyan to-nexus-sakura bg-clip-text text-transparent tracking-widest uppercase">
                 {{ category.title }}
