@@ -1,11 +1,45 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Request, Depends, Form
+from fastapi import APIRouter, Request, Depends, Form, HTTPException
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy import select
-from src.database.session import SessionFactory
 from sqlalchemy.orm import joinedload
+from src.database.session import SessionFactory
 from src.database.models.web_control import SupportTicket, ChatMessage
+from src.api.routes.nexus import get_current_user
+
+# Сначала объявляем роутер
+router = APIRouter(prefix="/nexus/tickets", tags=["Tickets"])
+
+@router.get("", response_class=HTMLResponse)
+async def get_tickets(request: Request, user_data: dict = Depends(get_current_user)):
+    from src.api.app import templates
+    async with SessionFactory() as session:
+        stmt = select(SupportTicket).order_by(SupportTicket.created_at.desc())
+        result = await session.execute(stmt)
+        tickets = result.scalars().all()
+        return templates.TemplateResponse("tickets.html", {
+            "request": request, 
+            "tickets": tickets, 
+            "active_page": "tickets"
+        })
+
+@router.post("/create")
+async def create_ticket(
+    subject: str = Form(...),
+    submission_id: int = Form(...),
+    user_data: dict = Depends(get_current_user)
+):
+    async with SessionFactory() as session:
+        new_ticket = SupportTicket(
+            creator_id=user_data.get("user_id"),
+            submission_id=submission_id,
+            subject=subject,
+            status="open"
+        )
+        session.add(new_ticket)
+        await session.commit()
+        return RedirectResponse(url=f"/nexus/tickets/{new_ticket.id}", status_code=303)
 
 @router.get("/{ticket_id}", response_class=HTMLResponse)
 async def view_ticket(ticket_id: int, request: Request, user_data: dict = Depends(get_current_user)):
@@ -53,40 +87,7 @@ async def send_message(
 
         # Возвращаем только HTML-кусочек нового сообщения для вставки в чат
         return templates.TemplateResponse("components/chat_message.html", {
-            "request": Request({"type": "http"}), # Заглушка для рендера фрагмента
+            "request": request, # Используем реальный объект запроса
             "msg": new_msg,
             "current_user_id": user_data.get("user_id")
         })
-from src.api.routes.nexus import get_current_user
-
-router = APIRouter(prefix="/nexus/tickets", tags=["Tickets"])
-
-@router.get("", response_class=HTMLResponse)
-async def get_tickets(request: Request, user_data: dict = Depends(get_current_user)):
-    from src.api.app import templates
-    async with SessionFactory() as session:
-        stmt = select(SupportTicket).order_by(SupportTicket.created_at.desc())
-        result = await session.execute(stmt)
-        tickets = result.scalars().all()
-        return templates.TemplateResponse("tickets.html", {
-            "request": request, 
-            "tickets": tickets, 
-            "active_page": "tickets"
-        })
-
-@router.post("/create")
-async def create_ticket(
-    subject: str = Form(...),
-    submission_id: int = Form(...),
-    user_data: dict = Depends(get_current_user)
-):
-    async with SessionFactory() as session:
-        new_ticket = SupportTicket(
-            creator_id=user_data.get("user_id"),
-            submission_id=submission_id,
-            subject=subject,
-            status="open"
-        )
-        session.add(new_ticket)
-        await session.commit()
-        return RedirectResponse(url=f"/nexus/tickets/{new_ticket.id}", status_code=303)
