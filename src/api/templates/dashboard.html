@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+
+{% block title %}GDPX // NEXUS DASHBOARD{% endblock %}
+
+{% block content %}
+<div class="space-y-8 animate-in fade-in duration-700">
+    
+    <!-- Приветствие -->
+    <div>
+        <h1 class="text-3xl font-bold tracking-tight text-white">Добро пожаловать в Nexus</h1>
+        <p class="text-gray-400 mt-1">Центральный узел управления операциями GDPX</p>
+    </div>
+
+    <!-- Сетка статистики (Stats Cards) -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+        
+        <!-- Карточка: Склад -->
+        <div class="bg-premium p-6 rounded-2xl premium-border sakura-shadow flex flex-col gap-4">
+            <div class="flex justify-between items-start">
+                <span class="text-gray-400 text-xs font-bold uppercase tracking-widest">На складе (PENDING)</span>
+                <span class="p-2 bg-accent/10 rounded-lg text-accent">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                    </svg>
+                </span>
+            </div>
+            <div class="flex items-baseline gap-2">
+                <span class="text-4xl font-bold text-white">{{ stats.stock }}</span>
+                <span class="text-gray-500 text-sm">eSIM</span>
+            </div>
+            <div class="text-xs text-green-500 flex items-center gap-1">
+                <span>● Готовы к выдаче</span>
+            </div>
+        </div>
+
+        <!-- Карточка: Профит за день -->
+        <div class="bg-premium p-6 rounded-2xl premium-border sakura-shadow flex flex-col gap-4 text-white">
+            <div class="flex justify-between items-start">
+                <span class="text-gray-400 text-xs font-bold uppercase tracking-widest">Оборот сегодня (ACCEPTED)</span>
+                <span class="p-2 bg-green-500/10 rounded-lg text-green-500">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                </span>
+            </div>
+            <div class="flex items-baseline gap-2">
+                <span class="text-4xl font-bold">{{ stats.today }}</span>
+                <span class="text-gray-500 text-sm">транзакций</span>
+            </div>
+            <div class="text-xs text-gray-500">За последние 24 часа</div>
+        </div>
+
+        <!-- Карточка: Воркеры -->
+        <div class="bg-premium p-6 rounded-2xl premium-border sakura-shadow flex flex-col gap-4">
+            <div class="flex justify-between items-start">
+                <span class="text-gray-400 text-xs font-bold uppercase tracking-widest">Агентов в системе</span>
+                <span class="p-2 bg-sakura/10 rounded-lg text-sakura">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                    </svg>
+                </span>
+            </div>
+            <div class="flex items-baseline gap-2 text-white">
+                <span class="text-4xl font-bold">{{ stats.workers }}</span>
+                <span class="text-gray-500 text-sm">чел.</span>
+            </div>
+            <div class="text-xs text-blue-400">Активное комьюнити</div>
+        </div>
+
+    </div>
+
+    <!-- Модули управления (Quick Actions) -->
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-12">
+        <div class="bg-premium/50 p-8 rounded-2xl border border-gray-800 hover:border-accent transition-all cursor-pointer group">
+            <h3 class="text-xl font-bold text-white group-hover:text-accent transition-colors">📦 Инвентаризация</h3>
+            <p class="text-gray-500 mt-2">Управление кластерами, настройка топиков выдачи и мониторинг склада.</p>
+        </div>
+        <div class="bg-premium/50 p-8 rounded-2xl border border-gray-800 hover:border-accent transition-all cursor-pointer group">
+            <h3 class="text-xl font-bold text-white group-hover:text-accent transition-colors">💬 Центр Коллаборации</h3>
+            <p class="text-gray-500 mt-2">Прямая связь с симбайерами, решение тикетов по проблемным eSIM.</p>
+        </div>
+    </div>
+
+</div>
+{% endblock %}

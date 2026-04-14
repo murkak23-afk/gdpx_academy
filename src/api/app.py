@@ -37,6 +37,11 @@ def create_app(bot: Bot, dispatcher: Dispatcher) -> FastAPI:
     )
     settings = get_settings()
 
+    # --- WEBAPP ROUTERS ---
+    from src.api.routes import auth, nexus
+    app.include_router(auth.router)
+    app.include_router(nexus.router)
+
     # --- WEBAPP ENDPOINTS ---
 
     @app.get("/delivery")
