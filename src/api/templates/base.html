@@ -77,8 +77,8 @@
 
     <!-- ==================== PARALLAX BACKGROUND ==================== -->
     <div class="fixed inset-0 w-full h-full pointer-events-none z-0 overflow-hidden" id="hero">
-        <!-- Mouse Follower -->
-        <div class="mouse-follower" id="mouseFollower" style="z-index: 9999;"></div>
+        <!-- Mouse Follower (Hidden) -->
+        <div class="mouse-follower" id="mouseFollower" style="display: none !important;"></div>
 
         <!-- Stars -->
         <div class="stars" id="stars"></div>
@@ -109,8 +109,9 @@
     <!-- ============================================================= -->
 
     <!-- Логотип в правом верхнем углу -->
-    <div class="fixed top-8 right-8 z-[60]">
-        <img src="/assets/logo.png" class="w-24 h-auto opacity-90 hover:opacity-100 transition-opacity drop-shadow-[0_0_15px_rgba(0,217,255,0.8)]" alt="GDPX Logo">
+    <div class="fixed top-8 right-8 z-[60] flex items-center gap-4">
+        <span class="text-nexus-cyan font-display tracking-[0.2em] text-xl font-bold drop-shadow-[0_0_15px_rgba(0,217,255,0.8)] uppercase">Академия GDPX //</span>
+        <img src="/assets/logo.png" class="w-24 h-auto opacity-90 hover:opacity-100 transition-opacity drop-shadow-[0_0_20px_rgba(255,0,234,0.6)]" alt="GDPX Logo">
     </div>
 
     <!-- Layout Wrapper (Sidebar + Main) -->
