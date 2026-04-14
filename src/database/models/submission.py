@@ -63,6 +63,10 @@ class Submission(Base, TimestampMixin):
     fixed_payout_rate: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False, default=Decimal("0.00"))
     accepted_amount: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)
     hold_assigned: Mapped[str | None] = mapped_column(String(60), nullable=True)
+    
+    # Фиксация места отгрузки
+    delivered_to_chat: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    delivered_to_thread: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
 
     # Строковые отношения 
     seller: Mapped["User"] = relationship("User", foreign_keys=[user_id], back_populates="submissions")

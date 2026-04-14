@@ -86,24 +86,27 @@ def create_app(bot: Bot, dispatcher: Dispatcher) -> FastAPI:
     async def process_delivery_order(order: DeliveryOrder, background_tasks: BackgroundTasks):
         """Прием заказа из WebApp и запуск выдачи."""
         async with SessionFactory() as session:
-            cat = await session.get(Category, order.category_id)
-            if not cat:
-                raise HTTPException(status_code=404, detail="Категория не найдена")
-            
-            if not cat.delivery_thread_id:
-                raise HTTPException(status_code=400, detail="Топик для выдачи не настроен для этой категории")
-            
-            # ЛЕНИВЫЙ ИМПОРТ для предотвращения кругового импорта
-            from src.domain.submission.submission_service import SubmissionService
-            
+            # 1. Ищем конфигурацию маршрута для этого чата и категории
+            from src.database.models.web_control import DeliveryConfig
+            stmt_cfg = select(DeliveryConfig).where(
+                DeliveryConfig.category_id == order.category_id,
+                DeliveryConfig.chat_id == order.chat_id
+            )
+            cfg_result = await session.execute(stmt_cfg)
+            cfg = cfg_result.scalar_one_or_none()
+
+            if not cfg:
+                raise HTTPException(status_code=400, detail="Для вашего чата не настроен маршрут выдачи этого оператора")
+
+            # 2. Проверяем наличие
             sub_svc = SubmissionService(session=session)
             available = await sub_svc.get_category_stock_count(order.category_id)
             if order.count > available:
                 raise HTTPException(status_code=400, detail=f"Недостаточно на складе. Доступно: {available}")
 
-            # Запускаем выдачу в фоне
-            background_tasks.add_task(_background_delivery, bot, cat.id, order.chat_id, cat.delivery_thread_id, order.count)
-            
+            # Запускаем выдачу в фоне, используя thread_id из конфига
+            background_tasks.add_task(_background_delivery, bot, cfg.category_id, order.chat_id, cfg.thread_id, order.count)
+
             return {"status": "ok"}
 
     # --- SYSTEM ENDPOINTS ---
