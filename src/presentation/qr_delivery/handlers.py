@@ -51,7 +51,7 @@ async def cmd_qr_delivery_menu(event: Message | CallbackQuery, session: AsyncSes
     
     # ui.display сам поймет, группа это или ЛС, и сохранит позицию
     chat_id = event.chat.id if isinstance(event, Message) else event.message.chat.id
-    await ui.display(event=event, text=text, reply_markup=await get_qr_delivery_main_kb(chat_id))
+    await ui.display(event=event, text=text, reply_markup=get_qr_delivery_main_kb(chat_id))
     if isinstance(event, CallbackQuery):
         await event.answer()
 
@@ -70,7 +70,7 @@ async def cb_delivery_op_list(callback: CallbackQuery, session: AsyncSession, ui
         f"Ниже список категорий, в которых есть готовые к выдаче eSIM (PENDING)."
     )
     
-    await ui.display(event=callback, text=text, reply_markup=await get_qr_delivery_operators_kb(stats))
+    await ui.display(event=callback, text=text, reply_markup=get_qr_delivery_operators_kb(stats))
     await callback.answer()
 
 @router.callback_query(QRDeliveryCD.filter(F.action == "op_pick"))
@@ -155,7 +155,7 @@ async def process_delivery_count(message: Message, state: FSMContext, session: A
         f"Выдано: <code>{success_count}</code> шт.\n"
         f"Статус изменен на <b>IN_WORK</b>.",
         parse_mode="HTML",
-        reply_markup=await get_qr_delivery_main_kb()
+        reply_markup=get_qr_delivery_main_kb(message.chat.id)
     )
 
 @router.callback_query(QRDeliveryCD.filter(F.action == "cancel"))
