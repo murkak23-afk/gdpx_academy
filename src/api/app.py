@@ -85,6 +85,7 @@ def create_app(bot: Bot, dispatcher: Dispatcher) -> FastAPI:
     @app.post("/api/delivery/order")
     async def process_delivery_order(order: DeliveryOrder, background_tasks: BackgroundTasks):
         """Прием заказа из WebApp и запуск выдачи."""
+        logger.info(f"DEBUG: New delivery request. Category: {order.category_id}, Count: {order.count}, ChatID: {order.chat_id}")
         async with SessionFactory() as session:
             from src.database.models.web_control import DeliveryConfig
             stmt_cfg = select(DeliveryConfig).where(

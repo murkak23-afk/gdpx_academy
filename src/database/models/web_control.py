@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from sqlalchemy import BigInteger, ForeignKey, String, Text, Boolean, JSON
+from sqlalchemy import BigInteger, ForeignKey, String, Text, Boolean, JSON, Integer
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.database.models.base import Base, TimestampMixin
@@ -20,25 +20,36 @@ class WebAccount(Base, TimestampMixin):
     # Связь с основным пользователем бота
     user = relationship("User", backref="web_account", uselist=False)
 
+class SupportTicket(Base, TimestampMixin):
+    """Тикет (тема обсуждения), привязанный к объекту."""
+    __tablename__ = "support_tickets"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    creator_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("users.id", ondelete="CASCADE"))
+    
+    # К какому объекту привязан тикет (опционально)
+    category_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("categories.id", ondelete="SET NULL"), nullable=True)
+    submission_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("submissions.id", ondelete="SET NULL"), nullable=True)
+    
+    subject: Mapped[str] = mapped_column(String(255))
+    status: Mapped[str] = mapped_column(String(20), default="open") # open, resolved, closed
+
+    creator = relationship("User")
+    messages = relationship("ChatMessage", back_populates="ticket", cascade="all, delete-orphan")
+
 class ChatMessage(Base, TimestampMixin):
     """Сообщения внутренней системы поддержки."""
     __tablename__ = "chat_messages"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    ticket_id: Mapped[int] = mapped_column(Integer, ForeignKey("support_tickets.id", ondelete="CASCADE"))
     sender_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("users.id", ondelete="CASCADE"))
-    recipient_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     
     text: Mapped[str] = mapped_column(Text)
-    
-    # Контекстная связь с SIM-картой (тикет)
-    submission_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("submissions.id", ondelete="SET NULL"), nullable=True)
-    
     is_read: Mapped[bool] = mapped_column(default=False)
-    payload: Mapped[dict | None] = mapped_column(JSON, nullable=True) # Для доп. данных
 
-    sender = relationship("User", foreign_keys=[sender_id])
-    recipient = relationship("User", foreign_keys=[recipient_id])
-    submission = relationship("Submission")
+    ticket = relationship("SupportTicket", back_populates="messages")
+    sender = relationship("User")
 
 class DeliveryConfig(Base, TimestampMixin):
     """Конфигурация маршрутизации выдачи: (Категория + Чат) -> Топик."""
