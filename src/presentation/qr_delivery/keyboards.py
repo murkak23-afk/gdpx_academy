@@ -7,20 +7,23 @@ from src.presentation.common.base import PremiumBuilder
 from src.presentation.common.factory import QRDeliveryCD
 
 
-def get_qr_delivery_main_kb(chat_id: int) -> InlineKeyboardMarkup:
-    """Главное меню системы выдачи с привязкой к чату. (БЕЗ КЭША для стабильности)"""
+def get_qr_delivery_main_kb() -> InlineKeyboardMarkup:
+    """Классическое главное меню выдачи (только кнопки)."""
+    return (PremiumBuilder()
+            .button("📱 СПИСОК ОПЕРАТОРОВ", QRDeliveryCD(action="op_list"))
+            .button("❌ ОТМЕНИТЬ ДЕЙСТВИЕ", QRDeliveryCD(action="cancel"))
+            .adjust(1)
+            .as_markup())
+
+def get_qr_delivery_webapp_kb(chat_id: int) -> InlineKeyboardMarkup:
+    """Отдельная клавиатура для входа в WebApp."""
     from src.core.config import get_settings
     settings = get_settings()
-    
-    # URL нашего приложения + передаем ID текущего чата
     base_url = settings.webhook_url.replace('/webhook', '')
     webapp_url = f"{base_url}/delivery?chat_id={chat_id}"
     
     return (PremiumBuilder()
-            .button("📱 ОПЕРАТОРЫ (КНОПКИ)", QRDeliveryCD(action="op_list"))
-            .button("🌐 DELIVERY HUB (APP)", web_app=WebAppInfo(url=webapp_url))
-            .button("❌ ОТМЕНИТЬ ДЕЙСТВИЕ", QRDeliveryCD(action="cancel"))
-            .adjust(1)
+            .button("🌐 ОТКРЫТЬ DELIVERY HUB", web_app=WebAppInfo(url=webapp_url))
             .as_markup())
 
 def get_qr_delivery_operators_kb(categories: list) -> InlineKeyboardMarkup:

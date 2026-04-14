@@ -15,7 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.database.models.enums import UserRole
 from src.presentation.common.factory import QRDeliveryCD, NavCD
-from .keyboards import get_qr_delivery_main_kb, get_qr_delivery_operators_kb
+from .keyboards import get_qr_delivery_main_kb, get_qr_delivery_operators_kb, get_qr_delivery_webapp_kb
 from src.domain.submission.submission_service import SubmissionService
 from src.domain.users.user_service import UserService
 from src.presentation.qr_delivery.states import QRDeliveryStates
@@ -31,29 +31,43 @@ logger = logging.getLogger(__name__)
 @router.callback_query(QRDeliveryCD.filter(F.action == "menu"))
 @router.callback_query(F.data == "qr_delivery_menu")
 async def cmd_qr_delivery_menu(event: Message | CallbackQuery, session: AsyncSession, state: FSMContext, ui: MessageManager):
-    """Главный экран системы выдачи (поддерживает группы и топики)."""
+    """Классическое меню (кнопки)."""
     await state.clear()
-    
     user_svc = UserService(session=session)
     user = await user_svc.get_by_telegram_id(event.from_user.id)
     
     if not user or user.role not in (UserRole.ADMIN, UserRole.OWNER, UserRole.SIMBUYER):
-        if isinstance(event, CallbackQuery):
-            await event.answer("❌ Доступ ограничен", show_alert=True)
+        if isinstance(event, CallbackQuery): await event.answer("❌ Доступ ограничен", show_alert=True)
         return
 
     text = (
         f"❖ <b>GDPX // СИСТЕМА ВЫДАЧИ</b>\n"
         f"{DIVIDER}\n"
-        f"Инструментарий для оперативной отгрузки eSIM покупателям.\n\n"
+        f"Инструментарий для оперативной отгрузки eSIM (КНОПКИ).\n\n"
         f"<i>Выберите оператора для начала процесса:</i>"
     )
     
-    # ui.display сам поймет, группа это или ЛС, и сохранит позицию
-    chat_id = event.chat.id if isinstance(event, Message) else event.message.chat.id
-    await ui.display(event=event, text=text, reply_markup=get_qr_delivery_main_kb(chat_id))
-    if isinstance(event, CallbackQuery):
-        await event.answer()
+    await ui.display(event=event, text=text, reply_markup=get_qr_delivery_main_kb())
+    if isinstance(event, CallbackQuery): await event.answer()
+
+@router.message(Command("qrweb"), StateFilter("*"))
+async def cmd_qr_delivery_web(message: Message, session: AsyncSession, state: FSMContext, ui: MessageManager):
+    """Вход в современный DELIVERY HUB (WebApp)."""
+    await state.clear()
+    user_svc = UserService(session=session)
+    user = await user_svc.get_by_telegram_id(message.from_user.id)
+    
+    if not user or user.role not in (UserRole.ADMIN, UserRole.OWNER, UserRole.SIMBUYER):
+        return
+
+    text = (
+        f"❖ <b>GDPX // DELIVERY HUB</b>\n"
+        f"{DIVIDER}\n"
+        f"Современный интерфейс для управления отгрузками.\n\n"
+        f"<i>Нажмите кнопку ниже для запуска приложения:</i>"
+    )
+    
+    await ui.display(event=message, text=text, reply_markup=get_qr_delivery_webapp_kb(message.chat.id))
 
 @router.callback_query(QRDeliveryCD.filter(F.action == "op_list"))
 async def cb_delivery_op_list(callback: CallbackQuery, session: AsyncSession, ui: MessageManager):
@@ -136,7 +150,6 @@ async def process_delivery_count(message: Message, state: FSMContext, session: A
                 f"{DIVIDER}\n"
                 f"👤 <b>АГЕНТ:</b> @{item.owner.username or 'id' + str(item.owner.telegram_id)}"
             )
-            # Отправляем в тот же топик, где работаем
             thread_id = message.message_thread_id
             if item.media_type == "photo":
                 await bot.send_photo(message.chat.id, item.tg_file_id, caption=caption, parse_mode="HTML", message_thread_id=thread_id)
@@ -155,7 +168,7 @@ async def process_delivery_count(message: Message, state: FSMContext, session: A
         f"Выдано: <code>{success_count}</code> шт.\n"
         f"Статус изменен на <b>IN_WORK</b>.",
         parse_mode="HTML",
-        reply_markup=get_qr_delivery_main_kb(message.chat.id)
+        reply_markup=get_qr_delivery_main_kb()
     )
 
 @router.callback_query(QRDeliveryCD.filter(F.action == "cancel"))
