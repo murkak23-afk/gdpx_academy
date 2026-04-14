@@ -37,7 +37,7 @@
     </script>
     
     <style>
-        body { font-family: 'Outfit', sans-serif; background: #0a0a0f; color: #ffffff; margin: 0; overflow: hidden; }
+        body { font-family: 'Outfit', sans-serif; background: #0a0a0f; color: #ffffff; margin: 0; min-h-screen; }
         .sidebar-active { 
             background: linear-gradient(90deg, rgba(0, 217, 255, 0.15) 0%, rgba(255, 0, 234, 0.1) 100%);
             border-left: 3px solid #00d9ff;
@@ -48,10 +48,10 @@
             backdrop-filter: blur(20px);
             border: 1px solid rgba(255, 255, 255, 0.08);
         }
-        .layout-wrapper { position: relative; z-index: 50; }
+        .layout-wrapper { position: relative; z-index: 50; min-height: 100vh; }
     </style>
 </head>
-<body class="h-screen w-screen relative">
+<body class="min-h-screen relative overflow-y-auto">
 
     <!-- PARALLAX BACKGROUND -->
     <div class="fixed inset-0 w-full h-full pointer-events-none z-0 overflow-hidden" id="hero">
@@ -60,9 +60,9 @@
         <div class="parallax-layer layer-fg opacity-30"><div class="glowing-orb orb-1"></div></div>
     </div>
 
-    <div class="layout-wrapper flex h-full w-full">
+    <div class="layout-wrapper flex min-h-screen w-full">
         <!-- Sidebar -->
-        <aside class="w-72 glass-panel border-r border-white/10 flex flex-col">
+        <aside class="w-72 glass-panel border-r border-white/10 flex flex-col sticky top-0 h-screen">
             <div class="p-8">
                 <h2 class="text-[10px] font-bold text-nexus-cyan tracking-[0.4em] uppercase opacity-60">Control Panel</h2>
             </div>
