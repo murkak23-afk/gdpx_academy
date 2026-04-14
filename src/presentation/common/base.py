@@ -24,18 +24,18 @@ class PremiumBuilder:
         url: str | None = None, 
         web_app: Any = None
     ) -> PremiumBuilder:
-        """Добавить кнопку любого типа с гарантированной чистотой объекта."""
+        """Добавить кнопку с гарантированным отсутствием конфликтов типов."""
+        kwargs = {"text": text}
         if web_app:
-            btn = InlineKeyboardButton(text=text, web_app=web_app)
+            kwargs["web_app"] = web_app
         elif url:
-            btn = InlineKeyboardButton(text=text, url=url)
+            kwargs["url"] = url
         else:
             if isinstance(callback_data, CallbackData):
                 callback_data = callback_data.pack()
-            # Если нет ни URL, ни WebApp, обязательно должен быть callback_data
-            btn = InlineKeyboardButton(text=text, callback_data=str(callback_data or "noop"))
+            kwargs["callback_data"] = str(callback_data or "noop")
         
-        self.builder.add(btn)
+        self.builder.add(InlineKeyboardButton(**kwargs))
         return self
 
     def primary(self, text: str, callback_data: Any) -> PremiumBuilder:

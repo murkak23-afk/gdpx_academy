@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from aiogram.types import InlineKeyboardMarkup, WebAppInfo
+from aiogram.types import InlineKeyboardMarkup, WebAppInfo, InlineKeyboardButton
 from src.presentation.common.base import PremiumBuilder
 from src.presentation.common.factory import QRDeliveryCD
 
@@ -16,15 +16,16 @@ def get_qr_delivery_main_kb() -> InlineKeyboardMarkup:
             .as_markup())
 
 def get_qr_delivery_webapp_kb(chat_id: int) -> InlineKeyboardMarkup:
-    """Отдельная клавиатура для входа в WebApp."""
+    """Отдельная клавиатура для входа в WebApp (Максимально чистая)."""
     from src.core.config import get_settings
     settings = get_settings()
-    base_url = settings.webhook_url.replace('/webhook', '')
+    # Убедимся, что URL корректный
+    base_url = settings.webhook_url.split('/webhook')[0]
     webapp_url = f"{base_url}/delivery?chat_id={chat_id}"
     
-    return (PremiumBuilder()
-            .button("🌐 ОТКРЫТЬ DELIVERY HUB", web_app=WebAppInfo(url=webapp_url))
-            .as_markup())
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🌐 ОТКРЫТЬ DELIVERY HUB", web_app=WebAppInfo(url=webapp_url))]
+    ])
 
 def get_qr_delivery_operators_kb(categories: list) -> InlineKeyboardMarkup:
     """Список операторов с количеством доступных симок."""
