@@ -12,10 +12,8 @@ from collections.abc import Mapping, Sequence
 from datetime import datetime
 from html import escape
 from typing import Any
+from src.core.constants import DIVIDER, DIVIDER_LIGHT
 
-from src.presentation.common.constants import (
-    DIVIDER,
-    DIVIDER_LIGHT,
     HEADER_CATCON,
     HEADER_FINANCE,
     HEADER_HISTORY,

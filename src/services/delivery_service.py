@@ -8,7 +8,7 @@ from src.database.uow import UnitOfWork
 from src.domain.submission.submission_service import SubmissionService
 from src.database.models.user import User
 from src.database.models.web_control import SimbuyerPrice
-from src.core.utils.ui_builder import DIVIDER
+from src.core.constants import DIVIDER
 
 logger = logging.getLogger(__name__)
 

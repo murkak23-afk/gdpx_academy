@@ -10,7 +10,7 @@ from aiogram.types import CallbackQuery, InlineKeyboardMarkup, InputMediaPhoto, 
 from redis.asyncio import Redis
 
 from src.core.config import get_settings
-from src.core.utils.ui_builder import DIVIDER_LIGHT
+from src.core.constants import DIVIDER_LIGHT
 
 logger = logging.getLogger(__name__)
 
