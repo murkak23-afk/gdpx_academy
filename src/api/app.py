@@ -71,33 +71,33 @@ def create_app(bot: Bot, dispatcher: Dispatcher) -> FastAPI:
 
 from src.services.delivery_service import background_delivery_task
 
-    @app.post("/api/delivery/order")
-    async def process_delivery_order(order: DeliveryOrder, background_tasks: BackgroundTasks):
-        # ЭТОТ ПРИНТ ТЫ ДОЛЖЕН УВИДЕТЬ В ЛОГАХ
-        print(f"!!! ORDER RECEIVED: Chat={order.chat_id}, Cat={order.category_id}, Count={order.count}")
+@app.post("/api/delivery/order")
+async def process_delivery_order(order: DeliveryOrder, background_tasks: BackgroundTasks):
+    # ЭТОТ ПРИНТ ТЫ ДОЛЖЕН УВИДЕТЬ В ЛОГАХ
+    print(f"!!! ORDER RECEIVED: Chat={order.chat_id}, Cat={order.category_id}, Count={order.count}")
+    
+    async with SessionFactory() as session:
+        from src.database.models.web_control import DeliveryConfig
+        stmt_cfg = select(DeliveryConfig).where(
+            DeliveryConfig.category_id == order.category_id,
+            DeliveryConfig.chat_id == order.chat_id
+        )
+        cfg = (await session.execute(stmt_cfg)).scalar_one_or_none()
+
+        if not cfg:
+            msg = f"Маршрут не найден. ChatID: {order.chat_id}, CatID: {order.category_id}"
+            print(f"!!! ERROR: {msg}")
+            raise HTTPException(status_code=400, detail=msg)
         
-        async with SessionFactory() as session:
-            from src.database.models.web_control import DeliveryConfig
-            stmt_cfg = select(DeliveryConfig).where(
-                DeliveryConfig.category_id == order.category_id,
-                DeliveryConfig.chat_id == order.chat_id
-            )
-            cfg = (await session.execute(stmt_cfg)).scalar_one_or_none()
+        from src.domain.submission.submission_service import SubmissionService
+        sub_svc = SubmissionService(session=session)
+        available = await sub_svc.get_category_stock_count(order.category_id)
+        
+        if order.count > available:
+            raise HTTPException(status_code=400, detail=f"Недостаточно на складе. Доступно: {available}")
 
-            if not cfg:
-                msg = f"Маршрут не найден. ChatID: {order.chat_id}, CatID: {order.category_id}"
-                print(f"!!! ERROR: {msg}")
-                raise HTTPException(status_code=400, detail=msg)
-            
-            from src.domain.submission.submission_service import SubmissionService
-            sub_svc = SubmissionService(session=session)
-            available = await sub_svc.get_category_stock_count(order.category_id)
-            
-            if order.count > available:
-                raise HTTPException(status_code=400, detail=f"Недостаточно на складе. Доступно: {available}")
-
-            background_tasks.add_task(background_delivery_task, bot, cfg.category_id, order.chat_id, cfg.thread_id, order.count)
-            return {"status": "ok"}
+        background_tasks.add_task(background_delivery_task, bot, cfg.category_id, order.chat_id, cfg.thread_id, order.count)
+        return {"status": "ok"}
 
     @app.post(settings.webhook_path)
     async def telegram_webhook(request: Request, background_tasks: BackgroundTasks, x_tg_token: str | None = Header(None, alias="X-Telegram-Bot-Api-Secret-Token")):
