@@ -16,7 +16,7 @@
                     {{ ticket.subject }}
                     <span class="px-2.5 py-1 text-[10px] bg-nexus-cyan/10 text-nexus-cyan border border-nexus-cyan/30 rounded-[8px] uppercase tracking-[0.2em] shadow-[0_0_10px_rgba(0,217,255,0.2)]">{{ ticket.status }}</span>
                 </h1>
-                <p class="text-[13px] text-white/50 mt-1.5 tracking-wide">Референс eSIM: <span class="text-nexus-cyan font-mono drop-shadow-[0_0_5px_rgba(0,217,255,0.5)]">#{{ ticket.submission_id }}</span></p>
+                <p class="text-[13px] text-white/50 mt-1.5 tracking-wide">Референс eSIM: <a href="/nexus/submission/{{ ticket.submission_id }}" class="text-nexus-cyan font-mono drop-shadow-[0_0_5px_rgba(0,217,255,0.5)] hover:underline decoration-nexus-cyan/30 underline-offset-4">#{{ ticket.submission_id }}</a></p>
             </div>
         </div>
     </div>

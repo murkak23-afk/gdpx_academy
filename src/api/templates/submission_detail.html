@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+
+{% block title %}eSIM #{{ sub.id }}{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
+    
+    <!-- Header / Navigation -->
+    <div class="flex items-center gap-4">
+        <a href="javascript:history.back()" class="w-12 h-12 rounded-full bg-white/5 border border-white/10 flex items-center justify-center text-white/50 hover:text-white hover:bg-white/10 hover:shadow-[0_0_15px_rgba(255,255,255,0.1)] transition-all">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/></svg>
+        </a>
+        <div>
+            <h1 class="text-[28px] font-bold text-white tracking-tight flex items-center gap-4">
+                eSIM Asset #{{ sub.id }}
+                {% set status_class = "bg-white/5 text-white/40 border-white/10" %}
+                {% if sub.status == "accepted" %}{% set status_class = "bg-emerald-500/10 text-emerald-400 border-emerald-500/30 shadow-[0_0_15px_rgba(16,185,129,0.2)]" %}
+                {% elif sub.status == "rejected" or sub.status == "blocked" %}{% set status_class = "bg-red-500/10 text-red-400 border-red-500/30 shadow-[0_0_15px_rgba(239,68,68,0.2)]" %}
+                {% elif sub.status == "in_work" %}{% set status_class = "bg-nexus-cyan/10 text-nexus-cyan border-nexus-cyan/30 shadow-[0_0_15px_rgba(0,217,255,0.2)]" %}
+                {% endif %}
+                <span class="px-3 py-1 text-[11px] border rounded-[10px] uppercase tracking-[0.2em] {{ status_class }}">
+                    {{ sub.status }}
+                </span>
+            </h1>
+            <p class="text-white/40 text-[14px] mt-1 tracking-wide">Category: <span class="text-nexus-cyan">{{ sub.category.title }}</span></p>
+        </div>
+    </div>
+
+    <!-- Main Content Grid -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        
+        <!-- Left Column: Details -->
+        <div class="lg:col-span-2 space-y-6">
+            <div class="bg-[#0a0a0f]/60 backdrop-blur-2xl border border-white/10 rounded-[32px] p-8 shadow-[0_15px_50px_rgba(0,0,0,0.4)]">
+                <h3 class="text-white/20 text-[10px] font-bold uppercase tracking-[0.3em] mb-8">Asset Information</h3>
+                
+                <div class="grid grid-cols-2 gap-y-8">
+                    <div>
+                        <div class="text-white/30 text-[11px] uppercase tracking-widest mb-1.5">Created At</div>
+                        <div class="text-white font-medium">{{ sub.created_at.strftime('%d.%m.%Y %H:%M') }}</div>
+                    </div>
+                    <div>
+                        <div class="text-white/30 text-[11px] uppercase tracking-widest mb-1.5">Last Update</div>
+                        <div class="text-white font-medium">{{ sub.updated_at.strftime('%d.%m.%Y %H:%M') }}</div>
+                    </div>
+                    {% if user.role != 'simbuyer' %}
+                    <div>
+                        <div class="text-white/30 text-[11px] uppercase tracking-widest mb-1.5">Seller Account</div>
+                        <div class="text-nexus-sakura font-bold tracking-wide">@{{ sub.seller.username or sub.seller.telegram_id }}</div>
+                    </div>
+                    <div>
+                        <div class="text-white/30 text-[11px] uppercase tracking-widest mb-1.5">Reward Price</div>
+                        <div class="text-white font-bold">{{ sub.purchase_price or sub.fixed_payout_rate or 0 }} USDT</div>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Media Section (If exists) -->
+            <div class="bg-[#0a0a0f]/60 backdrop-blur-2xl border border-white/10 rounded-[32px] p-8 shadow-[0_15px_50px_rgba(0,0,0,0.4)] overflow-hidden">
+                <h3 class="text-white/20 text-[10px] font-bold uppercase tracking-[0.3em] mb-6">Visual Proof / Content</h3>
+                <div class="aspect-video bg-white/5 rounded-2xl border border-white/5 flex items-center justify-center relative group">
+                    {% if sub.media_file_id %}
+                        <!-- Здесь могла бы быть логика загрузки картинки из ТГ, но пока заглушка -->
+                        <div class="text-center p-10">
+                            <svg class="w-12 h-12 text-white/20 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+                            <p class="text-white/30 text-[12px] uppercase tracking-widest">Image Content Available</p>
+                            <p class="text-white/10 text-[10px] mt-2 font-mono">{{ sub.media_file_id }}</p>
+                        </div>
+                    {% else %}
+                        <div class="text-white/10 text-[12px] uppercase tracking-widest">No Media Provided</div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Column: Actions -->
+        <div class="space-y-6">
+            {% if user.role != 'simbuyer' %}
+            <div class="bg-gradient-to-br from-white/10 to-transparent backdrop-blur-2xl border border-white/10 rounded-[32px] p-8">
+                <h3 class="text-white/20 text-[10px] font-bold uppercase tracking-[0.3em] mb-6">Operations</h3>
+                
+                <div class="space-y-4">
+                    <button hx-post="/nexus/esim/{{ sub.id }}/action/accept" hx-swap="none" onclick="this.disabled=true; this.classList.add('opacity-50')"
+                            class="w-full py-4 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 font-bold uppercase tracking-widest text-[12px] hover:bg-emerald-500/20 transition-all">
+                        Accept Asset
+                    </button>
+                    <button hx-post="/nexus/esim/{{ sub.id }}/action/not_scan" hx-swap="none" onclick="this.disabled=true; this.classList.add('opacity-50')"
+                            class="w-full py-4 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400 font-bold uppercase tracking-widest text-[12px] hover:bg-amber-500/20 transition-all">
+                        Mark Not A Scan
+                    </button>
+                    <button hx-post="/nexus/esim/{{ sub.id }}/action/block" hx-swap="none" onclick="this.disabled=true; this.classList.add('opacity-50')"
+                            class="w-full py-4 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 font-bold uppercase tracking-widest text-[12px] hover:bg-red-500/20 transition-all">
+                        Block / Reject
+                    </button>
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- External Links -->
+            <div class="bg-white/[0.02] border border-white/5 rounded-[32px] p-8">
+                <h3 class="text-white/20 text-[10px] font-bold uppercase tracking-[0.3em] mb-6">Support Context</h3>
+                <a href="/nexus/tickets" class="flex items-center justify-between group">
+                    <span class="text-white/40 text-[13px] tracking-wide">Related Tickets</span>
+                    <svg class="w-5 h-5 text-nexus-cyan group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 8l4 4m0 0l-4 4m4-4H3"/></svg>
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

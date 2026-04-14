@@ -53,14 +53,16 @@ class ChatMessage(Base, TimestampMixin):
     sender = relationship("User")
 
 class DeliveryConfig(Base, TimestampMixin):
-    """Конфигурация маршрутизации выдачи: (Категория + Чат) -> Топик."""
+    """Конфигурация маршрутизации выдачи: (Пользователь + Категория) -> Чат + Топик."""
     __tablename__ = "delivery_configs"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("users.id", ondelete="CASCADE"), index=True)
     category_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("categories.id", ondelete="CASCADE"), index=True)
     chat_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
     thread_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
 
+    user = relationship("User")
     category = relationship("Category")
 
 class SimbuyerPrice(Base, TimestampMixin):

@@ -63,6 +63,6 @@
         <span class="text-[10px] bg-white/5 border border-white/10 px-3 py-1 rounded-lg text-white/60 tracking-widest uppercase">{{ ticket.status }}</span>
     </div>
     <div class="font-medium text-[16px] text-white tracking-wide mb-2 line-clamp-1">{{ ticket.subject }}</div>
-    <div class="text-[12px] text-white/40 tracking-wider">Ref: <span class="text-nexus-cyan">#{{ ticket.submission_id }}</span></div>
+    <div class="text-[12px] text-white/40 tracking-wider">Ref: <a href="/nexus/submission/{{ ticket.submission_id }}" class="text-nexus-cyan hover:underline decoration-nexus-cyan/30 underline-offset-4">#{{ ticket.submission_id }}</a></div>
 </a>
 {% endmacro %}

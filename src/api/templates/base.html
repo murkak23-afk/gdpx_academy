@@ -75,6 +75,13 @@
                 <a href="/nexus/my-esim" class="block py-3 px-4 rounded-xl transition-all {% if active_page == 'my-esim' %}sidebar-active{% else %}text-slate-400 hover:bg-white/5 hover:text-white{% endif %}">Мои eSIM</a>
                 <a href="/nexus/reports" class="block py-3 px-4 rounded-xl transition-all {% if active_page == 'reports' %}sidebar-active{% else %}text-slate-400 hover:bg-white/5 hover:text-white{% endif %}">Статистика</a>
                 <a href="/nexus/tickets" class="block py-3 px-4 rounded-xl transition-all {% if active_page == 'tickets' %}sidebar-active{% else %}text-slate-400 hover:bg-white/5 hover:text-white{% endif %}">Support Center</a>
+                {% if user and (user.role == 'owner' or user.role == 'admin') %}
+                <a href="/nexus/categories" class="block py-3 px-4 rounded-xl transition-all {% if active_page == 'categories' %}sidebar-active{% else %}text-slate-400 hover:bg-white/5 hover:text-white{% endif %}">Категории</a>
+                <a href="/nexus/users" class="block py-3 px-4 rounded-xl transition-all {% if active_page == 'users' %}sidebar-active{% else %}text-slate-400 hover:bg-white/5 hover:text-white{% endif %}">Пользователи</a>
+                {% endif %}
+                {% if user and user.role == 'owner' %}
+                <a href="/nexus/audit" class="block py-3 px-4 rounded-xl transition-all {% if active_page == 'audit' %}sidebar-active{% else %}text-slate-400 hover:bg-white/5 hover:text-white{% endif %}">Журнал Аудита</a>
+                {% endif %}
             </nav>
 
             {% if user %}

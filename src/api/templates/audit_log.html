@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+
+{% block title %}Журнал аудита{% endblock %}
+
+{% block content %}
+<div class="space-y-8 animate-in fade-in duration-500">
+    
+    <!-- Заголовок -->
+    <div class="flex justify-between items-end">
+        <div>
+            <h1 class="text-[32px] font-semibold text-white tracking-tight drop-shadow-[0_0_10px_rgba(255,0,234,0.3)]">Security Audit Log</h1>
+            <p class="text-nexus-sakura mt-2 font-medium tracking-wider uppercase text-[10px]">Полная история административных действий и изменений системы</p>
+        </div>
+        <div>
+            <button class="px-5 py-2.5 bg-white/5 border border-white/10 rounded-xl text-sm font-semibold text-white/40 hover:bg-white/10 transition-all">
+                ЭКСПОРТ ЛОГОВ
+            </button>
+        </div>
+    </div>
+
+    <!-- Список логов -->
+    <div class="bg-[#0a0a0f]/60 backdrop-blur-xl rounded-[24px] border border-white/10 shadow-[0_8px_30px_rgba(0,0,0,0.5)] overflow-hidden">
+        <div class="overflow-x-auto">
+            <table class="w-full text-left border-collapse">
+                <thead class="bg-white/5 border-b border-white/10 text-[11px] font-semibold text-white/60 uppercase tracking-[0.15em]">
+                    <tr>
+                        <th class="px-8 py-5">Время</th>
+                        <th class="px-8 py-5">Исполнитель</th>
+                        <th class="px-8 py-5">Действие</th>
+                        <th class="px-8 py-5">Объект</th>
+                        <th class="px-8 py-5">Детали</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-white/5 text-sm">
+                    {% for log in logs %}
+                    <tr class="hover:bg-white/5 transition-colors duration-300 group">
+                        <td class="px-8 py-5">
+                            <div class="text-white/60 font-mono text-[12px]">{{ log.created_at.strftime('%d.%m %H:%M:%S') }}</div>
+                        </td>
+                        <td class="px-8 py-5">
+                            <div class="flex items-center gap-3">
+                                <div class="w-6 h-6 rounded-full bg-nexus-sakura/20 flex items-center justify-center text-[10px] text-nexus-sakura font-bold">
+                                    {{ log.admin.full_name[0]|upper }}
+                                </div>
+                                <div class="text-white font-medium">@{{ log.admin.username or log.admin.telegram_id }}</div>
+                            </div>
+                        </td>
+                        <td class="px-8 py-5">
+                            <span class="px-2 py-0.5 bg-white/5 border border-white/10 rounded text-[10px] font-bold text-white/80 tracking-widest uppercase">
+                                {{ log.action }}
+                            </span>
+                        </td>
+                        <td class="px-8 py-5">
+                            {% if log.target_type %}
+                                <div class="text-[11px] text-white/40 uppercase tracking-widest">{{ log.target_type }}</div>
+                                <div class="text-nexus-cyan font-bold font-mono">#{{ log.target_id }}</div>
+                            {% else %}
+                                <span class="text-white/10">---</span>
+                            {% endif %}
+                        </td>
+                        <td class="px-8 py-5">
+                            <div class="text-white/70 max-w-xs truncate group-hover:max-w-none group-hover:whitespace-normal transition-all">
+                                {{ log.details or 'Нет данных' }}
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

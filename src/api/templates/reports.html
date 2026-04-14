@@ -64,7 +64,7 @@
                     {% for item in shipments %}
                     <tr class="hover:bg-white/5 transition-colors duration-300 group">
                         <td class="px-8 py-5">
-                            <div class="font-mono text-white font-semibold">#{{ item.id }}</div>
+                            <a href="/nexus/submission/{{ item.id }}" class="font-mono text-white font-semibold hover:text-nexus-cyan transition-colors">#{{ item.id }}</a>
                             <div class="text-[11px] text-white/40 mt-1">{{ item.updated_at.strftime('%d.%m.%Y %H:%M') }}</div>
                         </td>
                         <td class="px-8 py-5">
