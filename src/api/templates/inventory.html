@@ -71,13 +71,6 @@
 </div>
 
 <script>
-    // Гарантированно подключаем расширение HTMX JSON
-    if (typeof htmx === 'undefined') {
-        console.error("HTMX is not loaded!");
-    } else {
-        htmx.logAll(); // Включаем логи HTMX в консоль браузера
-    }
-
     let currentMaxStock = 1;
 
     function openModal(id, title, maxStock) { 
