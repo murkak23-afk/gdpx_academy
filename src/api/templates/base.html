@@ -3,15 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% block title %}GDPX // CONTROL{% endblock %}</title>
+    <title>{% block title %}GDPX // NEXUS{% endblock %}</title>
     
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/htmx.org@1.9.10"></script>
-    <script src="https://unpkg.com/htmx.org/dist/ext/json-enc.js"></script>
     <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
     
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600&display=swap" rel="stylesheet">
-    <link href="/assets/theme.css" rel="stylesheet">
 
     <script>
         tailwind.config = {
@@ -25,78 +23,100 @@
                             bg: '#0a0a0f',
                             sidebar: 'rgba(10, 10, 15, 0.8)',
                             text: '#ffffff',
-                            muted: '#94a3b8',
                             success: '#00C853',
                             error: '#FF3B30'
                         }
-                    },
-                    fontFamily: { body: ['Outfit', 'sans-serif'] }
+                    }
                 }
             }
         }
     </script>
     
     <style>
-        body { font-family: 'Outfit', sans-serif; background: #0a0a0f; color: #ffffff; margin: 0; min-h-screen; }
+        body { font-family: 'Outfit', sans-serif; background: #0a0a0f; color: #ffffff; margin: 0; min-height: 100vh; overflow-x: hidden; }
         .sidebar-active { 
             background: linear-gradient(90deg, rgba(0, 217, 255, 0.15) 0%, rgba(255, 0, 234, 0.1) 100%);
             border-left: 3px solid #00d9ff;
             color: white; 
         }
         .glass-panel {
-            background: rgba(20, 20, 25, 0.6);
+            background: rgba(20, 20, 25, 0.8);
             backdrop-filter: blur(20px);
             border: 1px solid rgba(255, 255, 255, 0.08);
         }
-        .layout-wrapper { position: relative; z-index: 50; min-height: 100vh; }
+        /* Анимация появления */
+        .fade-in { animation: fadeIn 0.5s ease-out; }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
     </style>
 </head>
-<body class="min-h-screen relative overflow-y-auto">
+<body class="min-h-screen bg-[#0a0a0f]">
 
-    <!-- PARALLAX BACKGROUND -->
-    <div class="fixed inset-0 w-full h-full pointer-events-none z-0 overflow-hidden" id="hero">
-        <div class="stars"></div>
-        <div class="parallax-layer layer-bg"></div>
-        <div class="parallax-layer layer-fg opacity-30"><div class="glowing-orb orb-1"></div></div>
+    <!-- Глобальный фон (Fixed) -->
+    <div class="fixed inset-0 z-0 pointer-events-none overflow-hidden">
+        <div class="absolute inset-0 bg-[radial-gradient(circle_at_50%_-20%,#1e1b4b,transparent)] opacity-50"></div>
+        <div class="absolute top-0 left-0 w-full h-full bg-[url('https://www.transparenttextures.com/patterns/stardust.png')] opacity-20"></div>
     </div>
 
-    <div class="layout-wrapper flex min-h-screen w-full overflow-x-hidden">
-        <!-- Sidebar: скрыт на мобилках (до 1024px) -->
+    <div class="relative z-10 flex min-h-screen w-full">
+        
+        <!-- Sidebar: Виден только на ПК -->
         <aside class="hidden lg:flex w-72 glass-panel border-r border-white/10 flex-col sticky top-0 h-screen shrink-0">
             <div class="p-8">
-                <h2 class="text-[10px] font-bold text-nexus-cyan tracking-[0.4em] uppercase opacity-60">Control Panel</h2>
+                <div class="flex items-center gap-3">
+                    <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-nexus-cyan to-nexus-sakura"></div>
+                    <h2 class="text-[14px] font-bold text-white tracking-widest uppercase">Nexus Panel</h2>
+                </div>
             </div>
             
-            <nav class="flex-1 px-4 space-y-1.5">
+            <nav class="flex-1 px-4 space-y-2">
                 {% if user and (user.role == 'admin' or user.role == 'owner') %}
-                <a href="/nexus" class="block py-3 px-4 rounded-xl transition-all {% if active_page == 'dashboard' %}sidebar-active{% else %}text-slate-400 hover:bg-white/5 hover:text-white{% endif %}">Дашборд</a>
+                <a href="/nexus" class="flex items-center py-3 px-4 rounded-xl transition-all {% if active_page == 'dashboard' %}sidebar-active{% else %}text-slate-400 hover:bg-white/5 hover:text-white{% endif %}">
+                    <span>Дашборд</span>
+                </a>
                 {% endif %}
-                <a href="/nexus/inventory" class="block py-3 px-4 rounded-xl transition-all {% if active_page == 'inventory' %}sidebar-active{% else %}text-slate-400 hover:bg-white/5 hover:text-white{% endif %}">Склад</a>
-                <a href="/nexus/my-esim" class="block py-3 px-4 rounded-xl transition-all {% if active_page == 'my-esim' %}sidebar-active{% else %}text-slate-400 hover:bg-white/5 hover:text-white{% endif %}">Мои eSIM</a>
-                <a href="/nexus/reports" class="block py-3 px-4 rounded-xl transition-all {% if active_page == 'reports' %}sidebar-active{% else %}text-slate-400 hover:bg-white/5 hover:text-white{% endif %}">Статистика</a>
-                <a href="/nexus/tickets" class="block py-3 px-4 rounded-xl transition-all {% if active_page == 'tickets' %}sidebar-active{% else %}text-slate-400 hover:bg-white/5 hover:text-white{% endif %}">Support Center</a>
+                <a href="/nexus/inventory" class="flex items-center py-3 px-4 rounded-xl transition-all {% if active_page == 'inventory' %}sidebar-active{% else %}text-slate-400 hover:bg-white/5 hover:text-white{% endif %}">
+                    <span>Склад eSIM</span>
+                </a>
+                <a href="/nexus/my-esim" class="flex items-center py-3 px-4 rounded-xl transition-all {% if active_page == 'my-esim' %}sidebar-active{% else %}text-slate-400 hover:bg-white/5 hover:text-white{% endif %}">
+                    <span>Мои активы</span>
+                </a>
+                <a href="/nexus/reports" class="flex items-center py-3 px-4 rounded-xl transition-all {% if active_page == 'reports' %}sidebar-active{% else %}text-slate-400 hover:bg-white/5 hover:text-white{% endif %}">
+                    <span>Статистика</span>
+                </a>
+                <a href="/nexus/tickets" class="flex items-center py-3 px-4 rounded-xl transition-all {% if active_page == 'tickets' %}sidebar-active{% else %}text-slate-400 hover:bg-white/5 hover:text-white{% endif %}">
+                    <span>Поддержка</span>
+                </a>
+                
                 {% if user and (user.role == 'owner' or user.role == 'admin') %}
-                <a href="/nexus/categories" class="block py-3 px-4 rounded-xl transition-all {% if active_page == 'categories' %}sidebar-active{% else %}text-slate-400 hover:bg-white/5 hover:text-white{% endif %}">Категории</a>
-                <a href="/nexus/users" class="block py-3 px-4 rounded-xl transition-all {% if active_page == 'users' %}sidebar-active{% else %}text-slate-400 hover:bg-white/5 hover:text-white{% endif %}">Пользователи</a>
+                <div class="pt-4 pb-2 px-4 text-[10px] font-bold text-white/20 uppercase tracking-[0.2em]">Management</div>
+                <a href="/nexus/categories" class="flex items-center py-3 px-4 rounded-xl transition-all {% if active_page == 'categories' %}sidebar-active{% else %}text-slate-400 hover:bg-white/5 hover:text-white{% endif %}">
+                    <span>Категории</span>
+                </a>
+                <a href="/nexus/users" class="flex items-center py-3 px-4 rounded-xl transition-all {% if active_page == 'users' %}sidebar-active{% else %}text-slate-400 hover:bg-white/5 hover:text-white{% endif %}">
+                    <span>Пользователи</span>
+                </a>
                 {% endif %}
+                
                 {% if user and user.role == 'owner' %}
-                <a href="/nexus/audit" class="block py-3 px-4 rounded-xl transition-all {% if active_page == 'audit' %}sidebar-active{% else %}text-slate-400 hover:bg-white/5 hover:text-white{% endif %}">Журнал Аудита</a>
+                <a href="/nexus/audit" class="flex items-center py-3 px-4 rounded-xl transition-all {% if active_page == 'audit' %}sidebar-active{% else %}text-slate-400 hover:bg-white/5 hover:text-white{% endif %}">
+                    <span>Журнал Аудита</span>
+                </a>
                 {% endif %}
             </nav>
 
             {% if user %}
-            <div class="mt-auto border-t border-white/10 p-6 bg-black/20">
+            <div class="mt-auto border-t border-white/10 p-6 bg-black/40">
                 <div class="flex items-center gap-3">
-                    <div class="w-10 h-10 rounded-full bg-gradient-to-br from-nexus-cyan to-nexus-sakura p-[1px]">
+                    <div class="w-10 h-10 rounded-full bg-gradient-to-br from-nexus-cyan to-nexus-sakura p-[1px] shrink-0">
                         <div class="w-full h-full rounded-full bg-[#0a0a0f] flex items-center justify-center font-bold text-nexus-cyan text-xs">
                             {{ user.username[0]|upper if user.username else 'U' }}
                         </div>
                     </div>
-                    <div class="min-w-0">
-                        <div class="text-sm font-semibold text-white truncate">@{{ user.username }}</div>
-                        <div class="text-[10px] text-nexus-cyan uppercase tracking-widest opacity-70">{{ user.role }}</div>
+                    <div class="min-w-0 flex-1">
+                        <div class="text-[13px] font-bold text-white truncate">@{{ user.username or user.telegram_id }}</div>
+                        <div class="text-[10px] text-nexus-cyan uppercase tracking-widest font-bold opacity-60">{{ user.role }}</div>
                     </div>
-                    <a href="/auth/logout" class="ml-auto text-white/20 hover:text-nexus-error transition-colors">
+                    <a href="/auth/logout" class="text-white/20 hover:text-red-500 transition-colors">
                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
                     </a>
                 </div>
@@ -104,14 +124,23 @@
             {% endif %}
         </aside>
 
-        <!-- Main Content -->
-        <main class="flex-1 min-w-0 overflow-y-auto">
-            <div class="p-4 sm:p-8 md:p-12 max-w-[1600px] mx-auto">
-                {% block content %}{% endblock %}
+        <!-- Main Content Area -->
+        <main class="flex-1 w-full flex flex-col min-w-0">
+            <!-- Mobile Header (Visible only on mobile) -->
+            <header class="lg:hidden h-16 border-b border-white/10 flex items-center justify-between px-6 glass-panel shrink-0">
+                <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-nexus-cyan to-nexus-sakura"></div>
+                <div class="text-white font-bold uppercase tracking-widest text-xs">Nexus Mobile</div>
+                <a href="/auth/logout" class="text-white/40"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M17 16l4-4m0 0l-4-4m4 4H7"/></svg></a>
+            </header>
+
+            <!-- Scrollable Content -->
+            <div class="flex-1 overflow-y-auto p-6 sm:p-8 lg:p-12">
+                <div class="w-full max-w-[1400px] mx-auto fade-in">
+                    {% block content %}{% endblock %}
+                </div>
             </div>
         </main>
     </div>
 
-    <script src="/assets/theme.js"></script>
 </body>
 </html>
