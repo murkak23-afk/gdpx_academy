@@ -1,4 +1,4 @@
-"""FastAPI-приложение: healthcheck и WebApp-хаб. v1.0.3"""
+"""FastAPI-приложение: healthcheck и WebApp-хаб. v1.0.4"""
 
 from __future__ import annotations
 
@@ -24,7 +24,6 @@ from src.database.models.enums import SubmissionStatus
 
 logger = logging.getLogger(__name__)
 
-# Настройка шаблонов с абсолютным путем
 BASE_DIR = Path(__file__).resolve().parent
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 
@@ -35,26 +34,18 @@ class DeliveryOrder(BaseModel):
     init_data: str | None = None
 
 def create_app(bot: Bot, dispatcher: Dispatcher) -> FastAPI:
-    app = FastAPI(
-        title="tgpriem API",
-        version="1.0.0",
-        description="Служебные эндпоинты и WebApp-хаб.",
-    )
+    app = FastAPI(title="tgpriem API", version="1.0.0")
     settings = get_settings()
 
-    # --- ГЛОБАЛЬНЫЕ ОБРАБОТЧИКИ ОШИБОК ---
     @app.exception_handler(HTTPException)
     async def auth_exception_handler(request: Request, exc: HTTPException):
         if exc.status_code == 303:
             return RedirectResponse(url="/auth/login")
         return await http_exception_handler(request, exc)
 
-    # --- WEBAPP ROUTERS ---
     from src.api.routes import auth, nexus
     app.include_router(auth.router)
     app.include_router(nexus.router)
-
-    # --- WEBAPP ENDPOINTS ---
 
     @app.get("/delivery")
     async def delivery_page(request: Request):
@@ -62,30 +53,22 @@ def create_app(bot: Bot, dispatcher: Dispatcher) -> FastAPI:
 
     @app.get("/api/delivery/categories")
     async def get_delivery_categories():
-        """Список активных категорий и остатков."""
+        print("!!! API CALL: get_categories")
         async with SessionFactory() as session:
-            # Считаем остатки (статус PENDING)
             stmt = (
-                select(
-                    Category.id, 
-                    Category.title, 
-                    Category.is_priority, 
-                    func.count(Submission.id).label("stock")
-                )
+                select(Category.id, Category.title, Category.is_priority, func.count(Submission.id))
                 .outerjoin(Submission, (Submission.category_id == Category.id) & (Submission.status == SubmissionStatus.PENDING))
                 .where(Category.is_active == True)
                 .group_by(Category.id)
             )
             result = await session.execute(stmt)
-            return [
-                {"id": r[0], "title": r[1], "is_priority": r[2], "stock": r[3]}
-                for r in result.all()
-            ]
+            return [{"id": r[0], "title": r[1], "is_priority": r[2], "stock": r[3]} for r in result.all()]
 
     @app.post("/api/delivery/order")
     async def process_delivery_order(order: DeliveryOrder, background_tasks: BackgroundTasks):
-        """Прием заказа из WebApp и запуск выдачи."""
-        logger.info(f"DEBUG: New delivery request. Category: {order.category_id}, Count: {order.count}, ChatID: {order.chat_id}")
+        # ЭТОТ ПРИНТ ТЫ ДОЛЖЕН УВИДЕТЬ В ЛОГАХ
+        print(f"!!! ORDER RECEIVED: Chat={order.chat_id}, Cat={order.category_id}, Count={order.count}")
+        
         async with SessionFactory() as session:
             from src.database.models.web_control import DeliveryConfig
             stmt_cfg = select(DeliveryConfig).where(
@@ -95,52 +78,32 @@ def create_app(bot: Bot, dispatcher: Dispatcher) -> FastAPI:
             cfg = (await session.execute(stmt_cfg)).scalar_one_or_none()
 
             if not cfg:
-                raise HTTPException(status_code=400, detail="Для вашего чата не настроен маршрут выдачи этого оператора")
+                msg = f"Маршрут не найден. ChatID: {order.chat_id}, CatID: {order.category_id}"
+                print(f"!!! ERROR: {msg}")
+                raise HTTPException(status_code=400, detail=msg)
             
-            # ЛЕНИВЫЙ ИМПОРТ
             from src.domain.submission.submission_service import SubmissionService
             sub_svc = SubmissionService(session=session)
-            
             available = await sub_svc.get_category_stock_count(order.category_id)
+            
             if order.count > available:
                 raise HTTPException(status_code=400, detail=f"Недостаточно на складе. Доступно: {available}")
 
             background_tasks.add_task(_background_delivery, bot, cfg.category_id, order.chat_id, cfg.thread_id, order.count)
             return {"status": "ok"}
 
-    # --- SYSTEM ENDPOINTS ---
-
     @app.post(settings.webhook_path)
-    async def telegram_webhook(
-        request: Request,
-        background_tasks: BackgroundTasks,
-        x_telegram_bot_api_secret_token: str | None = Header(None),
-    ) -> Any:
-        if x_telegram_bot_api_secret_token != settings.webhook_secret_token:
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid secret token")
-
+    async def telegram_webhook(request: Request, background_tasks: BackgroundTasks, x_tg_token: str | None = Header(None, alias="X-Telegram-Bot-Api-Secret-Token")):
+        if x_tg_token != settings.webhook_secret_token:
+            raise HTTPException(status_code=401)
         update_data = await request.json()
         update = Update.model_validate(update_data, context={"bot": bot})
         background_tasks.add_task(dispatcher.feed_update, bot, update)
         return {"ok": True}
 
-    @app.get("/health/ready")
-    async def health_ready() -> JSONResponse:
-        checks: dict[str, str] = {}
-        try:
-            async with engine.connect() as conn:
-                await conn.execute(select(1))
-            checks["database"] = "ok"
-        except Exception as exc:
-            checks["database"] = f"error: {type(exc).__name__}"
-        db_ok = checks.get("database") == "ok"
-        body = {"status": "ready" if db_ok else "not_ready", "checks": checks}
-        return JSONResponse(status_code=200 if db_ok else 503, content=body)
-
     return app
 
 async def _background_delivery(bot: Bot, category_id: int, chat_id: int, thread_id: int, count: int):
-    """Фоновая задача: достает eSIM и шлет в персональный чат и топик категории."""
     from src.database.uow import UnitOfWork
     from src.domain.submission.submission_service import SubmissionService
     from src.core.utils.ui_builder import DIVIDER
@@ -149,10 +112,7 @@ async def _background_delivery(bot: Bot, category_id: int, chat_id: int, thread_
         async with UnitOfWork(session=session) as uow:
             sub_svc = SubmissionService(uow)
             items = await sub_svc.take_from_warehouse(category_id, count)
-        
-            if not items:
-                logger.error(f"Background delivery failed: no items found for cat {category_id}")
-                return
+            if not items: return
 
             for item in items:
                 try:
@@ -163,11 +123,7 @@ async def _background_delivery(bot: Bot, category_id: int, chat_id: int, thread_
                         f"{DIVIDER}\n"
                         f"👤 <b>АГЕНТ:</b> @{item.seller.username or 'id' + str(item.seller.telegram_id)}"
                     )
-                    
-                    if item.attachment_type == "photo":
-                        await bot.send_photo(chat_id=chat_id, photo=item.telegram_file_id, caption=caption, message_thread_id=thread_id)
-                    else:
-                        await bot.send_document(chat_id=chat_id, document=item.telegram_file_id, caption=caption, message_thread_id=thread_id)
+                    await bot.send_photo(chat_id=chat_id, photo=item.telegram_file_id, caption=caption, message_thread_id=thread_id)
                     await asyncio.sleep(0.3)
                 except Exception as e:
-                    logger.error(f"Error in background delivery for item {item.id}: {e}")
+                    print(f"!!! SEND ERROR: {e}")

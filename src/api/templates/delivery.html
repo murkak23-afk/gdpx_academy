@@ -243,19 +243,21 @@
             submitBtn.disabled = true;
             submitBtn.innerText = "ОТПРАВЛЯЕМ...";
 
-            // Извлекаем chat_id из URL
             const urlParams = new URLSearchParams(window.location.search);
             const chat_id = urlParams.get('chat_id');
+            const targetUrl = window.location.origin + '/api/delivery/order';
+            
+            console.log("Sending to:", targetUrl);
 
             try {
-                const response = await fetch('/api/delivery/order', {
+                const response = await fetch(targetUrl, {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({
                         category_id: selectedId,
                         count: val,
-                        chat_id: parseInt(chat_id), // Передаем ID чата обратно
-                        init_data: tg.initData
+                        chat_id: parseInt(chat_id),
+                        init_data: tg.initData || ""
                     })
                 });
 
