@@ -1,4 +1,4 @@
-"""FastAPI-приложение: healthcheck и WebApp-хаб. v1.0.1"""
+"""FastAPI-приложение: healthcheck и WebApp-хаб. v1.0.2"""
 
 from __future__ import annotations
 
@@ -11,7 +11,6 @@ from fastapi.responses import JSONResponse
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 from sqlalchemy import select, func
-from sqlalchemy.ext.asyncio import AsyncSession
 from aiogram import Dispatcher, Bot
 from aiogram.types import Update
 
@@ -20,8 +19,6 @@ from src.database.session import engine, SessionFactory
 from src.database.models.category import Category
 from src.database.models.submission import Submission
 from src.database.models.enums import SubmissionStatus
-from src.domain.submission.submission_service import SubmissionService
-from src.domain.finance.cryptobot_service import CryptoBotService
 
 logger = logging.getLogger(__name__)
 templates = Jinja2Templates(directory="src/api/templates")
@@ -80,7 +77,9 @@ def create_app(bot: Bot, dispatcher: Dispatcher) -> FastAPI:
             if not cat.delivery_thread_id:
                 raise HTTPException(status_code=400, detail="Топик для выдачи не настроен для этой категории")
             
-            # Проверяем наличие
+            # ЛЕНИВЫЙ ИМПОРТ для предотвращения кругового импорта
+            from src.domain.submission.submission_service import SubmissionService
+            
             sub_svc = SubmissionService(session=session)
             available = await sub_svc.get_category_stock_count(order.category_id)
             if order.count > available:
@@ -128,6 +127,7 @@ def create_app(bot: Bot, dispatcher: Dispatcher) -> FastAPI:
 
 async def _background_delivery(bot: Bot, category_id: int, chat_id: int, thread_id: int, count: int):
     """Фоновая задача: достает eSIM и шлет в персональный чат и топик категории."""
+    # ЛЕНИВЫЕ ИМПОРТЫ
     from src.database.uow import UnitOfWork
     from src.domain.submission.submission_service import SubmissionService
     from src.core.utils.ui_builder import DIVIDER
