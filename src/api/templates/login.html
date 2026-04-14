@@ -3,35 +3,102 @@
 {% block title %}GDPX // AUTHORIZATION{% endblock %}
 
 {% block content %}
-<div class="fixed inset-0 bg-[#0a0a0f] flex flex-col justify-center items-center p-4 z-[100]">
+<div class="fixed inset-0 bg-[#050508] flex flex-col justify-center items-center p-4 z-[100] overflow-hidden">
     
-    <!-- Stars Background -->
-    <div class="absolute inset-0 pointer-events-none opacity-40">
-        <div class="stars"></div>
-        <div class="parallax-layer layer-bg"></div>
+    <!-- Анимированный премиум-фон (Сетка + Туман) -->
+    <div class="absolute inset-0 z-0 pointer-events-none">
+        <!-- Радиальный градиент по центру -->
+        <div class="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-nexus-cyan/10 via-[#0a0a0f] to-[#050508]"></div>
+        
+        <!-- Декоративная сетка -->
+        <div class="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiPjxwYXRoIGQ9Ik0zNiAzNHYzLTVoM3YtNWgtM3YtM2gtM3YzaC0zdjNoM3YzaDN6IiBmaWxsPSJyZ2JhKDI1NSwgMjU1LCAyNTUsIDAuMDMpIi8+PC9nPjwvc3ZnPg==')]"></div>
+        
+        <!-- Цветные блики по углам -->
+        <div class="absolute -top-[20%] -left-[10%] w-[50%] h-[50%] rounded-full bg-nexus-cyan/10 blur-[120px] animate-pulse" style="animation-duration: 8s;"></div>
+        <div class="absolute -bottom-[20%] -right-[10%] w-[50%] h-[50%] rounded-full bg-nexus-sakura/10 blur-[120px] animate-pulse" style="animation-duration: 10s; animation-delay: 2s;"></div>
     </div>
 
-    <!-- Login Card -->
-    <div class="relative w-full max-w-[420px] bg-[#0a0a0f]/80 backdrop-blur-2xl p-10 rounded-[32px] border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.8)] animate-in slide-in-from-bottom-4 duration-700 ease-out">
+    <!-- Контейнер карточки логина -->
+    <div class="relative z-10 w-full max-w-[440px] animate-in fade-in slide-in-from-bottom-8 duration-1000 ease-out">
         
-        <div class="text-center mb-10">
-            <img src="/assets/logo.png" class="w-32 h-auto mx-auto mb-8 drop-shadow-[0_0_20px_rgba(0,212,255,0.3)]" alt="GDPX Logo">
-            <h2 class="text-[16px] font-bold text-white tracking-[0.3em] uppercase drop-shadow-[0_0_10px_rgba(255,255,255,0.2)]">Академия GDPX / УПРАВЛЕНИЕ</h2>
-            <p class="text-nexus-cyan text-[10px] mt-4 tracking-[0.4em] uppercase font-bold opacity-80">Access Restricted</p>
-        </div>
+        <!-- Сама карточка Glassmorphism -->
+        <div class="bg-white/[0.02] backdrop-blur-3xl p-10 sm:p-12 rounded-[40px] border border-white/10 shadow-[0_30px_100px_rgba(0,0,0,0.8),_inset_0_1px_0_rgba(255,255,255,0.1)] relative overflow-hidden group">
+            
+            <!-- Легкий блик на карточке при наведении -->
+            <div class="absolute inset-0 bg-gradient-to-br from-white/[0.05] to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-700 pointer-events-none"></div>
 
-        <form hx-post="/auth/login" hx-target="#error-container" class="flex flex-col gap-6">
-            <input type="text" name="login" required class="w-full bg-white/5 border border-white/10 rounded-[16px] px-6 py-4 outline-none focus:border-nexus-cyan/50 text-white placeholder:text-white/20 uppercase tracking-widest text-xs" placeholder="ЛОГИН">
-            <input type="password" name="password" required class="w-full bg-white/5 border border-white/10 rounded-[16px] px-6 py-4 outline-none focus:border-nexus-cyan/50 text-white placeholder:text-white/20 uppercase tracking-widest text-xs" placeholder="ПАРОЛЬ">
-            <div id="error-container"></div>
-            <button type="submit" class="w-full h-[58px] rounded-[18px] font-bold text-white text-[14px] tracking-[0.3em] uppercase bg-gradient-to-r from-nexus-cyan to-nexus-sakura hover:shadow-[0_0_40px_rgba(0,212,255,0.4)] transition-all active:scale-95">ВОЙТИ В СИСТЕМУ</button>
-        </form>
+            <!-- Заголовок и Лого -->
+            <div class="text-center mb-10 relative">
+                <!-- Здесь твоя картинка-логотип (подставь правильный путь, если он другой) -->
+                <!-- Я добавила эффект парения и неоновой тени -->
+                <div class="relative inline-block mb-8 animate-bounce" style="animation-duration: 4s;">
+                    <div class="absolute inset-0 bg-nexus-cyan blur-[30px] opacity-20 rounded-full"></div>
+                    <img src="/assets/logo.png" class="w-28 h-auto relative z-10 drop-shadow-[0_0_15px_rgba(0,217,255,0.4)]" alt="GDPX" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+                    <!-- Заглушка, если картинки нет -->
+                    <div class="hidden w-24 h-24 mx-auto rounded-full bg-gradient-to-br from-nexus-cyan to-nexus-sakura p-1 relative z-10 shadow-[0_0_30px_rgba(0,217,255,0.3)]">
+                        <div class="w-full h-full bg-[#0a0a0f] rounded-full flex items-center justify-center">
+                            <span class="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-nexus-cyan to-white tracking-widest">GDPX</span>
+                        </div>
+                    </div>
+                </div>
+
+                <h2 class="text-[14px] sm:text-[16px] font-semibold text-white tracking-[0.4em] uppercase">Академия GDPX</h2>
+                <div class="h-[1px] w-12 bg-white/20 mx-auto my-3"></div>
+                <p class="text-nexus-cyan text-[10px] sm:text-[11px] tracking-[0.5em] uppercase font-bold drop-shadow-[0_0_8px_rgba(0,217,255,0.5)]">Access Restricted</p>
+            </div>
+
+            <!-- Форма -->
+            <form hx-post="/auth/login" hx-target="#error-container" class="flex flex-col gap-5 relative z-10">
+                
+                <!-- Поле Логин -->
+                <div class="relative group/input">
+                    <div class="absolute -inset-0.5 bg-gradient-to-r from-nexus-cyan to-nexus-sakura rounded-[20px] opacity-0 group-hover/input:opacity-20 transition duration-500 blur-sm"></div>
+                    <input type="text" name="login" required autocomplete="off"
+                           class="relative w-full bg-[#050508]/80 border border-white/10 rounded-[18px] px-6 py-4.5 outline-none focus:border-nexus-cyan focus:bg-white/[0.05] focus:shadow-[0_0_20px_rgba(0,217,255,0.15)] text-white placeholder:text-white/20 font-medium tracking-widest text-[13px] transition-all duration-300" 
+                           placeholder="USERNAME / ID">
+                </div>
+
+                <!-- Поле Пароль -->
+                <div class="relative group/input">
+                    <div class="absolute -inset-0.5 bg-gradient-to-r from-nexus-cyan to-nexus-sakura rounded-[20px] opacity-0 group-hover/input:opacity-20 transition duration-500 blur-sm"></div>
+                    <input type="password" name="password" required 
+                           class="relative w-full bg-[#050508]/80 border border-white/10 rounded-[18px] px-6 py-4.5 outline-none focus:border-nexus-sakura focus:bg-white/[0.05] focus:shadow-[0_0_20px_rgba(255,0,234,0.15)] text-white placeholder:text-white/20 font-medium tracking-widest text-[13px] transition-all duration-300" 
+                           placeholder="PASSWORD">
+                </div>
+
+                <!-- Контейнер для ошибок (будет заполняться HTMX) -->
+                <div id="error-container" class="min-h-[24px] empty:hidden transition-all duration-300"></div>
+                
+                <!-- Кнопка -->
+                <button type="submit" onclick="this.innerHTML='<span class=\'animate-pulse\'>CONNECTING...</span>'; this.classList.add('opacity-80');"
+                        class="relative w-full h-[60px] mt-2 rounded-[18px] font-bold text-white text-[13px] tracking-[0.3em] uppercase bg-gradient-to-r from-nexus-cyan to-nexus-sakura overflow-hidden group/btn shadow-[0_0_30px_rgba(255,0,234,0.2)] hover:shadow-[0_0_50px_rgba(0,217,255,0.4)] transition-all duration-500 hover:-translate-y-1 active:translate-y-0 active:scale-[0.98]">
+                    
+                    <!-- Эффект бегущего блика на кнопке -->
+                    <div class="absolute top-0 -inset-full h-full w-1/2 z-5 block transform -skew-x-12 bg-gradient-to-r from-transparent to-white opacity-20 group-hover/btn:animate-[shine_1.5s_ease-in-out_infinite]"></div>
+                    
+                    <span class="relative z-10">System Override</span>
+                </button>
+            </form>
+
+            <!-- Декоративные элементы на карточке -->
+            <div class="absolute top-0 right-0 w-16 h-16 bg-gradient-to-bl from-white/10 to-transparent rounded-bl-[40px] pointer-events-none"></div>
+            <div class="absolute bottom-0 left-0 w-16 h-16 bg-gradient-to-tr from-white/10 to-transparent rounded-tr-[40px] pointer-events-none"></div>
+            
+            <div class="absolute bottom-6 left-0 w-full text-center pointer-events-none opacity-20">
+                <p class="text-[8px] font-mono tracking-[0.4em] text-white">NEXUS CORE V2.0 // SECURE CONNECTION</p>
+            </div>
+        </div>
     </div>
 </div>
 
 <style>
-    /* Полностью зачищаем любые всплывающие логотипы и меню на странице входа */
-    aside, header, .fixed.top-8.right-8 { display: none !important; }
-    main { padding: 0 !important; }
+    /* Скрываем элементы глобального шаблона (меню, хедеры), оставляем только чистый экран логина */
+    aside, header, main, .fixed.inset-0#hero { display: none !important; }
+    
+    /* Анимация для кнопки */
+    @keyframes shine {
+        0% { left: -100%; }
+        100% { left: 200%; }
+    }
 </style>
 {% endblock %}
