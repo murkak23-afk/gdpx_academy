@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="ru" class="dark">
+<html lang="ru" class="light">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -7,53 +7,47 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/htmx.org@1.9.10"></script>
     <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
     
     <style>
-        [x-cloak] { display: none !important; }
-        body { 
-            background: radial-gradient(circle at top right, #0a111a, #050505 60%); 
-            color: #e5e7eb; 
-            font-family: 'Inter', sans-serif; 
+        body { background-color: #F8FAFC; color: #1E293B; font-family: 'Inter', sans-serif; }
+        .glass-panel { 
+            background: rgba(255, 255, 255, 0.7); 
+            backdrop-filter: blur(12px); 
+            border: 1px solid rgba(226, 232, 240, 0.8);
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.05);
         }
-        .cyber-panel { 
-            background: rgba(10, 10, 10, 0.6); 
-            backdrop-filter: blur(20px); 
-            border: 1px solid rgba(255,255,255,0.05); 
-        }
-        .bg-premium { background: rgba(0,0,0,0.3) !important; }
-        .logo-glow { filter: drop-shadow(0 0 10px var(--neon-cyan)) drop-shadow(0 0 20px rgba(255, 183, 197, 0.3)); }
-        .neon-border { border: 1px solid var(--neon-cyan); box-shadow: 0 0 10px rgba(0, 210, 255, 0.2); }
-        .text-neon { text-shadow: 0 0 10px var(--neon-cyan); }
+        .sidebar-item-active { background: #00d2ff !important; color: white !important; }
+        .custom-shadow { box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); }
     </style>
 </head>
 <body class="h-screen overflow-hidden flex">
 
     <!-- Sidebar -->
-    <aside class="w-72 cyber-panel flex flex-col z-20">
-        <div class="p-6 flex items-center justify-center">
-            <img src="/assets/logo.png" class="w-40 h-auto logo-glow" alt="GDPX Logo">
+    <aside class="w-72 bg-white border-r border-slate-200 flex flex-col z-20">
+        <div class="p-8 flex items-center justify-center">
+            <img src="/assets/logo.png" class="w-32 h-auto" alt="GDPX Logo">
         </div>
         
         <nav class="flex-1 px-4 py-8 space-y-2">
-            <a href="/nexus" class="block py-3 px-4 rounded-lg bg-white/5 hover:bg-neon-cyan/10 transition-all border border-transparent hover:border-cyan-500/30">Dashboard</a>
-            <a href="/nexus/inventory" class="block py-3 px-4 rounded-lg text-gray-400 hover:text-white transition-all">Inventory</a>
-            <a href="/nexus/reports" class="block py-3 px-4 rounded-lg text-gray-400 hover:text-white transition-all">Reports</a>
-            <a href="/nexus/tickets" class="block py-3 px-4 rounded-lg text-gray-400 hover:text-white transition-all">Support Center</a>
+            <a href="/nexus" class="block py-3 px-4 rounded-xl transition-all {% if active_page == 'dashboard' %}sidebar-item-active text-white font-semibold shadow-lg shadow-blue-500/20{% else %}text-slate-500 hover:bg-slate-100{% endif %}">Dashboard</a>
+            <a href="/nexus/inventory" class="block py-3 px-4 rounded-xl transition-all {% if active_page == 'inventory' %}sidebar-item-active text-white font-semibold{% else %}text-slate-500 hover:bg-slate-100{% endif %}">Inventory</a>
+            <a href="/nexus/reports" class="block py-3 px-4 rounded-xl transition-all {% if active_page == 'reports' %}sidebar-item-active text-white font-semibold{% else %}text-slate-500 hover:bg-slate-100{% endif %}">Reports</a>
+            <a href="/nexus/tickets" class="block py-3 px-4 rounded-xl transition-all {% if active_page == 'tickets' %}sidebar-item-active text-white font-semibold{% else %}text-slate-500 hover:bg-slate-100{% endif %}">Support Center</a>
         </nav>
     </aside>
 
     <!-- Main Content -->
-    <main class="flex-1 overflow-y-auto p-12 relative">
-        <div class="max-w-7xl mx-auto">
+    <main class="flex-1 overflow-y-auto p-12">
+        <div class="max-w-[1600px] mx-auto">
             {% block content %}{% endblock %}
         </div>
     </main>
 
-    <!-- Chat Bubble (Float) -->
+    <!-- Floating Chat Button -->
     <div class="fixed bottom-8 right-8 z-50">
-        <button class="bg-gradient-to-br from-cyan-500 to-purple-600 p-4 rounded-full shadow-[0_0_20px_rgba(0,210,255,0.4)] hover:scale-110 transition-transform">
-            <span class="text-2xl">?</span>
+        <button class="bg-[#00d2ff] p-4 rounded-full shadow-lg hover:shadow-2xl hover:scale-110 transition-all text-white">
+            <span class="text-2xl font-bold">?</span>
         </button>
     </div>
 
