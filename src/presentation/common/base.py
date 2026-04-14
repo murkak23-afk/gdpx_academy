@@ -25,9 +25,14 @@ class PremiumBuilder:
         web_app: Any = None
     ) -> PremiumBuilder:
         """Добавить обычную кнопку (callback, url или web_app)."""
-        if isinstance(callback_data, CallbackData):
-            callback_data = callback_data.pack()
-        self.builder.button(text=text, callback_data=callback_data, url=url, web_app=web_app)
+        if web_app:
+            self.builder.button(text=text, web_app=web_app)
+        elif url:
+            self.builder.button(text=text, url=url)
+        else:
+            if isinstance(callback_data, CallbackData):
+                callback_data = callback_data.pack()
+            self.builder.button(text=text, callback_data=callback_data)
         return self
 
     def primary(self, text: str, callback_data: Any) -> PremiumBuilder:
