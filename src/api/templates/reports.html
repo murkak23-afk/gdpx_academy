@@ -49,9 +49,13 @@
                             </span>
                         </td>
                         <td class="px-6 py-4">
-                            <div class="text-[10px] text-gray-500 font-mono">{{ item.delivered_to_chat }}</div>
-                            {% if item.delivered_to_thread %}
-                                <div class="text-[10px] text-accent">Topic: {{ item.delivered_to_thread }}</div>
+                            {% if item.delivered_to_chat %}
+                                <div class="text-[10px] text-gray-500 font-mono">{{ item.delivered_to_chat }}</div>
+                                {% if item.delivered_to_thread %}
+                                    <div class="text-[10px] text-accent">Topic: {{ item.delivered_to_thread }}</div>
+                                {% endif %}
+                            {% else %}
+                                <div class="text-[10px] text-gray-600 italic">Legacy / Direct</div>
                             {% endif %}
                         </td>
                         <td class="px-6 py-4 text-right">

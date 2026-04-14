@@ -83,7 +83,15 @@ async def get_reports(request: Request, user_data: dict = Depends(get_current_us
         if user.role == UserRole.SIMBUYER:
             stmt = stmt.where(Submission.delivered_to_chat == user.telegram_id) # Или другой критерий привязки
         
-        stmt = stmt.where(Submission.delivered_to_chat.is_not(None)).order_by(Submission.updated_at.desc()).limit(100)
+        # Показываем все отгруженные, принятые или заблокированные
+        stmt = stmt.where(
+            Submission.status.in_([
+                SubmissionStatus.ACCEPTED, 
+                SubmissionStatus.IN_WORK, 
+                SubmissionStatus.BLOCKED,
+                SubmissionStatus.NOT_A_SCAN
+            ])
+        ).order_by(Submission.updated_at.desc()).limit(100)
         
         result = await session.execute(stmt)
         shipments = result.scalars().all()
