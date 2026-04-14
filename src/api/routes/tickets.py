@@ -70,6 +70,7 @@ async def view_ticket(ticket_id: int, request: Request, user_data: dict = Depend
 @router.post("/{ticket_id}/message", response_class=HTMLResponse)
 async def send_message(
     ticket_id: int,
+    request: Request,
     text: str = Form(...),
     user_data: dict = Depends(get_current_user)
 ):
@@ -87,7 +88,7 @@ async def send_message(
 
         # Возвращаем только HTML-кусочек нового сообщения для вставки в чат
         return templates.TemplateResponse("components/chat_message.html", {
-            "request": request, # Используем реальный объект запроса
+            "request": request,
             "msg": new_msg,
             "current_user_id": user_data.get("user_id")
         })
