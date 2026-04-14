@@ -60,10 +60,3 @@ async def get_dashboard(request: Request, user_data: dict = Depends(get_current_
             "user": {"username": user_data.get("sub")},
             "stats": stats
         })
-
-# Обработка редиректа если не авторизован
-@router.exception_handler(HTTPException)
-async def auth_exception_handler(request: Request, exc: HTTPException):
-    if exc.status_code == 303:
-        return RedirectResponse(url="/auth/login")
-    return await request.app.default_exception_handler(request, exc)
