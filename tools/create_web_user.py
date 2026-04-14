@@ -9,6 +9,8 @@ from sqlalchemy import select
 from src.database.session import SessionFactory
 from src.database.models.user import User
 from src.database.models.web_control import WebAccount
+
+# Прямой импорт, минуя __init__.py
 from src.services.auth_service import AuthService
 
 async def create_owner_account(login, password, tg_id):
