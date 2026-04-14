@@ -24,15 +24,18 @@ class PremiumBuilder:
         url: str | None = None, 
         web_app: Any = None
     ) -> PremiumBuilder:
-        """Добавить обычную кнопку (callback, url или web_app)."""
+        """Добавить кнопку любого типа с гарантированной чистотой объекта."""
+        btn = None
         if web_app:
-            self.builder.button(text=text, web_app=web_app)
+            btn = InlineKeyboardButton(text=text, web_app=web_app)
         elif url:
-            self.builder.button(text=text, url=url)
+            btn = InlineKeyboardButton(text=text, url=url)
         else:
             if isinstance(callback_data, CallbackData):
                 callback_data = callback_data.pack()
-            self.builder.button(text=text, callback_data=callback_data)
+            btn = InlineKeyboardButton(text=text, callback_data=callback_data)
+        
+        self.builder.add(btn)
         return self
 
     def primary(self, text: str, callback_data: Any) -> PremiumBuilder:

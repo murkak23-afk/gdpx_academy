@@ -2,8 +2,7 @@
 
 from __future__ import annotations
 
-from aiogram.types import InlineKeyboardMarkup
-
+from aiogram.types import InlineKeyboardMarkup, WebAppInfo
 from src.core.cache.keyboard_cache import cached_keyboard
 from src.presentation.common.base import PremiumBuilder
 from src.presentation.common.factory import QRDeliveryCD
@@ -12,7 +11,6 @@ from src.presentation.common.factory import QRDeliveryCD
 @cached_keyboard(ttl=600)
 def get_qr_delivery_main_kb(chat_id: int) -> InlineKeyboardMarkup:
     """Главное меню системы выдачи с привязкой к чату."""
-    from aiogram.types import WebAppInfo
     from src.core.config import get_settings
     settings = get_settings()
     
@@ -32,7 +30,12 @@ def get_qr_delivery_operators_kb(categories: list) -> InlineKeyboardMarkup:
     """Список операторов с количеством доступных симок."""
     builder = PremiumBuilder()
     for cat in categories:
-        builder.button(f"📡 {cat['title']} ({cat['count']})", QRDeliveryCD(action="op_pick", val=str(cat['id'])))
+        # Для безопасности данных
+        cat_id = cat['id'] if isinstance(cat, dict) else cat.id
+        title = cat['title'] if isinstance(cat, dict) else cat.title
+        count = cat['count'] if isinstance(cat, dict) else getattr(cat, 'count', 0)
+        
+        builder.button(f"📡 {title} ({count})", QRDeliveryCD(action="op_pick", val=str(cat_id)))
     
     builder.row()
     builder.button("❮ НАЗАД", QRDeliveryCD(action="menu"))
