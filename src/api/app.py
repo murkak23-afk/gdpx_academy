@@ -1,4 +1,4 @@
-"""FastAPI-приложение: healthcheck и WebApp-хаб."""
+"""FastAPI-приложение: healthcheck и WebApp-хаб. v1.0.1"""
 
 from __future__ import annotations
 
