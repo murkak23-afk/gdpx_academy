@@ -3,14 +3,12 @@
 from __future__ import annotations
 
 from aiogram.types import InlineKeyboardMarkup, WebAppInfo
-from src.core.cache.keyboard_cache import cached_keyboard
 from src.presentation.common.base import PremiumBuilder
 from src.presentation.common.factory import QRDeliveryCD
 
 
-@cached_keyboard(ttl=600)
 def get_qr_delivery_main_kb(chat_id: int) -> InlineKeyboardMarkup:
-    """Главное меню системы выдачи с привязкой к чату."""
+    """Главное меню системы выдачи с привязкой к чату. (БЕЗ КЭША для стабильности)"""
     from src.core.config import get_settings
     settings = get_settings()
     
@@ -25,12 +23,10 @@ def get_qr_delivery_main_kb(chat_id: int) -> InlineKeyboardMarkup:
             .adjust(1)
             .as_markup())
 
-@cached_keyboard(ttl=120)
 def get_qr_delivery_operators_kb(categories: list) -> InlineKeyboardMarkup:
     """Список операторов с количеством доступных симок."""
     builder = PremiumBuilder()
     for cat in categories:
-        # Для безопасности данных
         cat_id = cat['id'] if isinstance(cat, dict) else cat.id
         title = cat['title'] if isinstance(cat, dict) else cat.title
         count = cat['count'] if isinstance(cat, dict) else getattr(cat, 'count', 0)

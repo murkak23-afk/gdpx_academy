@@ -25,7 +25,6 @@ class PremiumBuilder:
         web_app: Any = None
     ) -> PremiumBuilder:
         """Добавить кнопку любого типа с гарантированной чистотой объекта."""
-        btn = None
         if web_app:
             btn = InlineKeyboardButton(text=text, web_app=web_app)
         elif url:
@@ -33,7 +32,8 @@ class PremiumBuilder:
         else:
             if isinstance(callback_data, CallbackData):
                 callback_data = callback_data.pack()
-            btn = InlineKeyboardButton(text=text, callback_data=callback_data)
+            # Если нет ни URL, ни WebApp, обязательно должен быть callback_data
+            btn = InlineKeyboardButton(text=text, callback_data=str(callback_data or "noop"))
         
         self.builder.add(btn)
         return self
