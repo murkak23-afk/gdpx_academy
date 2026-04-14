@@ -14,7 +14,7 @@
 
     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         {% for cat in categories %}
-            {{ cards.inventory_card(cat, stock[cat.id]) }}
+            {{ cards.inventory_card(cat, stock[cat.id], custom_prices) }}
         {% endfor %}
     </div>
 </div>

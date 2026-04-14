@@ -117,9 +117,26 @@ async def _background_delivery(bot: Bot, category_id: int, chat_id: int, thread_
         async with UnitOfWork(session=session) as uow:
             sub_svc = SubmissionService(uow)
             items = await sub_svc.take_from_warehouse(category_id, count)
+
             if not items: return
 
+            # Получаем цену для этого чата (покупателя)
+            from src.database.models.user import User
+            from src.database.models.web_control import SimbuyerPrice
+            buyer_stmt = select(User).where(User.telegram_id == chat_id)
+            buyer = (await session.execute(buyer_stmt)).scalar_one_or_none()
+
+            price_val = 0
+            if buyer:
+                price_stmt = select(SimbuyerPrice.price).where(and_(SimbuyerPrice.user_id == buyer.id, SimbuyerPrice.category_id == category_id))
+                price_val = (await session.execute(price_stmt)).scalar() or 0
+
             for item in items:
+                # Фиксируем цену покупки
+                item.purchase_price = price_val
+                item.delivered_to_chat = chat_id
+                item.delivered_to_thread = thread_id
+
                 try:
                     caption = (
                         f"📟 <b>eSIM #{item.id}</b>\n"

@@ -64,9 +64,10 @@ class Submission(Base, TimestampMixin):
     accepted_amount: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)
     hold_assigned: Mapped[str | None] = mapped_column(String(60), nullable=True)
     
-    # Фиксация места отгрузки
+    # Фиксация места и цены отгрузки
     delivered_to_chat: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     delivered_to_thread: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    purchase_price: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)
 
     # Строковые отношения 
     seller: Mapped["User"] = relationship("User", foreign_keys=[user_id], back_populates="submissions")

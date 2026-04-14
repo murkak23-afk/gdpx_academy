@@ -61,3 +61,15 @@ class DeliveryConfig(Base, TimestampMixin):
     thread_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
 
     category = relationship("Category")
+
+class SimbuyerPrice(Base, TimestampMixin):
+    """Персональные цены для конкретных покупателей."""
+    __tablename__ = "simbuyer_prices"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    category_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("categories.id", ondelete="CASCADE"), index=True)
+    price: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
+
+    user = relationship("User")
+    category = relationship("Category")
