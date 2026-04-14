@@ -1,40 +1,45 @@
 {% macro inventory_card(category, stock_count) %}
-<div class="group bg-white p-7 rounded-[24px] border border-slate-100 shadow-[0_8px_30px_rgb(0,0,0,0.04)] 
-            hover:shadow-[0_20px_40px_rgba(0,212,255,0.12)] hover:-translate-y-1.5 transition-all duration-500 ease-out flex flex-col justify-between h-[300px]">
+<div class="group bg-[#0a0a0f]/60 backdrop-blur-xl p-7 rounded-[24px] border border-white/10 shadow-[0_8px_30px_rgba(0,0,0,0.5)] 
+            hover:shadow-[0_20px_40px_rgba(0,217,255,0.2)] hover:-translate-y-1.5 transition-all duration-500 ease-out flex flex-col justify-between h-[300px] relative overflow-hidden">
     
-    <!-- Заголовок: eSIM слева, Имя справа в виде премиального бейджа -->
-    <div class="flex justify-between items-center gap-2">
+    <!-- Декоративный glow внутри карточки -->
+    <div class="absolute top-0 right-0 w-32 h-32 bg-nexus-cyan/10 rounded-full blur-[50px] pointer-events-none group-hover:bg-nexus-cyan/20 transition-colors duration-500"></div>
+
+    <!-- Заголовок: eSIM слева, Имя справа -->
+    <div class="flex justify-between items-center gap-2 relative z-10">
         <!-- Левый бейдж: "eSIM" -->
-        <div class="px-3 py-1 bg-slate-50/80 border border-slate-100 rounded-lg shadow-sm shrink-0">
-            <span class="text-[10px] font-medium text-slate-400 tracking-[0.25em] uppercase">eSIM</span>
+        <div class="px-4 py-1.5 bg-gradient-to-r from-nexus-cyan/10 to-nexus-sakura/10 border border-nexus-cyan/30 rounded-[10px] shadow-[0_0_10px_rgba(0,217,255,0.2)] group-hover:shadow-[0_0_20px_rgba(255,0,234,0.3)] transition-shadow duration-500 shrink-0">
+            <span class="text-[13px] font-semibold bg-gradient-to-r from-nexus-cyan to-nexus-sakura bg-clip-text text-transparent tracking-widest uppercase">
+                eSIM
+            </span>
         </div>
         
-        <!-- Правый бейдж: Стеклянный градиентный бейдж для оператора -->
-        <div class="px-3 py-1.5 bg-gradient-to-r from-nexus-cyan/5 to-nexus-sakura/5 border border-nexus-cyan/20 rounded-[10px] shadow-[0_0_10px_rgba(0,212,255,0.1)] group-hover:shadow-[0_0_20px_rgba(192,38,255,0.2)] transition-shadow duration-500 min-w-0 flex-1 flex justify-end">
-            <span class="text-[12px] font-semibold bg-gradient-to-r from-nexus-cyan to-nexus-sakura bg-clip-text text-transparent tracking-widest uppercase truncate text-right">
+        <!-- Правый бейдж: Оператор -->
+        <div class="px-4 py-1.5 bg-gradient-to-r from-nexus-cyan/10 to-nexus-sakura/10 border border-nexus-cyan/30 rounded-[10px] shadow-[0_0_10px_rgba(0,217,255,0.2)] group-hover:shadow-[0_0_20px_rgba(255,0,234,0.3)] transition-shadow duration-500 min-w-0 flex-1 flex justify-end">
+            <span class="text-[13px] font-semibold bg-gradient-to-r from-nexus-cyan to-nexus-sakura bg-clip-text text-transparent tracking-widest uppercase truncate text-right">
                 {{ category.title }}
             </span>
         </div>
     </div>
 
-    <!-- Данные: Очень тонкий, огромный премиальный шрифт -->
-    <div class="mt-4 flex-1 flex flex-col justify-center">
-        <div class="text-[64px] font-light tracking-tighter text-slate-800 leading-none group-hover:scale-105 origin-left transition-transform duration-500">{{ stock_count }}</div>
-        <div class="text-[12px] text-slate-400 font-medium mt-3 tracking-[0.1em] uppercase">Доступно активов</div>
+    <!-- Данные: Количество -->
+    <div class="mt-4 flex-1 flex flex-col justify-center relative z-10">
+        <div class="text-[64px] font-light tracking-tighter text-white leading-none group-hover:scale-105 origin-left transition-transform duration-500 drop-shadow-[0_0_15px_rgba(255,255,255,0.3)]">{{ stock_count }}</div>
+        <div class="text-[12px] text-nexus-cyan/80 font-medium mt-3 tracking-[0.1em] uppercase">Доступно активов</div>
     </div>
 
-    <!-- Инфо-блоки в виде матового контейнера -->
-    <div class="mt-auto">
-        <div class="flex items-center justify-between p-3.5 mb-4 bg-slate-50/50 rounded-[12px] border border-slate-50/80">
-            <span class="text-[12px] text-slate-500 tracking-wide">Цена за единицу:</span>
-            <span class="text-[14px] font-semibold text-nexus-success tracking-wide">{{ category.payout_rate }} USDT</span>
+    <!-- Инфо-блоки -->
+    <div class="mt-auto relative z-10">
+        <div class="flex items-center justify-between p-3.5 mb-4 bg-white/5 rounded-[12px] border border-white/10 backdrop-blur-sm">
+            <span class="text-[12px] text-white/60 tracking-wide">Цена за единицу:</span>
+            <span class="text-[14px] font-semibold text-nexus-cyan tracking-wide drop-shadow-[0_0_8px_rgba(0,217,255,0.8)]">{{ category.payout_rate }} USDT</span>
         </div>
 
-        <!-- Кнопка действия: Тонкий шрифт, плавный градиент -->
+        <!-- Кнопка -->
         <button onclick="openModal('{{ category.id }}', '{{ category.title }}', '{{ stock_count }}')" 
-                class="w-full h-[52px] rounded-[14px] font-medium text-white text-[15px] tracking-[0.05em] uppercase
+                class="w-full h-[52px] rounded-[14px] font-bold text-white text-[15px] tracking-[0.1em] uppercase
                        bg-gradient-to-r from-nexus-cyan to-nexus-sakura opacity-90 hover:opacity-100
-                       hover:shadow-[0_0_25px_rgba(0,212,255,0.35)] active:scale-[0.98] transition-all duration-300">
+                       shadow-[0_0_15px_rgba(0,217,255,0.3)] hover:shadow-[0_0_30px_rgba(255,0,234,0.5)] active:scale-[0.98] transition-all duration-300">
             Взять на скан
         </button>
     </div>
@@ -42,14 +47,14 @@
 {% endmacro %}
 
 {% macro ticket_card(ticket) %}
-<a href="/nexus/tickets/{{ ticket.id }}" class="block p-6 bg-white border border-slate-100 rounded-[20px] hover:border-nexus-cyan transition-all duration-300 shadow-[0_4px_20px_rgb(0,0,0,0.03)] hover:shadow-[0_10px_30px_rgba(0,212,255,0.1)] hover:-translate-y-1">
+<a href="/nexus/tickets/{{ ticket.id }}" class="block p-6 bg-[#0a0a0f]/60 backdrop-blur-xl border border-white/10 rounded-[20px] hover:border-nexus-cyan transition-all duration-300 shadow-[0_8px_30px_rgba(0,0,0,0.5)] hover:shadow-[0_10px_30px_rgba(0,217,255,0.2)] hover:-translate-y-1">
     <div class="flex justify-between items-center mb-4">
-        <div class="px-3 py-1 bg-nexus-sakura/10 border border-nexus-sakura/20 rounded-lg">
-            <span class="text-[10px] font-bold text-nexus-sakura tracking-widest uppercase">#{{ ticket.id }}</span>
+        <div class="px-3 py-1 bg-nexus-sakura/20 border border-nexus-sakura/30 rounded-lg">
+            <span class="text-[10px] font-bold text-nexus-sakura tracking-widest uppercase drop-shadow-[0_0_8px_rgba(255,0,234,0.8)]">#{{ ticket.id }}</span>
         </div>
-        <span class="text-[10px] bg-slate-50 border border-slate-100 px-3 py-1 rounded-lg text-slate-500 tracking-wide uppercase">{{ ticket.status }}</span>
+        <span class="text-[10px] bg-white/10 border border-white/20 px-3 py-1 rounded-lg text-white/80 tracking-wide uppercase">{{ ticket.status }}</span>
     </div>
-    <div class="font-medium text-[16px] text-slate-800 tracking-wide mb-2 line-clamp-1">{{ ticket.subject }}</div>
-    <div class="text-[12px] text-slate-400 tracking-wider">eSIM Референс: <span class="text-nexus-cyan">#{{ ticket.submission_id }}</span></div>
+    <div class="font-medium text-[16px] text-white tracking-wide mb-2 line-clamp-1">{{ ticket.subject }}</div>
+    <div class="text-[12px] text-white/50 tracking-wider">eSIM Референс: <span class="text-nexus-cyan drop-shadow-[0_0_5px_rgba(0,217,255,0.5)]">#{{ ticket.submission_id }}</span></div>
 </a>
 {% endmacro %}
