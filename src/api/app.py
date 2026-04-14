@@ -47,9 +47,10 @@ def create_app(bot: Bot, dispatcher: Dispatcher) -> FastAPI:
             return RedirectResponse(url="/auth/login")
         return await http_exception_handler(request, exc)
 
-    from src.api.routes import auth, nexus
+    from src.api.routes import auth, nexus, tickets
     app.include_router(auth.router)
     app.include_router(nexus.router)
+    app.include_router(tickets.router)
 
     @app.get("/delivery")
     async def delivery_page(request: Request):

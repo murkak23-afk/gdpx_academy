@@ -1,91 +1,69 @@
 {% extends "base.html" %}
 
-{% block title %}GDPX // ВХОД В СИСТЕМУ{% endblock %}
+{% block title %}GDPX // ВХОД{% endblock %}
 
 {% block content %}
-<div class="fixed inset-0 bg-nexus-bg flex flex-col justify-center items-center p-4 z-[100]">
+<div class="fixed inset-0 bg-[#0a0a0f] flex flex-col justify-center items-center p-4 z-[100]">
     
-    <!-- Декоративные фоновые элементы (Glow) -->
-    <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-nexus-cyan/10 rounded-full blur-[100px] opacity-50 pointer-events-none"></div>
-    <div class="absolute top-1/2 left-1/2 translate-x-[20%] -translate-y-[20%] w-[400px] h-[400px] bg-nexus-sakura/10 rounded-full blur-[80px] opacity-50 pointer-events-none"></div>
+    <!-- Параллакс-фон внутри логина для атмосферы -->
+    <div class="absolute inset-0 pointer-events-none opacity-40">
+        <div class="stars"></div>
+        <div class="parallax-layer layer-bg"></div>
+    </div>
 
-    <!-- Карточка логина -->
-    <div class="relative w-full max-w-[420px] bg-white/80 backdrop-blur-xl p-10 rounded-[24px] border border-slate-100 shadow-[0_8px_30px_rgb(0,0,0,0.04)] animate-in slide-in-from-bottom-4 duration-700 ease-out">
+    <!-- Карточка логина (Glassmorphism Dark) -->
+    <div class="relative w-full max-w-[420px] bg-[#0a0a0f]/80 backdrop-blur-2xl p-10 rounded-[32px] border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.8)] animate-in slide-in-from-bottom-4 duration-700 ease-out">
         
-        <!-- Логотип и Заголовок -->
+        <!-- Заголовок -->
         <div class="text-center mb-10">
-            <img src="/assets/logo.png" class="w-32 h-auto mx-auto mb-6 drop-shadow-sm" alt="GDPX Logo">
-            <h2 class="text-2xl font-bold text-slate-900 tracking-tight">Вход в панель управления</h2>
-            <p class="text-slate-500 text-[14px] mt-2">Введите учетные данные B2B портала</p>
+            <img src="/assets/logo.png" class="w-32 h-auto mx-auto mb-8 drop-shadow-[0_0_15px_rgba(0,217,255,0.5)]" alt="GDPX Logo">
+            <h2 class="text-[14px] font-bold text-nexus-cyan tracking-[0.3em] uppercase drop-shadow-[0_0_10px_rgba(0,217,255,0.8)]">Академия GDPX / УПРАВЛЕНИЕ</h2>
+            <p class="text-white/40 text-[12px] mt-4 tracking-widest uppercase">Авторизация в Nexus Control</p>
         </div>
 
-        <!-- Форма HTMX -->
+        <!-- Форма -->
         <form hx-post="/auth/login" 
               hx-target="#error-container" 
-              hx-indicator="#loading-spinner"
-              class="flex flex-col gap-5">
+              class="flex flex-col gap-6">
             
             <!-- Поле: Логин -->
             <div class="flex flex-col gap-2">
-                <label class="text-[12px] font-semibold text-slate-500 uppercase tracking-widest ml-1">Логин</label>
-                <div class="relative">
-                    <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                        <svg class="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
-                    </div>
+                <div class="relative group">
                     <input type="text" name="login" required
-                           class="w-full bg-slate-50/50 border border-slate-200 rounded-[14px] pl-11 pr-4 py-3.5 outline-none focus:border-nexus-cyan focus:bg-white focus:ring-4 focus:ring-nexus-cyan/10 transition-all text-slate-900 placeholder:text-slate-400 font-medium"
-                           placeholder="username">
+                           class="w-full bg-white/5 border border-white/10 rounded-[16px] px-6 py-4 outline-none focus:border-nexus-cyan/50 focus:ring-1 focus:ring-nexus-cyan/20 transition-all text-white font-medium placeholder:text-white/20"
+                           placeholder="ЛОГИН">
                 </div>
             </div>
 
             <!-- Поле: Пароль -->
             <div class="flex flex-col gap-2" x-data="{ show: false }">
-                <div class="flex justify-between items-center ml-1">
-                    <label class="text-[12px] font-semibold text-slate-500 uppercase tracking-widest">Пароль</label>
-                    <a href="#" class="text-[12px] font-medium text-nexus-cyan hover:text-nexus-sakura transition-colors">Забыли пароль?</a>
-                </div>
-                <div class="relative">
-                    <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                        <svg class="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
-                    </div>
+                <div class="relative group">
                     <input :type="show ? 'text' : 'password'" name="password" required
-                           class="w-full bg-slate-50/50 border border-slate-200 rounded-[14px] pl-11 pr-12 py-3.5 outline-none focus:border-nexus-cyan focus:bg-white focus:ring-4 focus:ring-nexus-cyan/10 transition-all text-slate-900 font-medium"
-                           placeholder="••••••••">
+                           class="w-full bg-white/5 border border-white/10 rounded-[16px] px-6 py-4 outline-none focus:border-nexus-cyan/50 focus:ring-1 focus:ring-nexus-cyan/20 transition-all text-white font-medium placeholder:text-white/20"
+                           placeholder="ПАРОЛЬ">
                     <button type="button" @click="show = !show" 
-                            class="absolute inset-y-0 right-0 pr-4 flex items-center text-slate-400 hover:text-nexus-cyan transition-colors">
+                            class="absolute inset-y-0 right-0 pr-6 flex items-center text-white/20 hover:text-nexus-cyan transition-colors">
                         <svg x-show="!show" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
                         <svg x-show="show" x-cloak class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.05 0 011.563-3.074m9.448-4.854A10 10 0 0112 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-1.274 0-2.454-.21-3.54-.592M9.75 9.75l4.5 4.5m-4.5 0l4.5-4.5M3 3l18 18" /></svg>
                     </button>
                 </div>
             </div>
 
-            <!-- Контейнер для ошибок (HTMX сюда вставляет текст) -->
             <div id="error-container"></div>
 
-            <!-- Главная кнопка -->
+            <!-- Кнопка -->
             <button type="submit" 
-                    class="group relative mt-2 w-full h-[54px] rounded-[14px] font-semibold text-white text-[16px] tracking-wide
+                    class="w-full h-[58px] rounded-[18px] font-bold text-white text-[14px] tracking-[0.3em] uppercase
                            bg-gradient-to-r from-nexus-cyan to-nexus-sakura 
-                           hover:shadow-[0_0_30px_rgba(0,212,255,0.4)] hover:-translate-y-0.5 active:scale-[0.98] transition-all duration-300 overflow-hidden flex items-center justify-center">
-                
-                <!-- Индикатор загрузки -->
-                <span id="loading-spinner" class="htmx-indicator absolute inset-0 flex items-center justify-center bg-gradient-to-r from-nexus-cyan to-nexus-sakura z-10">
-                    <svg class="animate-spin h-6 w-6 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
-                </span>
-                
-                <span>Войти в систему</span>
+                           hover:shadow-[0_0_40px_rgba(0,212,255,0.4)] hover:-translate-y-0.5 active:scale-[0.98] transition-all duration-300">
+                ВОЙТИ В NEXUS
             </button>
         </form>
     </div>
 </div>
 
-<!-- Скрываем сайдбар для страницы входа -->
 <style>
     aside, header { display: none !important; }
     main { padding: 0 !important; }
-    body { background-color: #FAF9F6 !important; }
 </style>
 {% endblock %}
