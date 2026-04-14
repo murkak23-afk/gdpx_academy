@@ -546,7 +546,7 @@ class SubmissionService:
         return [{"category_id": int(cid), "title": title, "total": int(cnt)} for cid, title, cnt in rows]
 
     async def take_from_warehouse(self, category_id: int, count: int) -> list[Submission]:
-        stmt = select(Submission).options(joinedload(Submission.owner)).where(Submission.category_id == category_id, Submission.status == SubmissionStatus.PENDING).order_by(Submission.created_at.asc()).limit(count).with_for_update()
+        stmt = select(Submission).options(joinedload(Submission.seller)).where(Submission.category_id == category_id, Submission.status == SubmissionStatus.PENDING).order_by(Submission.created_at.asc()).limit(count).with_for_update()
         items = list((await self._uow.session.execute(stmt)).scalars().all())
         for item in items:
             item.status = SubmissionStatus.IN_WORK
