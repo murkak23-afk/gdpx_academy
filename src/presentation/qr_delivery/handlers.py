@@ -171,7 +171,7 @@ async def process_delivery_count(message: Message, state: FSMContext, session: A
         reply_markup=get_qr_delivery_main_kb()
     )
 
-@router.callback_query(QRDeliveryCD.filter(F.action == "cancel"))
+@router.callback_query(QRDeliveryCD.filter(F.action == "cancel"), StateFilter("*"))
 async def cb_delivery_cancel(callback: CallbackQuery, state: FSMContext, session: AsyncSession, ui: MessageManager):
     await state.clear()
     await cmd_qr_delivery_menu(callback, session, state, ui)
