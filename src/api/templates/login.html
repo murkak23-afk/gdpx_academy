@@ -3,120 +3,112 @@
 {% block title %}GDPX // AUTHORIZATION{% endblock %}
 
 {% block content %}
-<div class="fixed inset-0 bg-[#050508] flex flex-col justify-center items-center p-4 z-[100] overflow-hidden">
+<div class="fixed inset-0 bg-[#050508] flex flex-col justify-center items-center p-4 z-[100] overflow-hidden text-center">
     
-    <!-- Анимированный премиум-фон (Японский минимализм) -->
-    <div class="absolute inset-0 z-0 pointer-events-none">
-        <!-- Радиальный градиент -->
-        <div class="absolute inset-0 bg-[radial-gradient(circle_at_50%_-20%,#1e1b4b,transparent)] opacity-40"></div>
+    <!-- ВЕЛИЧЕСТВЕННЫЙ ЯПОНСКИЙ ФОН (Теневые силуэты) -->
+    <div class="absolute inset-0 z-0 pointer-events-none select-none">
+        <!-- Глубокое свечение -->
+        <div class="absolute inset-0 bg-[radial-gradient(circle_at_50%_40%,#1e1b4b,transparent)] opacity-60"></div>
         
-        <!-- Силуэт Японского пейзажа (SVG) -->
-        <svg class="absolute bottom-0 left-0 w-full h-auto opacity-[0.07]" viewBox="0 0 1440 320" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
-            <!-- Гора Фудзи -->
-            <path d="M720 100 L950 320 L490 320 Z" fill="#ffffff" />
-            <!-- Пагода (упрощенный силуэт) -->
-            <rect x="150" y="180" width="60" height="140" fill="#ffffff" />
-            <path d="M130 180 L230 180 L180 150 Z" fill="#ffffff" />
-            <path d="M140 220 L220 220 L180 200 Z" fill="#ffffff" />
-            <path d="M145 260 L215 260 L180 245 Z" fill="#ffffff" />
-            <!-- Сакура (ветки) -->
-            <path d="M1100 320 Q 1150 150 1300 100" stroke="#ffffff" stroke-width="2" fill="none" />
-            <circle cx="1280" cy="110" r="10" fill="#ff00ea" opacity="0.5" />
-            <circle cx="1250" cy="130" r="8" fill="#ff00ea" opacity="0.3" />
-            <circle cx="1220" cy="160" r="12" fill="#ff00ea" opacity="0.2" />
+        <!-- Гора Фудзи (Центральный массивный силуэт) -->
+        <svg class="absolute bottom-0 left-1/2 -translate-x-1/2 w-[120%] h-auto opacity-[0.04] text-white" viewBox="0 0 1000 400" fill="currentColor">
+            <path d="M500 50 L850 400 L150 400 Z" />
+            <path d="M500 50 L580 130 L420 130 Z" class="opacity-20" /> <!-- Снежная шапка -->
         </svg>
 
-        <!-- Катана (силуэт в углу) -->
-        <svg class="absolute top-10 right-10 w-64 h-64 opacity-[0.03] rotate-45" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
-            <path d="M10 90 L90 10 M12 92 L92 12" stroke="#ffffff" stroke-width="0.5" fill="none" />
-            <rect x="5" y="85" width="10" height="10" rx="2" fill="#ffffff" />
+        <!-- Пагода (Детальный силуэт слева) -->
+        <svg class="absolute bottom-0 left-[5%] w-[300px] md:w-[450px] h-auto opacity-[0.03] text-white" viewBox="0 0 200 400" fill="currentColor">
+            <rect x="80" y="300" width="40" height="100" />
+            <path d="M60 300 L140 300 L100 270 Z" />
+            <rect x="85" y="240" width="30" height="60" />
+            <path d="M65 240 L135 240 L100 210 Z" />
+            <rect x="90" y="190" width="20" height="50" />
+            <path d="M70 190 L130 190 L100 165 Z" />
+            <path d="M98 100 L102 100 L100 165 Z" /> <!-- Шпиль -->
         </svg>
 
-        <!-- Цветные блики -->
-        <div class="absolute -top-[20%] -left-[10%] w-[50%] h-[50%] rounded-full bg-nexus-cyan/5 blur-[120px]"></div>
+        <!-- Ветка Сакуры (Сверху справа) -->
+        <svg class="absolute top-0 right-0 w-[400px] md:w-[600px] h-auto opacity-[0.05] text-white flip-x" viewBox="0 0 300 200" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path d="M300 20 Q 200 50 150 120 T 50 180" />
+            <path d="M220 45 Q 180 20 140 40" />
+            <path d="M160 105 Q 120 80 80 110" />
+            <!-- Лепестки -->
+            <circle cx="150" cy="120" r="3" fill="#ff00ea" stroke="none" />
+            <circle cx="140" cy="40" r="2" fill="#ff00ea" stroke="none" />
+            <circle cx="80" cy="110" r="4" fill="#ff00ea" stroke="none" />
+            <circle cx="50" cy="180" r="3" fill="#ff00ea" stroke="none" />
+        </svg>
+
+        <!-- Силуэт Катаны (Тонкая линия через фон) -->
+        <div class="absolute top-1/2 left-0 w-full h-[1px] bg-gradient-to-r from-transparent via-white/5 to-transparent -rotate-[15deg]"></div>
     </div>
 
-    <!-- Контейнер карточки логина -->
-    <div class="relative z-10 w-full max-w-[440px] animate-in fade-in slide-in-from-bottom-8 duration-1000 ease-out">
+    <!-- КОНТЕЙНЕР КАРТОЧКИ -->
+    <div class="relative z-10 w-full max-w-[480px] animate-in fade-in slide-in-from-bottom-12 duration-1000 ease-out">
         
-        <!-- Сама карточка Glassmorphism -->
-        <div class="bg-white/[0.02] backdrop-blur-3xl p-10 sm:p-12 rounded-[40px] border border-white/10 shadow-[0_30px_100px_rgba(0,0,0,0.8),_inset_0_1px_0_rgba(255,255,255,0.1)] relative overflow-hidden group">
+        <!-- Карточка Glassmorphism -->
+        <div class="bg-white/[0.01] backdrop-blur-[40px] p-12 sm:p-16 rounded-[48px] border border-white/10 shadow-[0_40px_120px_rgba(0,0,0,0.9)] relative overflow-hidden group">
             
-            <!-- Легкий блик на карточке при наведении -->
-            <div class="absolute inset-0 bg-gradient-to-br from-white/[0.05] to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-700 pointer-events-none"></div>
+            <div class="absolute inset-0 bg-gradient-to-br from-nexus-cyan/[0.03] to-nexus-sakura/[0.03] opacity-50"></div>
 
-            <!-- Заголовок и Лого -->
-            <div class="text-center mb-10 relative">
-                <!-- Здесь твоя картинка-логотип (подставь правильный путь, если он другой) -->
-                <!-- Я добавила эффект парения и неоновой тени -->
-                <div class="relative inline-block mb-8 animate-bounce" style="animation-duration: 4s;">
-                    <div class="absolute inset-0 bg-nexus-cyan blur-[40px] opacity-20 rounded-full"></div>
-                    <img src="/assets/logo.png" class="w-44 h-auto relative z-10 drop-shadow-[0_0_25px_rgba(0,217,255,0.5)]" alt="GDPX" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
-                    <!-- Заглушка, если картинки нет -->
-                    <div class="hidden w-32 h-32 mx-auto rounded-full bg-gradient-to-br from-nexus-cyan to-nexus-sakura p-1 relative z-10 shadow-[0_0_40px_rgba(0,217,255,0.3)]">
+            <!-- ЛОГОТИП И ЗАГОЛОВОК (УВЕЛИЧЕННЫЕ) -->
+            <div class="text-center mb-12 relative">
+                <div class="relative inline-block mb-10 animate-bounce" style="animation-duration: 5s;">
+                    <div class="absolute inset-0 bg-nexus-cyan blur-[50px] opacity-20 rounded-full"></div>
+                    <img src="/assets/logo.png" class="w-56 h-auto relative z-10 drop-shadow-[0_0_30px_rgba(0,217,255,0.6)]" alt="GDPX">
+                    <div class="hidden w-40 h-40 mx-auto rounded-full bg-gradient-to-br from-nexus-cyan to-nexus-sakura p-1 relative z-10 shadow-[0_0_50px_rgba(0,217,255,0.4)]">
                         <div class="w-full h-full bg-[#0a0a0f] rounded-full flex items-center justify-center">
-                            <span class="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-nexus-cyan to-white tracking-widest">GDPX</span>
+                            <span class="text-4xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-nexus-cyan to-white tracking-widest">GDPX</span>
                         </div>
                     </div>
                 </div>
 
-                <h2 class="text-[14px] sm:text-[16px] font-semibold text-white tracking-[0.4em] uppercase">Академия GDPX</h2>
-                <div class="h-[1px] w-12 bg-white/20 mx-auto my-3"></div>
-                <p class="text-nexus-cyan text-[10px] sm:text-[11px] tracking-[0.5em] uppercase font-bold drop-shadow-[0_0_8px_rgba(0,217,255,0.5)]">Access Restricted</p>
+                <h2 class="text-[22px] sm:text-[26px] font-bold text-white tracking-[0.5em] uppercase drop-shadow-[0_0_15px_rgba(255,255,255,0.3)]">Академия GDPX</h2>
+                <div class="h-[2px] w-20 bg-gradient-to-r from-transparent via-white/30 to-transparent mx-auto my-5"></div>
+                <p class="text-nexus-cyan text-[11px] sm:text-[12px] tracking-[0.6em] uppercase font-black drop-shadow-[0_0_10px_rgba(0,217,255,0.6)]">Access Restricted</p>
             </div>
 
-            <!-- Форма -->
-            <form hx-post="/auth/login" hx-target="#error-container" class="flex flex-col gap-5 relative z-10">
+            <!-- ФОРМА -->
+            <form hx-post="/auth/login" hx-target="#error-container" class="flex flex-col gap-6 relative z-10">
                 
-                <!-- Поле Логин -->
                 <div class="relative group/input">
-                    <div class="absolute -inset-0.5 bg-gradient-to-r from-nexus-cyan to-nexus-sakura rounded-[20px] opacity-0 group-hover/input:opacity-20 transition duration-500 blur-sm"></div>
+                    <div class="absolute -inset-0.5 bg-gradient-to-r from-nexus-cyan to-nexus-sakura rounded-[22px] opacity-0 group-hover/input:opacity-30 transition duration-500 blur-sm"></div>
                     <input type="text" name="login" required autocomplete="off"
-                           class="relative w-full bg-[#050508]/80 border border-white/10 rounded-[18px] px-6 py-4.5 outline-none focus:border-nexus-cyan focus:bg-white/[0.05] focus:shadow-[0_0_20px_rgba(0,217,255,0.15)] text-white placeholder:text-white/20 font-medium tracking-widest text-[13px] transition-all duration-300" 
+                           class="relative w-full bg-black/40 border border-white/10 rounded-[20px] px-8 py-5 outline-none focus:border-nexus-cyan focus:bg-white/[0.05] text-white placeholder:text-white/10 font-medium tracking-widest text-[14px] transition-all duration-300" 
                            placeholder="USERNAME / ID">
                 </div>
 
-                <!-- Поле Пароль -->
                 <div class="relative group/input">
-                    <div class="absolute -inset-0.5 bg-gradient-to-r from-nexus-cyan to-nexus-sakura rounded-[20px] opacity-0 group-hover/input:opacity-20 transition duration-500 blur-sm"></div>
+                    <div class="absolute -inset-0.5 bg-gradient-to-r from-nexus-cyan to-nexus-sakura rounded-[22px] opacity-0 group-hover/input:opacity-30 transition duration-500 blur-sm"></div>
                     <input type="password" name="password" required 
-                           class="relative w-full bg-[#050508]/80 border border-white/10 rounded-[18px] px-6 py-4.5 outline-none focus:border-nexus-sakura focus:bg-white/[0.05] focus:shadow-[0_0_20px_rgba(255,0,234,0.15)] text-white placeholder:text-white/20 font-medium tracking-widest text-[13px] transition-all duration-300" 
+                           class="relative w-full bg-black/40 border border-white/10 rounded-[20px] px-8 py-5 outline-none focus:border-nexus-sakura focus:bg-white/[0.05] text-white placeholder:text-white/10 font-medium tracking-widest text-[14px] transition-all duration-300" 
                            placeholder="PASSWORD">
                 </div>
 
-                <!-- Контейнер для ошибок (будет заполняться HTMX) -->
-                <div id="error-container" class="min-h-[24px] empty:hidden transition-all duration-300"></div>
+                <div id="error-container" class="min-h-[24px]"></div>
                 
-                <!-- Кнопка -->
-                <button type="submit" onclick="this.innerHTML='<span class=\'animate-pulse\'>ПОДКЛЮЧЕНИЕ...</span>'; this.classList.add('opacity-80');"
-                        class="relative w-full h-[60px] mt-2 rounded-[18px] font-bold text-white text-[13px] tracking-[0.3em] uppercase bg-gradient-to-r from-nexus-cyan to-nexus-sakura overflow-hidden group/btn shadow-[0_0_30px_rgba(255,0,234,0.2)] hover:shadow-[0_0_50px_rgba(0,217,255,0.4)] transition-all duration-500 hover:-translate-y-1 active:translate-y-0 active:scale-[0.98]">
+                <button type="submit" onclick="this.innerHTML='<span class=\'animate-pulse\'>AUTHENTICATING...</span>';"
+                        class="relative w-full h-[64px] mt-2 rounded-[20px] font-black text-white text-[14px] tracking-[0.4em] uppercase bg-gradient-to-r from-nexus-cyan to-nexus-sakura overflow-hidden group/btn shadow-[0_0_40px_rgba(255,0,234,0.3)] hover:shadow-[0_0_60px_rgba(0,217,255,0.5)] transition-all duration-700 hover:-translate-y-1 active:scale-[0.98]">
                     
-                    <!-- Эффект бегущего блика на кнопке -->
-                    <div class="absolute top-0 -inset-full h-full w-1/2 z-5 block transform -skew-x-12 bg-gradient-to-r from-transparent to-white opacity-20 group-hover/btn:animate-[shine_1.5s_ease-in-out_infinite]"></div>
+                    <div class="absolute top-0 -inset-full h-full w-1/2 z-5 block transform -skew-x-12 bg-gradient-to-r from-transparent to-white opacity-20 group-hover/btn:animate-[shine_2s_ease-in-out_infinite]"></div>
                     
                     <span class="relative z-10">ВОЙТИ В СИСТЕМУ</span>
                 </button>
             </form>
 
-            <!-- Декоративные элементы на карточке -->
-            <div class="absolute top-0 right-0 w-16 h-16 bg-gradient-to-bl from-white/10 to-transparent rounded-bl-[40px] pointer-events-none"></div>
-            <div class="absolute bottom-0 left-0 w-16 h-16 bg-gradient-to-tr from-white/10 to-transparent rounded-tr-[40px] pointer-events-none"></div>
-            
-            <div class="absolute bottom-6 left-0 w-full text-center pointer-events-none opacity-20">
-                <p class="text-[8px] font-mono tracking-[0.4em] text-white">NEXUS CORE V2.0 // SECURE CONNECTION</p>
+            <!-- Техническая подпись -->
+            <div class="mt-12 pointer-events-none opacity-20">
+                <p class="text-[9px] font-mono tracking-[0.5em] text-white">NEXUS CORE V2.0 // JAPANESE MINIMALISM EDITION</p>
             </div>
         </div>
     </div>
 </div>
 
 <style>
-    /* Скрываем элементы глобального шаблона (меню, хедеры), оставляем только чистый экран логина */
-    aside, header, .fixed.inset-0#hero { display: none !important; }
+    aside, header, main, .fixed.inset-0#hero { display: none !important; }
+    main { padding: 0 !important; margin: 0 !important; width: 100% !important; height: 100% !important; }
+    .flip-x { transform: scaleX(-1); }
     
-    /* Убираем отступы у main только для страницы логина */
-    main { padding: 0 !important; margin: 0 !important; width: 100% !important; }
-    
-    /* Анимация для кнопки */
     @keyframes shine {
         0% { left: -100%; }
         100% { left: 200%; }
