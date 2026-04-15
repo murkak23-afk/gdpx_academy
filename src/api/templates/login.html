@@ -105,8 +105,20 @@
 </div>
 
 <style>
-    aside, header, main, .fixed.inset-0#hero { display: none !important; }
-    main { padding: 0 !important; margin: 0 !important; width: 100% !important; height: 100% !important; }
+    /* Скрываем только боковую панель и мобильную шапку */
+    aside, header, .fixed.inset-0#hero { display: none !important; }
+    
+    /* Делаем main невидимым контейнером на весь экран */
+    main { 
+        padding: 0 !important; 
+        margin: 0 !important; 
+        width: 100vw !important; 
+        height: 100vh !important; 
+        display: flex !important; 
+        align-items: center; 
+        justify-content: center;
+        background: transparent !important;
+    }
     .flip-x { transform: scaleX(-1); }
     
     @keyframes shine {
