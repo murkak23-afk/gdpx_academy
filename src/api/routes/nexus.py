@@ -8,11 +8,11 @@ from sqlalchemy import select, func, and_
 from sqlalchemy.orm import joinedload
 from src.database.session import SessionFactory
 from src.database.models.user import User
-from src.database.models.submission import Submission, SupportTicket, ChatMessage
+from src.database.models.submission import Submission
 from src.database.models.admin_audit import AdminAuditLog
 from src.database.models.category import Category
 from src.database.models.enums import SubmissionStatus, UserRole
-from src.database.models.web_control import SimbuyerPrice
+from src.database.models.web_control import SimbuyerPrice, SupportTicket, ChatMessage
 from src.services.auth_service import AuthService
 from src.core.utils.audit_logger import log_admin_action
 
