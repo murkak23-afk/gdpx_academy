@@ -2,10 +2,16 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timezone, timedelta
-from fastapi import APIRouter, Request, Depends, HTTPException, Form
-from fastapi.responses import HTMLResponse, RedirectResponse
+from typing import Optional
+from decimal import Decimal
+import io
+import csv
+
+from fastapi import APIRouter, Request, Depends, HTTPException, Form, BackgroundTasks
+from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
 from sqlalchemy import select, func, and_
 from sqlalchemy.orm import joinedload
+
 from src.database.session import SessionFactory
 from src.database.models.user import User
 from src.database.models.submission import Submission
@@ -13,21 +19,24 @@ from src.database.models.category import Category
 from src.database.models.enums import SubmissionStatus, UserRole
 from src.database.models.web_control import SimbuyerPrice, SupportTicket, ChatMessage, DeliveryConfig, WebAccount
 from src.database.models.admin_audit import AdminAuditLog
-from src.services.auth_service import AuthService
+from src.api.deps import templates, get_current_user, RoleChecker, get_db
 from src.core.utils.audit_logger import log_admin_action
 from src.core.bot import bot
+from src.services.delivery_service import background_delivery_task
+from src.domain.submission.submission_service import SubmissionService
 
-from fastapi import APIRouter, Request, Depends, HTTPException, Form, BackgroundTasks
-from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
-import io
+router = APIRouter(prefix="/nexus", tags=["Nexus"])
+logger = logging.getLogger(__name__)
+
+# RBAC Dependencies
+admin_only = RoleChecker([UserRole.OWNER, UserRole.ADMIN])
+owner_only = RoleChecker([UserRole.OWNER])
 
 @router.get("/media/{file_id}")
-async def get_media_proxy(file_id: str, user_data: dict = Depends(get_current_user)):
+async def get_media_proxy(file_id: str, user: User = Depends(get_current_user)):
     """Прокси для отображения фото из Telegram по file_id."""
     try:
-        from src.core.bot import bot
         file = await bot.get_file(file_id)
-        # Скачиваем файл в память
         dest = io.BytesIO()
         await bot.download_file(file.file_path, destination=dest)
         dest.seek(0)
@@ -37,13 +46,9 @@ async def get_media_proxy(file_id: str, user_data: dict = Depends(get_current_us
         return HTMLResponse(content="Media error", status_code=404)
 
 @router.get("/users/blacklist", response_class=HTMLResponse)
-async def get_blacklist(request: Request, user_data: dict = Depends(get_current_user)):
+async def get_blacklist(request: Request, user: User = Depends(admin_only)):
     """Просмотр заблокированных пользователей."""
     async with SessionFactory() as session:
-        user = await session.get(User, user_data.get("user_id"))
-        if user.role not in [UserRole.OWNER, UserRole.ADMIN]:
-            raise HTTPException(status_code=403, detail="Permission denied")
-            
         stmt = select(User).where(User.is_active == False).order_by(User.updated_at.desc())
         blocked_users = (await session.execute(stmt)).scalars().all()
         
@@ -57,13 +62,9 @@ async def get_blacklist(request: Request, user_data: dict = Depends(get_current_
         })
 
 @router.post("/users/{target_id}/toggle-active")
-async def toggle_user_active(target_id: int, user_data: dict = Depends(get_current_user)):
+async def toggle_user_active(target_id: int, user: User = Depends(admin_only)):
     """Блокировка/разблокировка пользователя."""
     async with SessionFactory() as session:
-        user = await session.get(User, user_data.get("user_id"))
-        if user.role not in [UserRole.OWNER, UserRole.ADMIN]:
-            raise HTTPException(status_code=403, detail="Permission denied")
-            
         target = await session.get(User, target_id)
         if target:
             if target.id == user.id:
@@ -81,29 +82,9 @@ async def toggle_user_active(target_id: int, user_data: dict = Depends(get_curre
             )
             return HTMLResponse(content='<script>window.location.reload();</script>')
         return HTTPException(status_code=404)
-
-from src.services.delivery_service import background_delivery_task
-from src.database.uow import UnitOfWork
-from src.domain.submission.submission_service import SubmissionService
-
-router = APIRouter(prefix="/nexus", tags=["Nexus"])
-logger = logging.getLogger(__name__)
-
-async def get_current_user(request: Request):
-    token = request.cookies.get("nexus_session")
-    if not token:
-        raise HTTPException(status_code=303, detail="Not authorized")
-    payload = AuthService.decode_token(token)
-    if not payload:
-        raise HTTPException(status_code=303, detail="Invalid session")
-    return payload
-
-from src.api.deps import templates
 @router.get("", response_class=HTMLResponse)
-async def get_dashboard(request: Request, user_data: dict = Depends(get_current_user)):
+async def get_dashboard(request: Request, user: User = Depends(get_current_user)):
     async with SessionFactory() as session:
-        user = await session.get(User, user_data.get("user_id"))
-        
         # Общий склад (видят ВСЕ)
         stock_count = await session.scalar(select(func.count(Submission.id)).where(Submission.status == SubmissionStatus.PENDING)) or 0
         today_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
@@ -121,12 +102,11 @@ async def get_dashboard(request: Request, user_data: dict = Depends(get_current_
             }
         else:
             # Личная статистика для SIMBUYER
-            # Считаем сколько взял сегодня и сколько из них принято
             base_stmt = select(Submission).where(Submission.delivered_to_chat == user.telegram_id, Submission.updated_at >= today_start)
             user_today_subs = (await session.execute(base_stmt)).scalars().all()
             
             stats = {
-                "stock": stock_count, # Видит общий склад
+                "stock": stock_count, 
                 "workers": 0,
                 "today_count": len(user_today_subs),
                 "today_amount": sum([s.purchase_price or 0 for s in user_today_subs if s.status == SubmissionStatus.ACCEPTED])
@@ -140,11 +120,8 @@ async def get_dashboard(request: Request, user_data: dict = Depends(get_current_
         })
 
 @router.get("/inventory", response_class=HTMLResponse)
-async def get_inventory(request: Request, user_data: dict = Depends(get_current_user)):
-    
+async def get_inventory(request: Request, user: User = Depends(get_current_user)):
     async with SessionFactory() as session:
-        user = await session.get(User, user_data.get("user_id"))
-        
         # Получаем активные категории
         stmt = select(Category).where(Category.is_active == True).order_by(Category.title.asc())
         categories = (await session.execute(stmt)).scalars().all()
@@ -154,7 +131,7 @@ async def get_inventory(request: Request, user_data: dict = Depends(get_current_
         custom_prices_raw = (await session.execute(price_stmt)).scalars().all()
         prices = {p.category_id: p.price for p in custom_prices_raw}
         
-        # Заполняем пропуски базовыми ценами категорий для корректного отображения
+        # Заполняем пропуски базовыми ценами категорий
         for cat in categories:
             if cat.id not in prices:
                 prices[cat.id] = cat.payout_rate
@@ -172,16 +149,13 @@ async def get_inventory(request: Request, user_data: dict = Depends(get_current_
             "user": user,
             "categories": categories,
             "stock": stock_data,
-            "custom_prices": prices, # Передаем цены в шаблон
+            "custom_prices": prices,
             "active_page": "inventory"
         })
 
 @router.get("/my-esim", response_class=HTMLResponse)
-async def get_my_esim(request: Request, user_data: dict = Depends(get_current_user)):
-    
+async def get_my_esim(request: Request, user: User = Depends(get_current_user)):
     async with SessionFactory() as session:
-        user = await session.get(User, user_data.get("user_id"))
-        
         stmt = select(Submission).options(joinedload(Submission.category)).where(Submission.status == SubmissionStatus.IN_WORK)
         if user.role == UserRole.SIMBUYER:
             stmt = stmt.where(Submission.delivered_to_chat == user.telegram_id)
@@ -196,23 +170,16 @@ async def get_my_esim(request: Request, user_data: dict = Depends(get_current_us
         })
 
 @router.get("/reports", response_class=HTMLResponse)
-async def get_reports(request: Request, user_data: dict = Depends(get_current_user)):
-    
+async def get_reports(request: Request, user: User = Depends(get_current_user)):
     async with SessionFactory() as session:
-        user = await session.get(User, user_data.get("user_id"))
-        
-        # Считаем сводку за сегодня (с 00:00 текущего дня)
-        # ВАЖНО: берем все симки, которые были ОБНОВЛЕНЫ сегодня (т.е. получили статус)
         today_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
         
         base_stmt = select(Submission).where(Submission.updated_at >= today_start)
         if user.role == UserRole.SIMBUYER:
             base_stmt = base_stmt.where(Submission.delivered_to_chat == user.telegram_id)
 
-        # Сбор данных для KPI
         all_today = (await session.execute(base_stmt)).scalars().all()
         
-        # Считаем только те, что были ВЫДАНЫ или ЗАВЕРШЕНЫ сегодня
         stats = {
             "total_taken": len([s for s in all_today if s.status != SubmissionStatus.PENDING]),
             "blocks": len([s for s in all_today if s.status == SubmissionStatus.BLOCKED]),
@@ -221,10 +188,8 @@ async def get_reports(request: Request, user_data: dict = Depends(get_current_us
             "total_spend": sum([s.purchase_price or 0 for s in all_today if s.status == SubmissionStatus.ACCEPTED])
         }
         
-        # Коэффициент успеха
         stats["success_rate"] = round((stats["accepted"] / stats["total_taken"] * 100), 1) if stats["total_taken"] > 0 else 0
 
-        # Список для таблицы (последние 500 за сегодня)
         stmt_list = base_stmt.options(joinedload(Submission.category)).order_by(Submission.updated_at.desc()).limit(500)
         shipments = (await session.execute(stmt_list)).scalars().all()
 
@@ -237,17 +202,9 @@ async def get_reports(request: Request, user_data: dict = Depends(get_current_us
         })
 
 @router.get("/reports/export")
-async def export_reports_csv(user_data: dict = Depends(get_current_user)):
-    """Выгрузка отчетов в CSV (Улучшение 4)."""
-    import io
-    import csv
-    from fastapi.responses import StreamingResponse
-    
+async def export_reports_csv(user: User = Depends(admin_only)):
+    """Выгрузка отчетов в CSV."""
     async with SessionFactory() as session:
-        user = await session.get(User, user_data.get("user_id"))
-        if user.role not in [UserRole.OWNER, UserRole.ADMIN]:
-            raise HTTPException(status_code=403)
-            
         stmt = select(Submission).options(joinedload(Submission.category)).order_by(Submission.updated_at.desc())
         items = (await session.execute(stmt)).scalars().all()
         
@@ -266,12 +223,9 @@ async def export_reports_csv(user_data: dict = Depends(get_current_user)):
         return response
 
 @router.get("/submission/{sub_id}", response_class=HTMLResponse)
-async def view_submission(sub_id: int, request: Request, user_data: dict = Depends(get_current_user)):
+async def view_submission(sub_id: int, request: Request, user: User = Depends(get_current_user)):
     """Детальная страница одной eSIM (скана)."""
-    
     async with SessionFactory() as session:
-        user = await session.get(User, user_data.get("user_id"))
-        
         stmt = (
             select(Submission)
             .options(joinedload(Submission.category), joinedload(Submission.seller))
@@ -283,7 +237,6 @@ async def view_submission(sub_id: int, request: Request, user_data: dict = Depen
         if not sub:
             raise HTTPException(status_code=404, detail="eSIM не найдена")
 
-        # Проверка прав: SIMBUYER видит только то, что ему доставили
         if user.role == UserRole.SIMBUYER and sub.delivered_to_chat != user.telegram_id:
             raise HTTPException(status_code=403, detail="Доступ запрещен")
 
@@ -295,14 +248,9 @@ async def view_submission(sub_id: int, request: Request, user_data: dict = Depen
         })
 
 @router.get("/categories", response_class=HTMLResponse)
-async def get_categories_manage(request: Request, user_data: dict = Depends(get_current_user)):
-    """Страница управления категориями (для OWNER и ADMIN)."""
-    
+async def get_categories_manage(request: Request, user: User = Depends(admin_only)):
+    """Страница управления категориями."""
     async with SessionFactory() as session:
-        user = await session.get(User, user_data.get("user_id"))
-        if user.role not in [UserRole.OWNER, UserRole.ADMIN]:
-            raise HTTPException(status_code=403, detail="Permission denied")
-            
         stmt = select(Category).order_by(Category.is_priority.desc(), Category.title.asc())
         categories = (await session.execute(stmt)).scalars().all()
         
@@ -323,39 +271,29 @@ async def get_categories_manage(request: Request, user_data: dict = Depends(get_
         })
 
 @router.post("/categories/{cat_id}/toggle")
-async def toggle_category(cat_id: int, user_data: dict = Depends(get_current_user)):
+async def toggle_category(cat_id: int, user: User = Depends(admin_only)):
     """HTMX-переключатель активности категории."""
     async with SessionFactory() as session:
-        user = await session.get(User, user_data.get("user_id"))
-        if user.role not in [UserRole.OWNER, UserRole.ADMIN]:
-            raise HTTPException(status_code=403, detail="Permission denied")
-            
         cat = await session.get(Category, cat_id)
         if cat:
             cat.is_active = not cat.is_active
             await session.commit()
             
-            # Возвращаем только кнопку/статус (для HTMX)
             status_text = "ACTIVE" if cat.is_active else "INACTIVE"
             status_color = "text-nexus-cyan border-nexus-cyan/30 bg-nexus-cyan/10 shadow-[0_0_10px_rgba(0,217,255,0.1)]" if cat.is_active else "text-white/20 border-white/5 bg-white/5"
             return HTMLResponse(content=f'<span class="px-3 py-1 text-[10px] border rounded-lg uppercase tracking-widest font-bold {status_color}">{status_text}</span>')
         return HTMLResponse(content="Error")
 
 @router.post("/categories/{cat_id}/price")
-async def update_category_price(cat_id: int, price: Decimal = Form(...), user_data: dict = Depends(get_current_user)):
+async def update_category_price(cat_id: int, price: Decimal = Form(...), user: User = Depends(admin_only)):
     """Обновление базовой цены категории."""
     async with SessionFactory() as session:
-        user = await session.get(User, user_data.get("user_id"))
-        if user.role not in [UserRole.OWNER, UserRole.ADMIN]:
-            raise HTTPException(status_code=403, detail="Permission denied")
-            
         cat = await session.get(Category, cat_id)
         if cat:
             old_price = cat.payout_rate
             cat.payout_rate = price
             await session.commit()
             
-            # Пишем лог
             await log_admin_action(
                 admin_id=user.id,
                 action="UPDATE_PRICE",
@@ -371,14 +309,10 @@ async def create_category(
     title: str = Form(...),
     slug: str = Form(...),
     payout_rate: Decimal = Form(...),
-    user_data: dict = Depends(get_current_user)
+    user: User = Depends(admin_only)
 ):
     """Создание новой категории активов."""
     async with SessionFactory() as session:
-        user = await session.get(User, user_data.get("user_id"))
-        if user.role not in [UserRole.OWNER, UserRole.ADMIN]:
-            raise HTTPException(status_code=403)
-            
         new_cat = Category(
             title=title,
             slug=slug,
@@ -395,14 +329,10 @@ async def update_category(
     cat_id: int,
     title: str = Form(...),
     payout_rate: Decimal = Form(...),
-    user_data: dict = Depends(get_current_user)
+    user: User = Depends(admin_only)
 ):
     """Обновление существующей категории."""
     async with SessionFactory() as session:
-        user = await session.get(User, user_data.get("user_id"))
-        if user.role not in [UserRole.OWNER, UserRole.ADMIN]:
-            raise HTTPException(status_code=403)
-            
         cat = await session.get(Category, cat_id)
         if cat:
             cat.title = title
@@ -413,23 +343,15 @@ async def update_category(
         return HTTPException(status_code=404)
 
 @router.get("/users/{target_id}/delivery", response_class=HTMLResponse)
-async def get_user_delivery_settings(target_id: int, request: Request, user_data: dict = Depends(get_current_user)):
+async def get_user_delivery_settings(target_id: int, request: Request, user: User = Depends(admin_only)):
     """Страница настройки персональных маршрутов выдачи пользователя."""
-    
     async with SessionFactory() as session:
-        user = await session.get(User, user_data.get("user_id"))
-        if user.role not in [UserRole.OWNER, UserRole.ADMIN]:
-            raise HTTPException(status_code=403, detail="Permission denied")
-            
         target = await session.get(User, target_id)
         if not target:
             raise HTTPException(status_code=404, detail="Пользователь не найден")
             
-        from src.database.models.web_control import DeliveryConfig
         stmt = select(DeliveryConfig).options(joinedload(DeliveryConfig.category)).where(DeliveryConfig.user_id == target.id)
         configs = (await session.execute(stmt)).scalars().all()
-        
-        # Список категорий для добавления новых маршрутов
         categories = (await session.execute(select(Category).where(Category.is_active == True))).scalars().all()
         
         return templates.TemplateResponse("user_delivery_settings.html", {
@@ -447,15 +369,10 @@ async def add_user_delivery_config(
     category_id: int = Form(...), 
     chat_id: int = Form(...), 
     thread_id: int = Form(...),
-    user_data: dict = Depends(get_current_user)
+    user: User = Depends(admin_only)
 ):
     """Добавление нового маршрута выдачи для пользователя."""
     async with SessionFactory() as session:
-        user = await session.get(User, user_data.get("user_id"))
-        if user.role not in [UserRole.OWNER, UserRole.ADMIN]:
-            raise HTTPException(status_code=403, detail="Permission denied")
-            
-        from src.database.models.web_control import DeliveryConfig
         new_cfg = DeliveryConfig(
             user_id=target_id,
             category_id=category_id,
@@ -465,7 +382,6 @@ async def add_user_delivery_config(
         session.add(new_cfg)
         await session.commit()
         
-        # Пишем лог
         await log_admin_action(
             admin_id=user.id,
             action="ADD_DELIVERY_ROUTE",
@@ -477,14 +393,9 @@ async def add_user_delivery_config(
         return RedirectResponse(url=f"/nexus/users/{target_id}/delivery", status_code=303)
 
 @router.post("/users/delivery/{cfg_id}/delete")
-async def delete_delivery_config(cfg_id: int, user_data: dict = Depends(get_current_user)):
+async def delete_delivery_config(cfg_id: int, user: User = Depends(admin_only)):
     """Удаление маршрута выдачи."""
     async with SessionFactory() as session:
-        user = await session.get(User, user_data.get("user_id"))
-        if user.role not in [UserRole.OWNER, UserRole.ADMIN]:
-            raise HTTPException(status_code=403, detail="Permission denied")
-            
-        from src.database.models.web_control import DeliveryConfig
         cfg = await session.get(DeliveryConfig, cfg_id)
         if cfg:
             target_id = cfg.user_id

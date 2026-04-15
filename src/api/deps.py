@@ -1,5 +1,62 @@
+from __future__ import annotations
+
+import logging
 from pathlib import Path
+from fastapi import Request, HTTPException, Depends
 from fastapi.templating import Jinja2Templates
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from src.database.session import SessionFactory
+from src.database.models.user import User
+from src.database.models.enums import UserRole
+from src.services.auth_service import AuthService
+
+logger = logging.getLogger(__name__)
 
 BASE_DIR = Path(__file__).resolve().parent
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
+
+async def get_db():
+    """Dependency for database sessions."""
+    async with SessionFactory() as session:
+        yield session
+
+async def get_current_user_payload(request: Request) -> dict:
+    """Извлекает payload из JWT куки."""
+    token = request.cookies.get("nexus_session")
+    if not token:
+        raise HTTPException(status_code=303, detail="Not authorized")
+    
+    payload = AuthService.decode_token(token)
+    if not payload:
+        raise HTTPException(status_code=303, detail="Invalid session")
+    return payload
+
+async def get_current_user(
+    payload: dict = Depends(get_current_user_payload),
+    db: AsyncSession = Depends(get_db)
+) -> User:
+    """Возвращает объект пользователя из БД."""
+    user_id = payload.get("user_id")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Invalid token payload")
+        
+    user = await db.get(User, user_id)
+    if not user:
+        raise HTTPException(status_code=401, detail="User not found")
+        
+    if not user.is_active:
+        raise HTTPException(status_code=403, detail="Account disabled")
+        
+    return user
+
+class RoleChecker:
+    """Зависимость для проверки ролей."""
+    def __init__(self, allowed_roles: list[UserRole]):
+        self.allowed_roles = allowed_roles
+
+    def __call__(self, user: User = Depends(get_current_user)):
+        if user.role not in self.allowed_roles:
+            logger.warning(f"Access denied for user {user.id} ({user.role}). Allowed: {self.allowed_roles}")
+            raise HTTPException(status_code=403, detail="Permission denied")
+        return user
