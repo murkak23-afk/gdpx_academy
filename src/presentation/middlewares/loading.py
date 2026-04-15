@@ -33,7 +33,7 @@ class LoadingMiddleware(BaseMiddleware):
             # 2. Loading-состояние (edit_message)
             # Показываем только если это не быстрый "toggle" (например, инкогнито или избранное)
             cd = callback.data or ""
-            if not any(x in cd for x in ["incognito", "prefs", "lang_set", "toggle_"]):
+            if not any(x in cd for x in ["incognito", "prefs", "lang_set", "toggle_", "sel_asset"]):
                 await ui.show_loading(callback)
 
         try:
