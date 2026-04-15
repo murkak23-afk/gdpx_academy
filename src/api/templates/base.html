@@ -105,15 +105,17 @@
     <div class="sakura-container" id="sakura-fall"></div>
     <script>
         const container = document.getElementById('sakura-fall');
-        for (let i = 0; i < 15; i++) {
-            const petal = document.createElement('div');
-            petal.className = 'petal';
-            petal.style.left = Math.random() * 100 + 'vw';
-            petal.style.width = Math.random() * 10 + 5 + 'px';
-            petal.style.height = petal.style.width;
-            petal.style.animationDuration = Math.random() * 10 + 10 + 's';
-            petal.style.animationDelay = Math.random() * 10 + 's';
-            container.appendChild(petal);
+        if (container) {
+            for (let i = 0; i < 15; i++) {
+                const petal = document.createElement('div');
+                petal.className = 'petal';
+                petal.style.left = Math.random() * 100 + 'vw';
+                petal.style.width = Math.random() * 10 + 5 + 'px';
+                petal.style.height = petal.style.width;
+                petal.style.animationDuration = Math.random() * 10 + 10 + 's';
+                petal.style.animationDelay = Math.random() * 10 + 's';
+                container.appendChild(petal);
+            }
         }
     </script>
 
@@ -123,6 +125,9 @@
         <div class="absolute top-0 left-0 w-full h-full bg-[url('https://www.transparenttextures.com/patterns/stardust.png')] opacity-20"></div>
     </div>
 
+    <!-- Основная структура Layout -->
+    <div class="relative z-10 flex min-h-screen w-full overflow-x-hidden">
+        
         <!-- Sidebar: Виден только на ПК -->
         <aside class="hidden lg:flex w-72 glass-panel border-r border-white/10 flex-col sticky top-0 h-screen shrink-0">
             <div class="p-8">
@@ -131,7 +136,6 @@
                     <h2 class="text-[14px] font-bold text-white tracking-widest uppercase">SYNDICATE PANEL</h2>
                 </div>
             </div>
-
             
             <nav class="flex-1 px-4 space-y-2">
                 {% if user and (user.role == 'admin' or user.role == 'owner') %}
@@ -194,10 +198,11 @@
 
         <!-- Main Content Area -->
         <main class="flex-1 w-full flex flex-col min-w-0">
+            <!-- Mobile Header -->
             <header class="lg:hidden h-16 border-b border-white/10 flex items-center justify-between px-6 glass-panel shrink-0">
                 <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-nexus-cyan to-nexus-sakura"></div>
                 <div class="text-white font-bold uppercase tracking-widest text-xs">SYNDICATE MOBILE</div>
-                <a href="/auth/logout" class="text-white/40 hover:text-nexus-error transition-colors">
+                <a href="/auth/logout" class="text-white/40 hover:text-nexus-sakura transition-colors">
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
                 </a>
             </header>
@@ -237,7 +242,6 @@
         function closeSearch() {
             document.getElementById('search-modal').classList.add('hidden');
         }
-        // Хоткеи
         window.addEventListener('keydown', function(e) {
             if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
                 e.preventDefault();
