@@ -258,6 +258,47 @@ async def get_categories_manage(request: Request, user_data: dict = Depends(get_
             "active_page": "categories"
         })
 
+@router.post("/categories/create")
+async def create_category(
+    title: str = Form(...),
+    slug: str = Form(...),
+    payout_rate: Decimal = Form(...),
+    user_data: dict = Depends(get_current_user)
+):
+    """Создание новой категории eSIM."""
+    async with SessionFactory() as session:
+        user = await session.get(User, user_data.get("user_id"))
+        if user.role != UserRole.OWNER:
+            raise HTTPException(status_code=403)
+            
+        new_cat = Category(title=title, slug=slug, payout_rate=payout_rate, is_active=True)
+        session.add(new_cat)
+        await session.commit()
+        await log_admin_action(admin_id=user.id, action="CREATE_CATEGORY", target_type="category", details=f"Создана: {title} ({slug})")
+        return RedirectResponse(url="/nexus/categories", status_code=303)
+
+@router.post("/categories/{cat_id}/edit")
+async def edit_category(
+    cat_id: int,
+    title: str = Form(...),
+    payout_rate: Decimal = Form(...),
+    user_data: dict = Depends(get_current_user)
+):
+    """Редактирование существующей категории."""
+    async with SessionFactory() as session:
+        user = await session.get(User, user_data.get("user_id"))
+        if user.role not in [UserRole.OWNER, UserRole.ADMIN]:
+            raise HTTPException(status_code=403)
+            
+        cat = await session.get(Category, cat_id)
+        if cat:
+            cat.title = title
+            cat.payout_rate = payout_rate
+            await session.commit()
+            await log_admin_action(admin_id=user.id, action="EDIT_CATEGORY", target_type="category", target_id=cat.id, details=f"Изменена: {title}, цена {payout_rate}")
+            return RedirectResponse(url="/nexus/categories", status_code=303)
+        return HTTPException(status_code=404)
+
 @router.post("/categories/{cat_id}/toggle")
 async def toggle_category(cat_id: int, user_data: dict = Depends(get_current_user)):
     """HTMX-переключатель активности категории."""

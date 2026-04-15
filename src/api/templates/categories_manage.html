@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Управление категориями{% endblock %}
+{% block title %}Управление активами{% endblock %}
 
 {% block content %}
 <div class="space-y-8 animate-in fade-in duration-500">
@@ -11,113 +11,131 @@
             <h1 class="text-[32px] font-semibold text-white tracking-tight drop-shadow-[0_0_10px_rgba(0,217,255,0.3)]">Управление активами</h1>
             <p class="text-nexus-cyan mt-2 font-medium tracking-wider">Настройка категорий, цен и лимитов</p>
         </div>
-        <div class="flex gap-3">
-            <button class="px-5 py-2.5 bg-white/5 border border-white/10 rounded-xl text-sm font-semibold text-white/60 hover:bg-white/10 transition-all">
+        <div class="flex gap-3 text-white">
+            <button class="px-5 py-2.5 bg-white/5 border border-white/10 rounded-xl text-sm font-semibold hover:bg-white/10 transition-all">
                 ИСТОРИЯ ЦЕН
             </button>
-            <button class="px-5 py-2.5 bg-gradient-to-r from-nexus-cyan to-nexus-sakura rounded-xl text-sm font-bold text-white shadow-lg shadow-blue-500/20 active:scale-95 transition-all">
+            <button onclick="openCreateModal()" class="px-5 py-2.5 bg-gradient-to-r from-nexus-cyan to-nexus-sakura rounded-xl text-sm font-bold shadow-lg shadow-blue-500/20 active:scale-95 transition-all">
                 + НОВАЯ КАТЕГОРИЯ
             </button>
         </div>
     </div>
 
     <!-- Таблица категорий -->
-    <div class="bg-[#0a0a0f]/60 backdrop-blur-xl rounded-[24px] border border-white/10 shadow-[0_8px_30px_rgba(0,0,0,0.5)] overflow-hidden">
-        <div class="overflow-x-auto">
-            <table class="w-full text-left border-collapse">
-                <thead class="bg-white/5 border-b border-white/10 text-[11px] font-semibold text-white/60 uppercase tracking-[0.15em]">
-                    <tr>
-                        <th class="px-8 py-5">Категория / Оператор</th>
-                        <th class="px-8 py-5 text-center">Статус</th>
-                        <th class="px-8 py-5 text-center">В стоке</th>
-                        <th class="px-8 py-5 text-center">Базовая Цена (USDT)</th>
-                        <th class="px-8 py-5 text-right">Действия</th>
-                    </tr>
-                </thead>
-                <tbody class="divide-y divide-white/5 text-sm">
-                    {% for cat in categories %}
-                    <tr class="hover:bg-white/5 transition-colors duration-300 group">
-                        <td class="px-8 py-5">
-                            <div class="flex items-center gap-4">
-                                <div class="w-10 h-10 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center">
-                                    <span class="text-nexus-cyan font-bold text-[10px] tracking-tighter">{{ cat.slug[:3].upper() }}</span>
-                                </div>
-                                <div>
-                                    <div class="text-[15px] font-bold text-white tracking-wide">{{ cat.title }}</div>
-                                    <div class="text-[11px] text-white/30 mt-0.5 tracking-widest uppercase">{{ cat.operator or 'General' }} | {{ cat.sim_type or 'eSIM' }}</div>
-                                </div>
+    <div class="overflow-x-auto fade-in">
+        <table class="premium-table">
+            <thead class="text-[11px] font-semibold text-white/40 uppercase tracking-[0.2em]">
+                <tr>
+                    <th class="text-left">Категория / Оператор</th>
+                    <th class="text-center">Статус</th>
+                    <th class="text-center">В стоке</th>
+                    <th class="text-center">Базовая Цена (USDT)</th>
+                    <th class="text-right">Действия</th>
+                </tr>
+            </thead>
+            <tbody class="text-sm">
+                {% for cat in categories %}
+                <tr class="hover:bg-white/5 transition-colors duration-300 group">
+                    <td class="px-8 py-5">
+                        <div class="flex items-center gap-4">
+                            <div class="w-10 h-10 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center">
+                                <span class="text-nexus-cyan font-bold text-[10px] tracking-tighter">{{ cat.slug[:3].upper() }}</span>
                             </div>
-                        </td>
-                        <td class="px-8 py-5 text-center">
-                            <div hx-post="/nexus/categories/{{ cat.id }}/toggle" hx-swap="outerHTML" class="cursor-pointer">
-                                {% if cat.is_active %}
-                                    <span class="px-3 py-1 text-[10px] border border-nexus-cyan/30 bg-nexus-cyan/10 text-nexus-cyan rounded-lg uppercase tracking-widest font-bold shadow-[0_0_10px_rgba(0,217,255,0.1)]">ACTIVE</span>
-                                {% else %}
-                                    <span class="px-3 py-1 text-[10px] border border-white/5 bg-white/5 text-white/20 rounded-lg uppercase tracking-widest font-bold">INACTIVE</span>
-                                {% endif %}
+                            <div>
+                                <div class="text-[15px] font-bold text-white tracking-wide">{{ cat.title }}</div>
+                                <div class="text-[11px] text-white/30 mt-0.5 tracking-widest uppercase">{{ cat.operator or 'General' }} | {{ cat.sim_type or 'eSIM' }}</div>
                             </div>
-                        </td>
-                        <td class="px-8 py-5 text-center">
-                            <span class="text-[16px] font-mono text-white font-bold">{{ stock[cat.id] }}</span>
-                        </td>
-                        <td class="px-8 py-5 text-center">
-                            <div class="inline-flex items-center gap-2">
-                                <span class="text-[16px] font-bold text-nexus-sakura">{{ cat.payout_rate }}</span>
-                                <button onclick="openPriceModal('{{ cat.id }}', '{{ cat.title }}', '{{ cat.payout_rate }}')" class="text-white/20 hover:text-white transition-colors">
-                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>
-                                </button>
-                            </div>
-                        </td>
-                        <td class="px-8 py-5 text-right">
-                            <button class="px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-[11px] font-bold text-white/40 uppercase tracking-widest hover:border-nexus-cyan hover:text-nexus-cyan transition-all">
-                                EDIT
+                        </div>
+                    </td>
+                    <td class="px-8 py-5 text-center">
+                        <div hx-post="/nexus/categories/{{ cat.id }}/toggle" hx-swap="outerHTML" class="cursor-pointer inline-block">
+                            {% if cat.is_active %}
+                                <span class="px-3 py-1 text-[10px] border border-nexus-cyan/30 bg-nexus-cyan/10 text-nexus-cyan rounded-lg uppercase tracking-widest font-bold shadow-[0_0_10px_rgba(0,217,255,0.1)]">ACTIVE</span>
+                            {% else %}
+                                <span class="px-3 py-1 text-[10px] border border-white/5 bg-white/5 text-white/20 rounded-lg uppercase tracking-widest font-bold">INACTIVE</span>
+                            {% endif %}
+                        </div>
+                    </td>
+                    <td class="px-8 py-5 text-center">
+                        <span class="text-[16px] font-mono text-white font-bold">{{ stock[cat.id] }}</span>
+                    </td>
+                    <td class="px-8 py-5 text-center">
+                        <div class="inline-flex items-center gap-2">
+                            <span class="text-[16px] font-bold text-nexus-sakura">{{ cat.payout_rate }}</span>
+                            <button onclick="openEditModal('{{ cat.id }}', '{{ cat.title }}', '{{ cat.payout_rate }}')" class="text-white/20 hover:text-white transition-colors">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>
                             </button>
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
+                        </div>
+                    </td>
+                    <td class="px-8 py-5 text-right">
+                        <button onclick="openEditModal('{{ cat.id }}', '{{ cat.title }}', '{{ cat.payout_rate }}')"
+                                class="px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-[11px] font-bold text-white/40 uppercase tracking-widest hover:border-nexus-cyan hover:text-nexus-cyan transition-all">
+                            EDIT
+                        </button>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
     </div>
 </div>
 
-<!-- Модалка изменения цены -->
-<div id="price-modal" class="fixed inset-0 bg-black/80 backdrop-blur-md z-[100] hidden flex items-center justify-center p-4">
+<!-- Модалка создания -->
+<div id="create-modal" class="fixed inset-0 bg-black/80 backdrop-blur-md z-[100] hidden flex items-center justify-center p-4">
     <div class="bg-[#0a0a0f] border border-white/10 w-full max-w-md rounded-[32px] p-8 shadow-[0_20px_60px_rgba(0,0,0,0.8)] animate-in zoom-in-95 duration-300">
-        <h3 class="text-xl font-bold text-white mb-2" id="modal-title">Изменить цену</h3>
-        <p class="text-white/40 text-sm mb-8" id="modal-subtitle"></p>
-        
-        <form id="price-form" method="post" class="space-y-6">
+        <h3 class="text-xl font-bold text-white mb-2">Новая категория</h3>
+        <form action="/nexus/categories/create" method="post" class="space-y-6">
             <div>
-                <label class="text-[10px] font-bold text-white/30 uppercase tracking-[0.2em] mb-3 block">Новая базовая цена (USDT)</label>
-                <input type="number" name="price" id="modal-price-input" step="0.01" required
-                       class="w-full bg-white/5 border border-white/10 rounded-2xl px-6 py-4 text-xl font-bold text-nexus-cyan focus:outline-none focus:border-nexus-cyan/50 transition-all">
+                <label class="text-[10px] font-bold text-white/30 uppercase mb-2 block">Название</label>
+                <input type="text" name="title" required class="w-full bg-white/5 border border-white/10 rounded-xl px-5 py-3 text-white focus:outline-none focus:border-nexus-cyan/50">
             </div>
-            
+            <div>
+                <label class="text-[10px] font-bold text-white/30 uppercase mb-2 block">Slug (beeline_new)</label>
+                <input type="text" name="slug" required class="w-full bg-white/5 border border-white/10 rounded-xl px-5 py-3 text-white focus:outline-none focus:border-nexus-cyan/50">
+            </div>
+            <div>
+                <label class="text-[10px] font-bold text-white/30 uppercase mb-2 block">Цена (USDT)</label>
+                <input type="number" name="payout_rate" step="0.01" required class="w-full bg-white/5 border border-white/10 rounded-xl px-5 py-3 text-white focus:outline-none focus:border-nexus-cyan/50">
+            </div>
             <div class="flex gap-4 pt-4">
-                <button type="button" onclick="closePriceModal()" class="flex-1 py-4 rounded-2xl border border-white/10 text-white/40 font-bold uppercase tracking-widest text-[12px] hover:bg-white/5 transition-all">Отмена</button>
-                <button type="submit" class="flex-1 py-4 rounded-2xl bg-gradient-to-r from-nexus-cyan to-nexus-sakura text-white font-bold uppercase tracking-widest text-[12px] shadow-lg shadow-blue-500/20 active:scale-95 transition-all">Сохранить</button>
+                <button type="button" onclick="closeCreateModal()" class="flex-1 py-4 rounded-2xl border border-white/10 text-white/40 font-bold uppercase tracking-widest text-[11px]">Отмена</button>
+                <button type="submit" class="flex-1 py-4 rounded-2xl bg-gradient-to-r from-nexus-cyan to-nexus-sakura text-white font-bold uppercase tracking-widest text-[11px]">Создать</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Модалка редактирования -->
+<div id="edit-modal" class="fixed inset-0 bg-black/80 backdrop-blur-md z-[100] hidden flex items-center justify-center p-4">
+    <div class="bg-[#0a0a0f] border border-white/10 w-full max-w-md rounded-[32px] p-8 shadow-[0_20px_60px_rgba(0,0,0,0.8)] animate-in zoom-in-95 duration-300">
+        <h3 class="text-xl font-bold text-white mb-2" id="edit-modal-title">Редактировать</h3>
+        <form id="edit-form" method="post" class="space-y-6">
+            <div>
+                <label class="text-[10px] font-bold text-white/30 uppercase mb-2 block">Название</label>
+                <input type="text" name="title" id="edit-title" required class="w-full bg-white/5 border border-white/10 rounded-xl px-5 py-3 text-white">
+            </div>
+            <div>
+                <label class="text-[10px] font-bold text-white/30 uppercase mb-2 block">Цена (USDT)</label>
+                <input type="number" name="payout_rate" id="edit-price" step="0.01" required class="w-full bg-white/5 border border-white/10 rounded-xl px-5 py-3 text-white">
+            </div>
+            <div class="flex gap-4 pt-4">
+                <button type="button" onclick="closeEditModal()" class="flex-1 py-4 rounded-2xl border border-white/10 text-white/40 font-bold uppercase tracking-widest text-[11px]">Отмена</button>
+                <button type="submit" class="flex-1 py-4 rounded-2xl bg-gradient-to-r from-nexus-cyan to-nexus-sakura text-white font-bold uppercase tracking-widest text-[11px]">Сохранить</button>
             </div>
         </form>
     </div>
 </div>
 
 <script>
-    function openPriceModal(id, title, currentPrice) {
-        document.getElementById('modal-title').innerText = title;
-        document.getElementById('modal-subtitle').innerText = 'Укажите новую базовую стоимость для всех пользователей';
-        document.getElementById('modal-price-input').value = currentPrice;
-        document.getElementById('price-form').action = '/nexus/categories/' + id + '/price';
-        document.getElementById('price-modal').classList.remove('hidden');
-    }
+    function openCreateModal() { document.getElementById('create-modal').classList.remove('hidden'); }
+    function closeCreateModal() { document.getElementById('create-modal').classList.add('hidden'); }
     
-    function closePriceModal() {
-        document.getElementById('price-modal').classList.add('hidden');
+    function openEditModal(id, title, price) {
+        document.getElementById('edit-title').value = title;
+        document.getElementById('edit-price').value = price;
+        document.getElementById('edit-form').action = '/nexus/categories/' + id + '/edit';
+        document.getElementById('edit-modal').classList.remove('hidden');
     }
-    
-    // Закрытие по клику вне модалки
-    document.getElementById('price-modal').addEventListener('click', function(e) {
-        if (e.target === this) closePriceModal();
-    });
+    function closeEditModal() { document.getElementById('edit-modal').classList.add('hidden'); }
 </script>
 {% endblock %}
