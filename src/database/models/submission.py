@@ -33,6 +33,7 @@ class Submission(Base, TimestampMixin):
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("users.id", ondelete="CASCADE"), index=True)
     admin_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    buyer_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
     category_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("categories.id"), index=True)
 
     telegram_file_id: Mapped[str] = mapped_column(String(255), nullable=False)
@@ -72,6 +73,7 @@ class Submission(Base, TimestampMixin):
     # Строковые отношения 
     seller: Mapped["User"] = relationship("User", foreign_keys=[user_id], back_populates="submissions")
     admin: Mapped["User | None"] = relationship("User", foreign_keys=[admin_id], back_populates="assigned_submissions")
+    buyer: Mapped["User | None"] = relationship("User", foreign_keys=[buyer_id])
     category: Mapped["Category"] = relationship("Category", back_populates="submissions")
     review_actions: Mapped[list["ReviewAction"]] = relationship(
         "ReviewAction", back_populates="submission", cascade="all, delete-orphan"

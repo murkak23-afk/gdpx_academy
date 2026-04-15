@@ -110,11 +110,11 @@ async def get_my_esim(request: Request, user_data: dict = Depends(get_current_us
     from src.api.app import templates
     async with SessionFactory() as session:
         user = await session.get(User, user_data.get("user_id"))
-        
+
         stmt = select(Submission).options(joinedload(Submission.category)).where(Submission.status == SubmissionStatus.IN_WORK)
         if user.role == UserRole.SIMBUYER:
-            stmt = stmt.where(Submission.delivered_to_chat == user.telegram_id)
-            
+            stmt = stmt.where(Submission.buyer_id == user.id)
+
         active_esims = (await session.execute(stmt.order_by(Submission.updated_at.desc()))).scalars().all()
 
         return templates.TemplateResponse("my_esim.html", {
@@ -122,6 +122,7 @@ async def get_my_esim(request: Request, user_data: dict = Depends(get_current_us
             "user": user,
             "esims": active_esims,
             "active_page": "my-esim"
+        })            "active_page": "my-esim"
         })
 
 @router.get("/reports", response_class=HTMLResponse)
@@ -531,7 +532,7 @@ async def take_esim_from_inventory(
             return HTMLResponse(content=f'<div class="text-amber-400 p-4 bg-amber-900/20 border border-amber-900 rounded-lg text-sm">Недостаточно на складе.</div>')
 
         # 3. Запускаем общую задачу выдачи
-        background_tasks.add_task(background_delivery_task, bot, category_id, cfg.chat_id, cfg.thread_id, count)
+        background_tasks.add_task(background_delivery_task, bot, category_id, cfg.chat_id, cfg.thread_id, count, buyer_id=user.id)
         
         # Логируем
         await log_admin_action(
@@ -773,11 +774,15 @@ async def process_esim_action(sub_id: int, action: str, user_data: dict = Depend
 
         # ЛОГИКА ЗАМОРОЗКИ И ПРАВ ДОСТУПА
         if is_simbuyer:
-            # 1. Симбайер не может переопределить решение Админа/Овнера (если статус уже ACCEPTED)
+            # 1. Проверка владения (Security Fix)
+            if sub.buyer_id != user.id:
+                return HTMLResponse(content='<div class="text-red-400 p-2 bg-red-900/20 border border-red-900 rounded">❌ Это не ваш актив.</div>')
+
+            # 2. Симбайер не может переопределить решение Админа/Овнера (если статус уже ACCEPTED)
             if old_status == SubmissionStatus.ACCEPTED:
                 return HTMLResponse(content='<div class="text-red-400 p-2 bg-red-900/20 border border-red-900 rounded">❌ Статус заморожен администратором.</div>')
             
-            # 2. Симбайер может ставить только BLOCKED или NOT_A_SCAN
+            # 3. Симбайер может ставить только BLOCKED или NOT_A_SCAN
             if action not in ["block", "not_scan"]:
                 return HTMLResponse(content='<div class="text-red-400 p-2 bg-red-900/20 border border-red-900 rounded">❌ Недостаточно прав для этого действия.</div>')
 
@@ -814,6 +819,7 @@ async def process_esim_action(sub_id: int, action: str, user_data: dict = Depend
                 details=f"Статус изменен: {old_status} -> {sub.status} пользователем {user.role}"
             )
             
-            return HTMLResponse(content='<script>window.location.reload();</script>')
+            # Для HTMX запросов возвращаем пустоту, чтобы строка исчезла (hx-swap="outerHTML swap:1s")
+            return HTMLResponse(content="")
         
-        return HTMLResponse(content='')
+        return HTMLResponse(content="")

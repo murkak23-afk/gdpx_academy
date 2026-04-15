@@ -133,20 +133,83 @@ async def run_daily_report_task(ctx):
                 text = (
                     "📊 <b>DAILY SYSTEM REPORT</b>\n"
                     "▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰\n"
-                    f"Всего заявок: {report_data.total_submissions}\n"
-                    f"Ожидают: {report_data.pending_count}\n"
-                    f"Принято (24ч): {report_data.accepted_24h}\n"
-                    f"Выплачено: {report_data.total_payouts_volume} USD"
+                    f"Всего заявок: {report_data.esim_accepted + report_data.esim_rejected}\n"
+                    f"Принято (24ч): {report_data.turnover_24h} USD\n"
+                    f"К выплате: {report_data.pending_payouts_sum} USD"
                 )
                 from src.core.utils.message_manager import MessageManager
                 mm = MessageManager(bot)
                 await mm.send_notification(user_id=settings.moderation_chat_id, text=text)
-            except AttributeError:
-                logger.warning("Метод get_global_report ещё не реализован. Отчет пропущен.")
             except Exception as e:
                 logger.error(f"Ошибка при генерации отчета: {e}")
     except Exception:
         logger.exception("Error in run_daily_report_task")
+
+async def run_daily_simbuyer_report_task(ctx):
+    """
+    Рассылка ежедневных отчетов симбайерам по их итогам.
+    Пн-Пт: 18:00 МСК, Сб: 16:00 МСК.
+    """
+    logger.info("Starting Daily Simbuyer Report task...")
+    bot = ctx['bot']
+    session_factory = ctx['session_factory']
+    
+    from src.database.models.web_control import DeliveryConfig
+    from src.database.models.enums import UserRole, SubmissionStatus
+    from sqlalchemy import select, and_, func
+
+    async with session_factory() as session:
+        # 1. Получаем всех активных симбайеров
+        stmt_users = select(User).where(User.role == UserRole.SIMBUYER, User.is_active.is_(True))
+        users = (await session.execute(stmt_users)).scalars().all()
+        
+        msk_tz = timezone(timedelta(hours=3))
+        now_msk = datetime.now(msk_tz)
+        start_of_day = now_msk.replace(hour=0, minute=0, second=0, microsecond=0)
+        start_of_day_utc = start_of_day.astimezone(timezone.utc)
+
+        for user in users:
+            try:
+                # 2. Считаем итоги за день (МСК)
+                stmt_stats = select(
+                    func.count(Submission.id),
+                    func.coalesce(func.sum(Submission.accepted_amount), 0)
+                ).where(
+                    Submission.buyer_id == user.id,
+                    Submission.status == SubmissionStatus.ACCEPTED,
+                    Submission.reviewed_at >= start_of_day_utc
+                )
+                res = (await session.execute(stmt_stats)).one()
+                count, total_sum = res[0], Decimal(res[1])
+
+                if count == 0:
+                    continue # Нет смысла слать пустой отчет
+
+                # 3. Ищем куда слать (DeliveryConfig)
+                stmt_cfg = select(DeliveryConfig.chat_id).where(DeliveryConfig.user_id == user.id).limit(1)
+                chat_id = (await session.execute(stmt_cfg)).scalar()
+
+                if not chat_id:
+                    logger.warning(f"No chat_id configured for Simbuyer {user.id}")
+                    continue
+
+                text = (
+                    f"📊 <b>ИТОГ ЗА ДЕНЬ ({now_msk.strftime('%d.%m.%Y')})</b>\n"
+                    f"▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰\n"
+                    f"👤 <b>АККАУНТ:</b> {user.full_name}\n"
+                    f"✅ <b>ПРИНЯТО:</b> <code>{count} шт.</code>\n"
+                    f"💰 <b>К ВЫПЛАТЕ:</b> <code>{total_sum} USDT</code>\n"
+                    f"▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰\n"
+                    f"💡 <i>Сверка произведена автоматически.</i>"
+                )
+                
+                from src.core.utils.message_manager import MessageManager
+                mm = MessageManager(bot)
+                await mm.send_notification(user_id=chat_id, text=text)
+                logger.info(f"Daily report sent to Simbuyer {user.id} (Chat: {chat_id})")
+
+            except Exception as e:
+                logger.error(f"Failed to send daily report to Simbuyer {user.id}: {e}")
 
 # -----------------
 # CONFIG
@@ -172,6 +235,9 @@ class WorkerSettings:
         cron(run_sla_and_autofix_task, minute=set(range(0, 60, 10))),
         # Архивация в 23:30 MSK (20:30 UTC)
         cron(run_daily_cleaner_task, hour={20}, minute={30}),
-        # Отчет в 09:00 MSK (06:00 UTC)
+        # Отчет для админов в 09:00 MSK (06:00 UTC)
         cron(run_daily_report_task, hour={6}, minute={0}),
+        # Отчет для симбайеров (Пн-Пт 18:00 MSK, Сб 16:00 MSK)
+        cron(run_daily_simbuyer_report_task, hour={15}, minute={0}, weekday={0,1,2,3,4}),
+        cron(run_daily_simbuyer_report_task, hour={13}, minute={0}, weekday={5}),
     ]

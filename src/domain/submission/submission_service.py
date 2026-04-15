@@ -545,7 +545,7 @@ class SubmissionService:
         rows = (await self._uow.session.execute(stmt)).all()
         return [{"category_id": int(cid), "title": title, "total": int(cnt)} for cid, title, cnt in rows]
 
-    async def take_from_warehouse(self, category_id: int, count: int) -> list[Submission]:
+    async def take_from_warehouse(self, category_id: int, count: int, buyer_id: int | None = None) -> list[Submission]:
         """Безопасное извлечение активов со склада (с блокировкой)."""
         # 1. Сначала выбираем только ID с блокировкой FOR UPDATE
         # Это предотвращает конфликт с OUTER JOIN
@@ -573,11 +573,13 @@ class SubmissionService:
         )
         items = list((await self._uow.session.execute(stmt)).scalars().all())
         
-        # 3. Переводим в статус IN_WORK
+        # 3. Переводим в статус IN_WORK и привязываем покупателя
         now = datetime.now(timezone.utc)
         for item in items:
             item.status = SubmissionStatus.IN_WORK
             item.assigned_at = now
+            if buyer_id:
+                item.buyer_id = buyer_id
             
         return items
 

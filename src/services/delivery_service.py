@@ -12,7 +12,7 @@ from src.core.constants import DIVIDER
 
 logger = logging.getLogger(__name__)
 
-async def background_delivery_task(bot: Bot, category_id: int, chat_id: int, thread_id: int, count: int):
+async def background_delivery_task(bot: Bot, category_id: int, chat_id: int, thread_id: int, count: int, buyer_id: int | None = None):
     """
     Фоновая задача выдачи eSIM. 
     Вынесена в отдельный сервис для предотвращения циклических импортов.
@@ -21,7 +21,7 @@ async def background_delivery_task(bot: Bot, category_id: int, chat_id: int, thr
         async with UnitOfWork(session=session) as uow:
             sub_svc = SubmissionService(uow)
             # Берем симки из очереди (метод уже переводит их в IN_WORK)
-            items = await sub_svc.get_material_from_warehouse_batch(category_id, count)
+            items = await sub_svc.take_from_warehouse(category_id, count, buyer_id=buyer_id)
 
             if not items:
                 logger.warning(f"⚠️ Склад пуст для категории {category_id}. Выдача в чат {chat_id} отменена.")

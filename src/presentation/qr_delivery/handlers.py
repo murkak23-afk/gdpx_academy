@@ -11,28 +11,102 @@ from aiogram import Bot, F, Router
 from aiogram.filters import Command, StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.database.models.enums import UserRole
-from src.presentation.common.factory import QRDeliveryCD, NavCD
-from .keyboards import get_qr_delivery_main_kb, get_qr_delivery_operators_kb, get_qr_delivery_webapp_kb
+from src.core.config import get_settings
+from src.core.utils.message_manager import MessageManager
+from src.core.utils.ui_builder import DIVIDER
+from src.database.models.enums import SubmissionStatus, UserRole
+from src.database.models.submission import Submission
 from src.domain.submission.submission_service import SubmissionService
 from src.domain.users.user_service import UserService
+from src.presentation.common.base import PremiumBuilder
+from src.presentation.common.factory import QRDeliveryCD
 from src.presentation.qr_delivery.states import QRDeliveryStates
-from src.core.utils.ui_builder import DIVIDER, DIVIDER_LIGHT
-from src.core.utils.message_manager import MessageManager
+from .keyboards import get_qr_delivery_main_kb, get_qr_delivery_operators_kb, get_qr_delivery_webapp_kb
 
 router = Router(name="qr-delivery-router")
 logger = logging.getLogger(__name__)
 
+# --- AUTO FIX LOGIC (Автоматическая фиксация статуса) ---
+
+@router.message(F.chat.id.in_(get_settings().auto_fix_chats.keys()), F.text)
+async def handle_auto_fix_message(message: Message, session: AsyncSession):
+    """
+    Слушает сообщения в топиках авто-блока и меняет статус сим-карт.
+    Работает в чатах, указанных в AUTO_FIX_CHATS.
+    """
+    settings = get_settings()
+    chat_configs = settings.auto_fix_chats.get(message.chat.id)
+    if not chat_configs:
+        return
+
+    # Определяем действие по топику (Blocked / Not a scan)
+    topic_id = message.message_thread_id or 0
+    action_type = chat_configs.get(topic_id)
+    if not action_type:
+        return
+
+    # Извлекаем все цифры (номер телефона)
+    digits = "".join(filter(str.isdigit, message.text))
+    if len(digits) < 4:
+        return # Слишком короткий номер для поиска
+
+    target_status = SubmissionStatus.BLOCKED if action_type == "blocked" else SubmissionStatus.NOT_A_SCAN
+    found_sub = None
+    search_method = "FULL"
+
+    # 1. Сначала ищем по полному номеру (11 цифр)
+    if len(digits) == 11:
+        stmt = select(Submission).where(
+            Submission.phone_normalized == digits,
+            Submission.status == SubmissionStatus.IN_WORK
+        ).order_by(Submission.updated_at.desc())
+        found_sub = (await session.execute(stmt)).scalar_one_or_none()
+    
+    # 2. Если не нашли по полному или цифр меньше 11, ищем по суффиксу (последние 4 цифры)
+    if not found_sub and len(digits) >= 4:
+        search_method = "SUFFIX"
+        stmt = select(Submission).where(
+            Submission.phone_normalized.like(f"%{digits[-4:]}"),
+            Submission.status == SubmissionStatus.IN_WORK
+        ).order_by(Submission.updated_at.desc())
+        results = (await session.execute(stmt)).scalars().all()
+        
+        if len(results) == 1:
+            found_sub = results[0]
+        elif len(results) > 1:
+            return await message.reply(f"⚠️ Найдено несколько совпадений ({len(results)}) по суффиксу. Уточните номер.")
+
+    # 3. Применяем статус, если нашли актив
+    if found_sub:
+        found_sub.status = target_status
+        await session.commit()
+        
+        await message.reply(
+            f"✅ <b>AUTO-FIX:</b> Статус изменен\n"
+            f"📟 ID: <code>{found_sub.id}</code>\n"
+            f"📞 Номер: <code>{found_sub.phone_normalized}</code>\n"
+            f"⚙️ Метод: <code>{search_method}</code>\n"
+            f"🔄 Статус: <code>{target_status.upper()}</code>",
+            parse_mode="HTML"
+        )
+        logger.info(f"AUTO_FIX: Sub #{found_sub.id} set to {target_status} via chat {message.chat.id}")
+    elif len(digits) == 11:
+        # Уведомляем только если был полноценный номер, но его нет в базе
+        await message.reply("❌ Номер не найден среди выданных в работу (IN_WORK).")
+
 # --- ГЛАВНОЕ МЕНЮ ВЫДАЧИ ---
 
 @router.message(Command("qr"), StateFilter("*"))
-@router.callback_query(QRDeliveryCD.filter(F.action == "menu"))
-@router.callback_query(F.data == "qr_delivery_menu")
+@router.callback_query(QRDeliveryCD.filter(F.action == "menu"), StateFilter("*"))
+@router.callback_query(F.data == "qr_delivery_menu", StateFilter("*"))
 async def cmd_qr_delivery_menu(event: Message | CallbackQuery, session: AsyncSession, state: FSMContext, ui: MessageManager):
-    """Классическое меню (кнопки)."""
+    """Главное меню (только кнопки)."""
+    logger.debug(f"DEBUG_QR: Menu called by {event.from_user.id}")
     await state.clear()
+    
     user_svc = UserService(session=session)
     user = await user_svc.get_by_telegram_id(event.from_user.id)
     
@@ -52,7 +126,7 @@ async def cmd_qr_delivery_menu(event: Message | CallbackQuery, session: AsyncSes
 
 @router.message(Command("qrweb"), StateFilter("*"))
 async def cmd_qr_delivery_web(message: Message, session: AsyncSession, state: FSMContext, ui: MessageManager):
-    """Вход в современный DELIVERY HUB (WebApp)."""
+    """Вход в DELIVERY HUB (WebApp)."""
     await state.clear()
     user_svc = UserService(session=session)
     user = await user_svc.get_by_telegram_id(message.from_user.id)
@@ -69,9 +143,10 @@ async def cmd_qr_delivery_web(message: Message, session: AsyncSession, state: FS
     
     await ui.display(event=message, text=text, reply_markup=get_qr_delivery_webapp_kb(message.chat.id))
 
-@router.callback_query(QRDeliveryCD.filter(F.action == "op_list"))
+@router.callback_query(QRDeliveryCD.filter(F.action == "op_list"), StateFilter("*"))
 async def cb_delivery_op_list(callback: CallbackQuery, session: AsyncSession, ui: MessageManager):
     """Список операторов с доступным стоком."""
+    logger.debug(f"DEBUG_QR: op_list by {callback.from_user.id}")
     sub_svc = SubmissionService(session=session)
     stats = await sub_svc.get_warehouse_stats_grouped()
     
@@ -87,9 +162,10 @@ async def cb_delivery_op_list(callback: CallbackQuery, session: AsyncSession, ui
     await ui.display(event=callback, text=text, reply_markup=get_qr_delivery_operators_kb(stats))
     await callback.answer()
 
-@router.callback_query(QRDeliveryCD.filter(F.action == "op_pick"))
+@router.callback_query(QRDeliveryCD.filter(F.action == "op_pick"), StateFilter("*"))
 async def cb_delivery_op_pick(callback: CallbackQuery, callback_data: QRDeliveryCD, state: FSMContext, session: AsyncSession, ui: MessageManager):
     """Запрос количества для выдачи."""
+    logger.debug(f"DEBUG_QR: op_pick {callback_data.val} by {callback.from_user.id}")
     cat_id = int(callback_data.val)
     
     from src.domain.submission.category_service import CategoryService
@@ -111,7 +187,6 @@ async def cb_delivery_op_pick(callback: CallbackQuery, callback_data: QRDelivery
         f"Введите количество eSIM для выдачи (числом):"
     )
     
-    from src.presentation.common.base import PremiumBuilder
     kb = PremiumBuilder().back(QRDeliveryCD(action="op_list")).as_markup()
     await ui.display(event=callback, text=text, reply_markup=kb)
     await callback.answer()
@@ -173,5 +248,6 @@ async def process_delivery_count(message: Message, state: FSMContext, session: A
 
 @router.callback_query(QRDeliveryCD.filter(F.action == "cancel"), StateFilter("*"))
 async def cb_delivery_cancel(callback: CallbackQuery, state: FSMContext, session: AsyncSession, ui: MessageManager):
+    """Отмена операции выдачи."""
     await state.clear()
     await cmd_qr_delivery_menu(callback, session, state, ui)

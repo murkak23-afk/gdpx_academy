@@ -6,32 +6,28 @@ from aiogram import BaseMiddleware
 from aiogram.types import CallbackQuery, Update
 
 from src.core.utils.message_manager import MessageManager
-
+from src.core.ui import ui as ui_module   # ← переименовали
+from src.core.logger import logger
 
 class LoadingMiddleware(BaseMiddleware):
-    """
-    Middleware для мгновенных реакций и loading-состояний.
-    Реализует Шаг 7 оптимизации UX.
-    """
-
     async def __call__(
         self,
         handler: Callable[[Update, Dict[str, Any]], Awaitable[Any]],
         event: Update,
         data: Dict[str, Any]
     ) -> Any:
-        if not isinstance(event, Update) or not event.callback_query:
+        # 1. Инициализируем ui сразу, чтобы избежать NameError в блоке except
+        ui: MessageManager | None = data.get("ui")
+        callback: CallbackQuery | None = event.callback_query if isinstance(event, Update) else None
+
+        if not callback:
             return await handler(event, data)
 
-        callback: CallbackQuery = event.callback_query
-        ui: MessageManager = data.get("ui")
-
         if ui:
-            # 1. Мгновенная реакция (callback.answer)
+            # 1. Мгновенная реакция
             await ui.answer_loading(callback)
             
-            # 2. Loading-состояние (edit_message)
-            # Показываем только если это не быстрый "toggle" (например, инкогнито или избранное)
+            # 2. Loading-состояние
             cd = callback.data or ""
             if not any(x in cd for x in ["incognito", "prefs", "lang_set", "toggle_", "sel_asset"]):
                 await ui.show_loading(callback)
@@ -39,11 +35,13 @@ class LoadingMiddleware(BaseMiddleware):
         try:
             return await handler(event, data)
         except Exception as e:
-            # Если произошла ошибка в хендлере после показа Loading, 
-            # возвращаем человекочитаемую ошибку вместо бесконечного спиннера.
-            if ui:
-                await ui.display(
-                    event=callback, 
-                    text="❌ <b>ОШИБКА ОБРАБОТКИ</b>\n\nПроизошла внутренняя ошибка при загрузке данных. Попробуйте позже или обратитесь в поддержку."
-                )
+            # Безопасно проверяем наличие ui и callback перед использованием
+            if ui and callback:
+                try:
+                    await ui.display(
+                        event=callback, 
+                        text="❌ <b>ОШИБКА ОБРАБОТКИ</b>\n\nПроизошла внутренняя ошибка при загрузке данных. Попробуйте позже или обратитесь в поддержку."
+                    )
+                except Exception as ui_e:
+                    logger.error(f"Error displaying error message: {ui_e}")
             raise e
