@@ -53,7 +53,7 @@
 
             <!-- ЛОГОТИП И ЗАГОЛОВОК (КОМПАКТНЫЕ) -->
             <div class="text-center mb-8 relative">
-                <div class="relative inline-block mb-6 animate-bounce" style="animation-duration: 5s;">
+                <div class="relative inline-block mb-6 animate-rotate-y" style="perspective: 1000px;">
                     <div class="absolute inset-0 bg-nexus-cyan blur-[40px] opacity-20 rounded-full"></div>
                     <img src="/assets/logo.png" class="w-40 h-auto relative z-10 drop-shadow-[0_0_20px_rgba(0,217,255,0.5)]" alt="GDPX">
                     <div class="hidden w-28 h-24 mx-auto rounded-full bg-gradient-to-br from-nexus-cyan to-nexus-sakura p-1 relative z-10 shadow-[0_0_40px_rgba(0,217,255,0.3)]">
@@ -98,7 +98,7 @@
 
             <!-- Техническая подпись -->
             <div class="mt-12 pointer-events-none opacity-20">
-                <p class="text-[9px] font-mono tracking-[0.5em] text-white">NEXUS CORE V2.0 // JAPANESE MINIMALISM EDITION</p>
+                <p class="text-[9px] font-mono tracking-[0.5em] text-white">THUG CORE v2.3 // JAPANESE MINIMALISM EDITION</p>
             </div>
         </div>
     </div>
@@ -124,6 +124,13 @@
     @keyframes shine {
         0% { left: -100%; }
         100% { left: 200%; }
+    }
+    .animate-rotate-y {
+        animation: rotate-y 8s ease-in-out infinite;
+    }
+    @keyframes rotate-y {
+        0%, 100% { transform: rotateY(0deg); }
+        50% { transform: rotateY(30deg); }
     }
 </style>
 {% endblock %}
