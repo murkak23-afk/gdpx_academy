@@ -17,7 +17,8 @@
     </div>
 
     <!-- Сетка статистики (Stats Cards) -->
-    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
+    <div id="stats-grid" hx-get="/nexus" hx-trigger="every 30s" hx-select="#stats-grid" hx-swap="outerHTML" 
+         class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
         
         <!-- Склад -->
         <div class="bg-white/[0.03] backdrop-blur-2xl p-10 rounded-[32px] border border-white/10 shadow-[0_15px_40px_rgba(0,0,0,0.4)] hover:shadow-[0_20px_60px_rgba(0,217,255,0.1)] transition-all group overflow-hidden relative flex flex-col justify-between min-h-[220px]">

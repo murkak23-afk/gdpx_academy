@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+
+{% block title %}Прайс-лист: {{ target.full_name }}{% endblock %}
+
+{% block content %}
+<div class="max-w-5xl mx-auto space-y-8 animate-in fade-in duration-500">
+    
+    <!-- Header -->
+    <div class="flex items-center gap-4">
+        <a href="/nexus/users" class="w-12 h-12 rounded-full bg-white/5 border border-white/10 flex items-center justify-center text-white/50 hover:text-white hover:bg-white/10 transition-all">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/></svg>
+        </a>
+        <div>
+            <h1 class="text-[28px] font-bold text-white tracking-tight">Прайс-лист: {{ target.full_name }}</h1>
+            <p class="text-nexus-sakura text-[13px] mt-1 uppercase tracking-widest font-medium">Индивидуальные ставки за активы</p>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        
+        <!-- Список текущих цен -->
+        <div class="lg:col-span-2 space-y-6">
+            <div class="bg-[#0a0a0f]/60 backdrop-blur-2xl border border-white/10 rounded-[32px] p-8 shadow-[0_15px_50px_rgba(0,0,0,0.4)]">
+                <h3 class="text-white/20 text-[10px] font-bold uppercase tracking-[0.3em] mb-8">Active Prices</h3>
+                
+                {% if prices %}
+                <div class="space-y-4">
+                    {% for p in prices %}
+                    <div class="flex items-center justify-between p-5 bg-white/5 border border-white/10 rounded-2xl group hover:border-nexus-sakura/30 transition-all">
+                        <div class="flex items-center gap-5">
+                            <div class="w-12 h-12 rounded-xl bg-nexus-sakura/10 flex items-center justify-center text-nexus-sakura font-bold">
+                                {{ p.category.slug[:2]|upper }}
+                            </div>
+                            <div>
+                                <div class="text-white font-bold tracking-wide">{{ p.category.title }}</div>
+                                <div class="flex gap-3 mt-1">
+                                    <span class="text-[11px] text-white/30 uppercase">Rate: <code class="text-nexus-sakura text-[14px] ml-1">{{ p.price }} USDT</code></span>
+                                </div>
+                            </div>
+                        </div>
+                        <form action="/nexus/users/prices/{{ p.id }}/delete" method="post">
+                            <button type="submit" class="p-3 text-white/10 hover:text-nexus-error transition-colors">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-4v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                            </button>
+                        </form>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="py-12 text-center border-2 border-dashed border-white/5 rounded-3xl">
+                    <p class="text-white/20 text-sm tracking-widest uppercase">Индивидуальные цены не заданы</p>
+                    <p class="text-white/10 text-xs mt-2">Будет использоваться базовая ставка категории.</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Форма добавления/обновления -->
+        <div class="space-y-6">
+            <div class="bg-gradient-to-bl from-white/10 to-transparent backdrop-blur-2xl border border-white/10 rounded-[32px] p-8">
+                <h3 class="text-white/20 text-[10px] font-bold uppercase tracking-[0.3em] mb-8">Set Custom Rate</h3>
+                
+                <form action="/nexus/users/{{ target.id }}/prices/add" method="post" class="space-y-6">
+                    <div>
+                        <label class="text-[10px] font-bold text-white/30 uppercase tracking-[0.2em] mb-3 block">Category</label>
+                        <select name="category_id" required class="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-4 text-white font-bold focus:outline-none focus:border-nexus-sakura/50 appearance-none">
+                            {% for cat in categories %}
+                                <option value="{{ cat.id }}" class="bg-[#0a0a0f]">{{ cat.title }} (База: {{ cat.payout_rate }})</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div>
+                        <label class="text-[10px] font-bold text-white/30 uppercase tracking-[0.2em] mb-3 block">Price (USDT)</label>
+                        <input type="number" name="price" step="0.01" required placeholder="0.00" 
+                               class="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-4 text-nexus-sakura font-bold text-lg focus:outline-none focus:border-nexus-sakura/50 text-center">
+                    </div>
+
+                    <button type="submit" class="w-full py-5 rounded-2xl bg-gradient-to-r from-nexus-sakura to-purple-500 text-white font-bold uppercase tracking-widest text-[12px] shadow-lg shadow-purple-500/20 active:scale-95 transition-all">
+                        Сохранить ставку
+                    </button>
+                </form>
+            </div>
+        </div>
+
+    </div>
+</div>
+{% endblock %}

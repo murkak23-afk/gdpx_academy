@@ -15,8 +15,8 @@
             <button class="px-5 py-2.5 bg-white/5 border border-white/10 rounded-xl text-sm font-semibold text-white/60 hover:bg-white/10 transition-all">
                 БЛОК-ЛИСТ
             </button>
-            <button class="px-5 py-2.5 bg-gradient-to-r from-nexus-cyan to-nexus-sakura rounded-xl text-sm font-bold text-white shadow-lg shadow-blue-500/20 active:scale-95 transition-all">
-                ВЫДАТЬ ДОСТУП
+            <button onclick="openCreateUserModal()" class="px-5 py-2.5 bg-gradient-to-r from-nexus-cyan to-nexus-sakura rounded-xl text-sm font-bold text-white shadow-lg shadow-blue-500/20 active:scale-95 transition-all">
+                + НОВЫЙ СОТРУДНИК
             </button>
         </div>
     </div>
@@ -66,12 +66,15 @@
                         </td>
                         <td class="px-8 py-5 text-right">
                             <div class="flex justify-end gap-2">
+                                <a href="/nexus/users/{{ u.id }}/prices" class="px-4 py-2 bg-nexus-sakura/10 border border-nexus-sakura/20 rounded-lg text-[11px] font-bold text-nexus-sakura uppercase tracking-widest hover:bg-nexus-sakura/20 transition-all">
+                                    Цены
+                                </a>
                                 <a href="/nexus/users/{{ u.id }}/delivery" class="px-4 py-2 bg-nexus-cyan/10 border border-nexus-cyan/20 rounded-lg text-[11px] font-bold text-nexus-cyan uppercase tracking-widest hover:bg-nexus-cyan/20 transition-all">
                                     Маршруты
                                 </a>
                                 <button onclick="openRoleModal('{{ u.id }}', '{{ u.full_name }}', '{{ u.role }}')" 
                                         {% if u.id == user.user_id %}disabled class="opacity-0 pointer-events-none"{% endif %}
-                                        class="px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-[11px] font-bold text-white/40 uppercase tracking-widest hover:border-nexus-sakura hover:text-nexus-sakura transition-all">
+                                        class="px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-[11px] font-bold text-white/40 uppercase tracking-widest hover:border-white/30 hover:text-white transition-all">
                                     Роль
                                 </button>
                             </div>
@@ -109,7 +112,57 @@
     </div>
 </div>
 
+<!-- Модалка создания пользователя -->
+<div id="create-user-modal" class="fixed inset-0 bg-black/80 backdrop-blur-md z-[100] hidden flex items-center justify-center p-4">
+    <div class="bg-[#0a0a0f] border border-white/10 w-full max-w-md rounded-[32px] p-8 shadow-[0_20px_60px_rgba(0,0,0,0.8)] animate-in zoom-in-95 duration-300">
+        <h3 class="text-xl font-bold text-white mb-2">Новый сотрудник</h3>
+        <p class="text-white/40 text-sm mb-8">Создание учетной записи и привязка Telegram ID</p>
+        
+        <form action="/nexus/users/create" method="post" class="space-y-5">
+            <div>
+                <label class="text-[10px] font-bold text-white/30 uppercase tracking-[0.2em] mb-2 block">Telegram ID</label>
+                <input type="number" name="telegram_id" required placeholder="8118820086"
+                       class="w-full bg-white/5 border border-white/10 rounded-xl px-5 py-3 text-white focus:outline-none focus:border-nexus-cyan/50 transition-all font-mono">
+            </div>
+            
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <label class="text-[10px] font-bold text-white/30 uppercase tracking-[0.2em] mb-2 block">Логин (WebApp)</label>
+                    <input type="text" name="login" required placeholder="worker1"
+                           class="w-full bg-white/5 border border-white/10 rounded-xl px-5 py-3 text-white focus:outline-none focus:border-nexus-cyan/50 transition-all text-sm">
+                </div>
+                <div>
+                    <label class="text-[10px] font-bold text-white/30 uppercase tracking-[0.2em] mb-2 block">Роль</label>
+                    <select name="role" class="w-full bg-white/5 border border-white/10 rounded-xl px-5 py-3 text-white focus:outline-none focus:border-nexus-cyan/50 appearance-none text-sm">
+                        {% for r in roles %}
+                            <option value="{{ r }}" class="bg-[#0a0a0f]">{{ r|upper }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+
+            <div>
+                <label class="text-[10px] font-bold text-white/30 uppercase tracking-[0.2em] mb-2 block">Пароль</label>
+                <input type="password" name="password" required placeholder="••••••••"
+                       class="w-full bg-white/5 border border-white/10 rounded-xl px-5 py-3 text-white focus:outline-none focus:border-nexus-cyan/50 transition-all">
+            </div>
+            
+            <div class="flex gap-4 pt-4">
+                <button type="button" onclick="closeCreateUserModal()" class="flex-1 py-4 rounded-2xl border border-white/10 text-white/40 font-bold uppercase tracking-widest text-[11px] hover:bg-white/5 transition-all">Отмена</button>
+                <button type="submit" class="flex-1 py-4 rounded-2xl bg-gradient-to-r from-nexus-cyan to-nexus-sakura text-white font-bold uppercase tracking-widest text-[11px] shadow-lg shadow-blue-500/20 active:scale-95 transition-all">Создать</button>
+            </div>
+        </form>
+    </div>
+</div>
+
 <script>
+    function openCreateUserModal() {
+        document.getElementById('create-user-modal').classList.remove('hidden');
+    }
+    function closeCreateUserModal() {
+        document.getElementById('create-user-modal').classList.add('hidden');
+    }
+    
     function openRoleModal(id, name, currentRole) {
         document.getElementById('modal-user-name').innerText = name;
         document.getElementById('modal-role-select').value = currentRole;

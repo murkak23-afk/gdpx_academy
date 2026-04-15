@@ -76,24 +76,38 @@
 
         <!-- Right Column: Actions -->
         <div class="space-y-6">
-            {% if user.role != 'simbuyer' %}
+            <!-- Операции (Отображаются по ролям и статусам) -->
+            {% set is_frozen = (user.role == 'simbuyer' and sub.status == 'accepted') %}
+            
+            {% if not is_frozen %}
             <div class="bg-gradient-to-br from-white/10 to-transparent backdrop-blur-2xl border border-white/10 rounded-[32px] p-8">
                 <h3 class="text-white/20 text-[10px] font-bold uppercase tracking-[0.3em] mb-6">Operations</h3>
                 
                 <div class="space-y-4">
-                    <button hx-post="/nexus/esim/{{ sub.id }}/action/accept" hx-swap="none" onclick="this.disabled=true; this.classList.add('opacity-50')"
+                    {% if user.role != 'simbuyer' %}
+                    <button hx-post="/nexus/esim/{{ sub.id }}/action/accept" hx-swap="none" hx-confirm="Подтвердить выплату за эту eSIM?" onclick="this.disabled=true; this.classList.add('opacity-50')"
                             class="w-full py-4 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 font-bold uppercase tracking-widest text-[12px] hover:bg-emerald-500/20 transition-all">
-                        Accept Asset
+                        Accept Asset (Зачёт)
                     </button>
-                    <button hx-post="/nexus/esim/{{ sub.id }}/action/not_scan" hx-swap="none" onclick="this.disabled=true; this.classList.add('opacity-50')"
+                    {% endif %}
+                    
+                    <button hx-post="/nexus/esim/{{ sub.id }}/action/not_scan" hx-swap="none" hx-confirm="Отметить как 'Не Скан'?" onclick="this.disabled=true; this.classList.add('opacity-50')"
                             class="w-full py-4 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400 font-bold uppercase tracking-widest text-[12px] hover:bg-amber-500/20 transition-all">
-                        Mark Not A Scan
+                        Mark Not A Scan (Не Скан)
                     </button>
-                    <button hx-post="/nexus/esim/{{ sub.id }}/action/block" hx-swap="none" onclick="this.disabled=true; this.classList.add('opacity-50')"
+                    <button hx-post="/nexus/esim/{{ sub.id }}/action/block" hx-swap="none" hx-confirm="Заблокировать актив?" onclick="this.disabled=true; this.classList.add('opacity-50')"
                             class="w-full py-4 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 font-bold uppercase tracking-widest text-[12px] hover:bg-red-500/20 transition-all">
-                        Block / Reject
+                        Block / Reject (Брак)
                     </button>
                 </div>
+            </div>
+            {% else %}
+            <div class="bg-emerald-500/5 border border-emerald-500/20 rounded-[32px] p-8 text-center">
+                <div class="w-12 h-12 mx-auto bg-emerald-500/10 rounded-full flex items-center justify-center mb-4">
+                    <svg class="w-6 h-6 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+                </div>
+                <h3 class="text-emerald-500 font-bold tracking-widest uppercase text-sm mb-2">Статус заморожен</h3>
+                <p class="text-emerald-500/50 text-xs">Актив проверен и принят модератором. Изменение статуса заблокировано.</p>
             </div>
             {% endif %}
 

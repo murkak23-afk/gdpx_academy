@@ -73,6 +73,9 @@
                 <a href="/nexus" class="flex items-center py-3 px-4 rounded-xl transition-all {% if active_page == 'dashboard' %}sidebar-active{% else %}text-slate-400 hover:bg-white/5 hover:text-white{% endif %}">
                     <span>Дашборд</span>
                 </a>
+                <a href="/nexus/moderation" class="flex items-center py-3 px-4 rounded-xl transition-all {% if active_page == 'moderation' %}sidebar-active{% else %}text-slate-400 hover:bg-white/5 hover:text-white{% endif %}">
+                    <span>Модерация</span>
+                </a>
                 {% endif %}
                 <a href="/nexus/inventory" class="flex items-center py-3 px-4 rounded-xl transition-all {% if active_page == 'inventory' %}sidebar-active{% else %}text-slate-400 hover:bg-white/5 hover:text-white{% endif %}">
                     <span>Склад eSIM</span>
@@ -141,6 +144,44 @@
             </div>
         </main>
     </div>
+
+    <!-- Глобальный Поиск (Ctrl+K) -->
+    <div id="search-modal" class="fixed inset-0 z-[200] bg-black/80 backdrop-blur-md hidden flex items-start justify-center pt-[10vh] px-4" onclick="if(event.target === this) closeSearch()">
+        <div class="w-full max-w-2xl bg-[#0a0a0f] border border-white/10 rounded-[32px] shadow-[0_30px_100px_rgba(0,0,0,0.8)] overflow-hidden animate-in zoom-in-95 duration-200 text-left">
+            <div class="p-6 border-b border-white/5 flex items-center gap-4">
+                <svg class="w-6 h-6 text-white/20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+                <input type="text" id="search-input" name="q" placeholder="Поиск по номеру или ID..." autocomplete="off"
+                       class="flex-1 bg-transparent border-none outline-none text-white text-lg placeholder:text-white/10"
+                       hx-get="/nexus/search" hx-trigger="keyup changed delay:300ms" hx-target="#search-results">
+                <div class="px-2 py-1 bg-white/5 border border-white/10 rounded text-[10px] text-white/40 font-mono">ESC</div>
+            </div>
+            <div id="search-results" class="max-h-[60vh] overflow-y-auto custom-scrollbar">
+                <div class="p-12 text-center text-white/10">
+                    <p class="text-sm tracking-widest uppercase italic">Начните вводить цифры номера...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function openSearch() {
+            document.getElementById('search-modal').classList.remove('hidden');
+            document.getElementById('search-input').focus();
+        }
+        function closeSearch() {
+            document.getElementById('search-modal').classList.add('hidden');
+        }
+        // Хоткеи
+        window.addEventListener('keydown', function(e) {
+            if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+                e.preventDefault();
+                openSearch();
+            }
+            if (e.key === 'Escape') {
+                closeSearch();
+            }
+        });
+    </script>
 
 </body>
 </html>

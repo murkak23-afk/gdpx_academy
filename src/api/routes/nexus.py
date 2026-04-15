@@ -162,6 +162,35 @@ async def get_reports(request: Request, user_data: dict = Depends(get_current_us
             "active_page": "reports"
         })
 
+@router.get("/reports/export")
+async def export_reports_csv(user_data: dict = Depends(get_current_user)):
+    """Выгрузка отчетов в CSV (Улучшение 4)."""
+    import io
+    import csv
+    from fastapi.responses import StreamingResponse
+    
+    async with SessionFactory() as session:
+        user = await session.get(User, user_data.get("user_id"))
+        if user.role not in [UserRole.OWNER, UserRole.ADMIN]:
+            raise HTTPException(status_code=403)
+            
+        stmt = select(Submission).options(joinedload(Submission.category)).order_by(Submission.updated_at.desc())
+        items = (await session.execute(stmt)).scalars().all()
+        
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerow(["ID", "Phone", "Category", "Status", "Price", "Date"])
+        
+        for i in items:
+            writer.writerow([i.id, i.phone_normalized or 'N/A', i.category.title, i.status, i.purchase_price or 0, i.updated_at.strftime('%Y-%m-%d %H:%M')])
+            
+        response = StreamingResponse(
+            iter([output.getvalue()]),
+            media_type="text/csv"
+        )
+        response.headers["Content-Disposition"] = "attachment; filename=gdpx_reports.csv"
+        return response
+
 @router.get("/submission/{sub_id}", response_class=HTMLResponse)
 async def view_submission(sub_id: int, request: Request, user_data: dict = Depends(get_current_user)):
     """Детальная страница одной eSIM (скана)."""
@@ -344,6 +373,80 @@ async def delete_delivery_config(cfg_id: int, user_data: dict = Depends(get_curr
             return RedirectResponse(url=f"/nexus/users/{target_id}/delivery", status_code=303)
         return HTTPException(status_code=404)
 
+@router.get("/users/{target_id}/prices", response_class=HTMLResponse)
+async def get_user_prices_settings(target_id: int, request: Request, user_data: dict = Depends(get_current_user)):
+    """Страница настройки персональных цен пользователя."""
+    from src.api.app import templates
+    async with SessionFactory() as session:
+        user = await session.get(User, user_data.get("user_id"))
+        if user.role not in [UserRole.OWNER, UserRole.ADMIN]:
+            raise HTTPException(status_code=403, detail="Permission denied")
+            
+        target = await session.get(User, target_id)
+        if not target:
+            raise HTTPException(status_code=404, detail="Пользователь не найден")
+            
+        from src.database.models.web_control import SimbuyerPrice
+        stmt = select(SimbuyerPrice).options(joinedload(SimbuyerPrice.category)).where(SimbuyerPrice.user_id == target.id)
+        prices = (await session.execute(stmt)).scalars().all()
+        
+        # Список категорий
+        categories = (await session.execute(select(Category).where(Category.is_active == True))).scalars().all()
+        
+        return templates.TemplateResponse("user_prices_settings.html", {
+            "request": request,
+            "user": user,
+            "target": target,
+            "prices": prices,
+            "categories": categories,
+            "active_page": "users"
+        })
+
+@router.post("/users/{target_id}/prices/add")
+async def add_user_price_config(
+    target_id: int, 
+    category_id: int = Form(...), 
+    price: Decimal = Form(...), 
+    user_data: dict = Depends(get_current_user)
+):
+    """Добавление/обновление персональной цены."""
+    async with SessionFactory() as session:
+        user = await session.get(User, user_data.get("user_id"))
+        if user.role not in [UserRole.OWNER, UserRole.ADMIN]:
+            raise HTTPException(status_code=403, detail="Permission denied")
+            
+        from src.database.models.web_control import SimbuyerPrice
+        # Ищем, нет ли уже цены для этой категории
+        stmt = select(SimbuyerPrice).where(SimbuyerPrice.user_id == target_id, SimbuyerPrice.category_id == category_id)
+        existing = (await session.execute(stmt)).scalar_one_or_none()
+        
+        if existing:
+            existing.price = price
+        else:
+            new_price = SimbuyerPrice(user_id=target_id, category_id=category_id, price=price)
+            session.add(new_price)
+            
+        await session.commit()
+        await log_admin_action(admin_id=user.id, action="UPDATE_USER_PRICE", target_type="user", target_id=target_id, details=f"Установлена цена {price} для кат. {category_id}")
+        return RedirectResponse(url=f"/nexus/users/{target_id}/prices", status_code=303)
+
+@router.post("/users/prices/{price_id}/delete")
+async def delete_user_price(price_id: int, user_data: dict = Depends(get_current_user)):
+    """Удаление персональной цены."""
+    async with SessionFactory() as session:
+        user = await session.get(User, user_data.get("user_id"))
+        if user.role not in [UserRole.OWNER, UserRole.ADMIN]:
+            raise HTTPException(status_code=403, detail="Permission denied")
+            
+        from src.database.models.web_control import SimbuyerPrice
+        price_cfg = await session.get(SimbuyerPrice, price_id)
+        if price_cfg:
+            target_id = price_cfg.user_id
+            await session.delete(price_cfg)
+            await session.commit()
+            return RedirectResponse(url=f"/nexus/users/{target_id}/prices", status_code=303)
+        return HTTPException(status_code=404)
+
 from src.services.delivery_service import background_delivery_task
 
 @router.post("/inventory/take", response_class=HTMLResponse)
@@ -389,6 +492,9 @@ async def take_esim_from_inventory(
         )
         
         return HTMLResponse(content='<script>window.location.href="/nexus/my-esim"</script>')
+
+@router.get("/users", response_class=HTMLResponse)
+async def get_users_manage(request: Request, user_data: dict = Depends(get_current_user)):
     """Страница управления пользователями (для OWNER и ADMIN)."""
     from src.api.app import templates
     async with SessionFactory() as session:
@@ -406,6 +512,59 @@ async def take_esim_from_inventory(
             "roles": [r.value for r in UserRole],
             "active_page": "users"
         })
+
+@router.post("/users/create")
+async def create_new_user(
+    telegram_id: int = Form(...),
+    login: str = Form(...),
+    password: str = Form(...),
+    role: str = Form(...),
+    user_data: dict = Depends(get_current_user)
+):
+    """Создание нового сотрудника и WebAccount."""
+    async with SessionFactory() as session:
+        current_admin = await session.get(User, user_data.get("user_id"))
+        if current_admin.role != UserRole.OWNER:
+            raise HTTPException(status_code=403, detail="Only OWNER can create users")
+            
+        # 1. Проверяем, существует ли пользователь в боте
+        stmt = select(User).where(User.telegram_id == telegram_id)
+        user = (await session.execute(stmt)).scalar_one_or_none()
+        
+        if not user:
+            # Создаем нового пользователя бота
+            user = User(
+                telegram_id=telegram_id,
+                full_name=f"New Worker ({login})",
+                role=UserRole(role),
+                is_active=True
+            )
+            session.add(user)
+            await session.flush() # Получаем ID
+        else:
+            # Если пользователь есть, просто обновляем его роль
+            user.role = UserRole(role)
+
+        # 2. Проверяем WebAccount
+        from src.database.models.web_control import WebAccount
+        stmt_web = select(WebAccount).where(WebAccount.login == login)
+        existing_web = (await session.execute(stmt_web)).scalar_one_or_none()
+        if existing_web:
+            raise HTTPException(status_code=400, detail="Логин уже занят")
+
+        # 3. Создаем WebAccount
+        new_web = WebAccount(
+            user_id=user.id,
+            login=login,
+            password_hash=AuthService.hash_password(password),
+            is_active=True
+        )
+        session.add(new_web)
+        
+        await session.commit()
+        await log_admin_action(admin_id=current_admin.id, action="CREATE_USER", target_type="user", target_id=user.id, details=f"Создан аккаунт {login} с ролью {role}")
+        
+        return RedirectResponse(url="/nexus/users", status_code=303)
 
 @router.post("/users/{target_id}/role")
 async def update_user_role(target_id: int, new_role: str = Form(...), user_data: dict = Depends(get_current_user)):
@@ -460,28 +619,129 @@ async def get_audit_log(request: Request, user_data: dict = Depends(get_current_
             "active_page": "audit"
         })
 
-@router.post("/esim/{sub_id}/action/{action}")
-async def process_esim_action(sub_id: int, action: str, user_data: dict = Depends(get_current_user)):
+@router.get("/moderation", response_class=HTMLResponse)
+async def get_moderation_panel(request: Request, user_data: dict = Depends(get_current_user)):
+    """Панель модерации активных симок (для OWNER и ADMIN)."""
+    from src.api.app import templates
     async with SessionFactory() as session:
         user = await session.get(User, user_data.get("user_id"))
-        # Запрещаем симбайеру менять статусы!
-        if user.role == UserRole.SIMBUYER:
+        if user.role not in [UserRole.OWNER, UserRole.ADMIN]:
             raise HTTPException(status_code=403, detail="Permission denied")
             
+        # Загружаем симки в работе
+        stmt = (
+            select(Submission)
+            .options(joinedload(Submission.category), joinedload(Submission.seller), joinedload(Submission.admin))
+            .where(Submission.status.in_([SubmissionStatus.IN_WORK, SubmissionStatus.WAIT_CONFIRM]))
+            .order_by(Submission.assigned_at.desc())
+        )
+        active_items = (await session.execute(stmt)).scalars().all()
+        
+        # Словарь цветов для категорий (Улучшение 3)
+        cat_colors = {
+            "beeline": "from-yellow-400 to-amber-600",
+            "mts": "from-red-500 to-rose-700",
+            "megafon": "from-emerald-400 to-green-600",
+            "tele2": "from-slate-400 to-slate-600",
+            "tinkoff": "from-yellow-300 to-yellow-500",
+        }
+
+        return templates.TemplateResponse("moderation.html", {
+            "request": request,
+            "user": user,
+            "items": active_items,
+            "cat_colors": cat_colors,
+            "active_page": "moderation"
+        })
+
+@router.get("/search")
+async def search_submissions(q: str, user_data: dict = Depends(get_current_user)):
+    """API для глобального поиска по номеру телефона."""
+    async with SessionFactory() as session:
+        user = await session.get(User, user_data.get("user_id"))
+        
+        # Ищем по номеру (нормализованному)
+        stmt = (
+            select(Submission)
+            .options(joinedload(Submission.category))
+            .where(Submission.phone_normalized.like(f"%{q}%"))
+            .limit(10)
+        )
+        # Если SIMBUYER - фильтруем только его симки
+        if user.role == UserRole.SIMBUYER:
+            stmt = stmt.where(Submission.delivered_to_chat == user.telegram_id)
+            
+        results = (await session.execute(stmt)).scalars().all()
+        
+        html = ""
+        for res in results:
+            html += f"""
+            <a href="/nexus/submission/{res.id}" class="flex items-center justify-between p-4 hover:bg-white/5 border-b border-white/5 transition-colors">
+                <div>
+                    <div class="text-white font-bold">{res.phone_normalized or 'Н/Д'}</div>
+                    <div class="text-[10px] text-white/40 uppercase tracking-widest">{res.category.title} #{res.id}</div>
+                </div>
+                <div class="text-nexus-cyan font-mono text-xs uppercase">{res.status}</div>
+            </a>
+            """
+        return HTMLResponse(content=html if html else '<div class="p-8 text-center text-white/20">Ничего не найдено</div>')
+
+@router.post("/esim/{sub_id}/action/{action}")
+async def process_esim_action(sub_id: int, action: str, user_data: dict = Depends(get_current_user)):
+    """Обработка действий с eSIM (изменение статуса)."""
+    async with SessionFactory() as session:
+        user = await session.get(User, user_data.get("user_id"))
+            
         sub = await session.get(Submission, sub_id)
-        if sub:
-            old_status = sub.status
-            if action == "block": sub.status = SubmissionStatus.BLOCKED
-            elif action == "not_scan": sub.status = SubmissionStatus.NOT_A_SCAN
-            elif action == "accept": sub.status = SubmissionStatus.ACCEPTED
+        if not sub:
+            return HTMLResponse(content='<div class="text-red-400">Not found</div>')
+
+        old_status = sub.status
+        is_simbuyer = user.role == UserRole.SIMBUYER
+
+        # ЛОГИКА ЗАМОРОЗКИ И ПРАВ ДОСТУПА
+        if is_simbuyer:
+            # 1. Симбайер не может переопределить решение Админа/Овнера (если статус уже ACCEPTED)
+            if old_status == SubmissionStatus.ACCEPTED:
+                return HTMLResponse(content='<div class="text-red-400 p-2 bg-red-900/20 border border-red-900 rounded">❌ Статус заморожен администратором.</div>')
+            
+            # 2. Симбайер может ставить только BLOCKED или NOT_A_SCAN
+            if action not in ["block", "not_scan"]:
+                return HTMLResponse(content='<div class="text-red-400 p-2 bg-red-900/20 border border-red-900 rounded">❌ Недостаточно прав для этого действия.</div>')
+
+        # ПРИМЕНЕНИЕ СТАТУСА
+        if action == "block": 
+            sub.status = SubmissionStatus.BLOCKED
+        elif action == "not_scan": 
+            sub.status = SubmissionStatus.NOT_A_SCAN
+        elif action == "accept" and not is_simbuyer: # Только Админ/Овнер
+            sub.status = SubmissionStatus.ACCEPTED
+            
+        if old_status != sub.status:
             await session.commit()
             
-            # Пишем лог
+            # ВИЗУАЛЬНЫЙ ЛОГ В ТИКЕТАХ (Улучшение 2)
+            from src.database.models.submission import SupportTicket, ChatMessage
+            ticket_stmt = select(SupportTicket).where(SupportTicket.submission_id == sub.id)
+            ticket = (await session.execute(ticket_stmt)).scalar_one_or_none()
+            if ticket:
+                sys_msg = ChatMessage(
+                    ticket_id=ticket.id,
+                    sender_id=None, # None означает системное сообщение
+                    text=f"⚙️ СИСТЕМА: Статус изменен на {sub.status.upper()} пользователем {user.full_name}"
+                )
+                session.add(sys_msg)
+                await session.commit()
+
+            # Пишем аудит-лог
             await log_admin_action(
                 admin_id=user.id,
                 action=f"ACTION_{action.upper()}",
                 target_type="submission",
                 target_id=sub.id,
-                details=f"Статус изменен: {old_status} -> {sub.status}"
+                details=f"Статус изменен: {old_status} -> {sub.status} пользователем {user.role}"
             )
-        return HTMLResponse(content="")
+            
+            return HTMLResponse(content='<script>window.location.reload();</script>')
+        
+        return HTMLResponse(content='')
