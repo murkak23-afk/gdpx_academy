@@ -21,56 +21,62 @@
          class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
         
         <!-- Склад -->
-        <div class="bg-white/[0.03] backdrop-blur-2xl p-10 rounded-[32px] border border-white/10 shadow-[0_15px_40px_rgba(0,0,0,0.4)] hover:shadow-[0_20px_60px_rgba(0,217,255,0.1)] transition-all group overflow-hidden relative flex flex-col justify-between min-h-[220px]">
-            <div class="absolute -top-12 -right-12 w-24 h-24 bg-nexus-cyan/5 rounded-full blur-[40px]"></div>
+        <div class="premium-card p-10 flex flex-col justify-between min-h-[220px] relative overflow-hidden group">
+            <div class="absolute -top-12 -right-12 w-24 h-24 bg-nexus-cyan/10 rounded-full blur-[40px] group-hover:bg-nexus-cyan/20 transition-all duration-700"></div>
             <div>
                 <div class="text-white/20 text-[10px] font-bold uppercase tracking-[0.3em] mb-4">Доступно на складе</div>
                 <div class="flex items-baseline gap-3">
-                    <span class="text-[52px] font-bold text-white group-hover:scale-105 transition-transform duration-500">{{ stats.stock }}</span>
+                    <span class="text-[52px] font-bold text-white neon-text-cyan">{{ stats.stock }}</span>
                     <span class="text-nexus-cyan/40 text-[14px] font-medium tracking-widest uppercase">В ОЖИДАНИИ</span>
                 </div>
             </div>
             <div class="mt-auto">
                 <div class="h-[2px] w-full bg-white/5 rounded-full overflow-hidden">
-                    <div class="h-full bg-nexus-cyan shadow-[0_0_10px_#00d9ff] w-[{{ (stats.stock / 10)|round }}%]"></div>
+                    <div class="h-full bg-nexus-cyan shadow-[0_0_15px_#00d9ff] w-[{{ (stats.stock / 10)|round }}%]"></div>
                 </div>
             </div>
         </div>
 
         <!-- Оборот (Amount) -->
-        <div class="bg-white/[0.03] backdrop-blur-2xl p-10 rounded-[32px] border border-white/10 shadow-[0_15px_40px_rgba(0,0,0,0.4)] hover:shadow-[0_20px_60px_rgba(255,0,234,0.1)] transition-all group overflow-hidden relative flex flex-col justify-between min-h-[220px]">
-            <div class="absolute -top-12 -right-12 w-24 h-24 bg-nexus-sakura/5 rounded-full blur-[40px]"></div>
+        <div class="premium-card p-10 flex flex-col justify-between min-h-[220px] relative overflow-hidden group">
+            <div class="absolute -top-12 -right-12 w-24 h-24 bg-nexus-sakura/10 rounded-full blur-[40px] group-hover:bg-nexus-sakura/20 transition-all duration-700"></div>
             <div>
                 <div class="text-white/20 text-[10px] font-bold uppercase tracking-[0.3em] mb-4">Доход за день (USDT)</div>
                 <div class="flex items-baseline gap-3">
-                    <span class="text-[52px] font-bold text-white group-hover:scale-105 transition-transform duration-500">{{ stats.today_amount }}</span>
+                    <span class="text-[52px] font-bold text-white neon-text-sakura">{{ stats.today_amount }}</span>
                     <span class="text-nexus-sakura/40 text-[14px] font-medium tracking-widest uppercase">ПРИНЯТО</span>
                 </div>
             </div>
             <div class="mt-auto flex items-center gap-2 text-[11px] text-nexus-sakura/80 font-bold uppercase tracking-wider">
-                <span class="w-1.5 h-1.5 rounded-full bg-nexus-sakura animate-pulse"></span>
+                <span class="w-1.5 h-1.5 rounded-full bg-nexus-sakura animate-pulse shadow-[0_0_10px_#ff00ea]"></span>
                 В РЕАЛЬНОМ ВРЕМЕНИ
             </div>
         </div>
 
         <!-- Оборот (Count) -->
-        <div class="bg-white/[0.03] backdrop-blur-2xl p-8 rounded-[32px] border border-white/10 shadow-[0_15px_40px_rgba(0,0,0,0.4)] hover:shadow-[0_20px_60px_rgba(255,255,255,0.05)] transition-all group overflow-hidden relative">
-            <div class="text-white/20 text-[10px] font-bold uppercase tracking-[0.3em] mb-4">Операции за сегодня</div>
-            <div class="flex items-baseline gap-3">
-                <span class="text-[48px] font-bold text-white group-hover:scale-105 transition-transform duration-500">{{ stats.today_count }}</span>
-                <span class="text-white/40 text-[14px] font-medium tracking-widest uppercase">Сканов</span>
+        <div class="premium-card p-10 flex flex-col justify-between min-h-[220px] relative overflow-hidden group">
+            <div class="absolute -top-12 -right-12 w-24 h-24 bg-white/5 rounded-full blur-[40px] group-hover:bg-white/10 transition-all duration-700"></div>
+            <div>
+                <div class="text-white/20 text-[10px] font-bold uppercase tracking-[0.3em] mb-4">Операции за сегодня</div>
+                <div class="flex items-baseline gap-3">
+                    <span class="text-[52px] font-bold text-white">{{ stats.today_count }}</span>
+                    <span class="text-white/40 text-[14px] font-medium tracking-widest uppercase">Сканов</span>
+                </div>
             </div>
-            <p class="mt-4 text-[12px] text-white/30 tracking-wide">Последние 24 часа активности</p>
+            <p class="mt-auto text-[12px] text-white/30 tracking-wide">За последние 24 часа</p>
         </div>
 
         <!-- Воркеры -->
-        <div class="bg-white/[0.03] backdrop-blur-2xl p-8 rounded-[32px] border border-white/10 shadow-[0_15px_40px_rgba(0,0,0,0.4)] hover:shadow-[0_20px_60px_rgba(0,217,255,0.05)] transition-all group overflow-hidden relative">
-            <div class="text-white/20 text-[10px] font-bold uppercase tracking-[0.3em] mb-4">Активные Агенты</div>
-            <div class="flex items-baseline gap-3">
-                <span class="text-[48px] font-bold text-white group-hover:scale-105 transition-transform duration-500">{{ stats.workers }}</span>
-                <span class="text-nexus-cyan/40 text-[14px] font-medium tracking-widest uppercase">Всего</span>
+        <div class="premium-card p-10 flex flex-col justify-between min-h-[220px] relative overflow-hidden group">
+            <div class="absolute -top-12 -right-12 w-24 h-24 bg-nexus-cyan/10 rounded-full blur-[40px] group-hover:bg-nexus-cyan/20 transition-all duration-700"></div>
+            <div>
+                <div class="text-white/20 text-[10px] font-bold uppercase tracking-[0.3em] mb-4">Активные Агенты</div>
+                <div class="flex items-baseline gap-3">
+                    <span class="text-[52px] font-bold text-white neon-text-cyan">{{ stats.workers }}</span>
+                    <span class="text-nexus-cyan/40 text-[14px] font-medium tracking-widest uppercase">Всего</span>
+                </div>
             </div>
-            <div class="mt-4 text-[12px] text-nexus-cyan font-bold tracking-[0.1em] uppercase">Команда в строю</div>
+            <div class="mt-auto text-[12px] text-nexus-cyan font-bold tracking-[0.1em] uppercase">Команда в строю</div>
         </div>
 
     </div>

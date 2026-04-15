@@ -34,6 +34,20 @@
     
     <style>
         body { font-family: 'Outfit', sans-serif; background: #0a0a0f; color: #ffffff; margin: 0; min-height: 100vh; overflow-x: hidden; }
+        
+        /* Эффект падающих лепестков */
+        .sakura-container { position: fixed; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 1; overflow: hidden; }
+        .petal { 
+            position: absolute; background: #ff00ea; border-radius: 150% 0 150% 0; 
+            opacity: 0.1; animation: fall linear infinite; filter: blur(1px);
+        }
+        @keyframes fall {
+            0% { transform: translateY(-10vh) translateX(0) rotate(0deg); opacity: 0; }
+            10% { opacity: 0.15; }
+            90% { opacity: 0.1; }
+            100% { transform: translateY(110vh) translateX(100px) rotate(360deg); opacity: 0; }
+        }
+
         .sidebar-active { 
             background: linear-gradient(90deg, rgba(0, 217, 255, 0.15) 0%, rgba(255, 0, 234, 0.1) 100%);
             border-left: 3px solid #00d9ff;
@@ -44,12 +58,64 @@
             backdrop-filter: blur(20px);
             border: 1px solid rgba(255, 255, 255, 0.08);
         }
+        /* Универсальные премиум-стили */
+        .premium-card {
+            background: rgba(255, 255, 255, 0.03);
+            backdrop-filter: blur(30px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 32px;
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .premium-card:hover {
+            border-color: rgba(0, 217, 255, 0.3);
+            box-shadow: 0 30px 70px rgba(0, 217, 255, 0.1);
+            transform: translateY(-4px);
+        }
+        .premium-table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0 8px;
+        }
+        .premium-table tr {
+            background: rgba(255, 255, 255, 0.02);
+            backdrop-filter: blur(10px);
+            transition: all 0.3s ease;
+        }
+        .premium-table tr:hover {
+            background: rgba(255, 255, 255, 0.05);
+            transform: scale(1.005);
+        }
+        .premium-table td, .premium-table th {
+            padding: 20px 24px;
+        }
+        .premium-table td:first-child { border-radius: 20px 0 0 20px; }
+        .premium-table td:last-child { border-radius: 0 20px 20px 0; }
+        
+        .neon-text-cyan { text-shadow: 0 0 10px rgba(0, 217, 255, 0.5); }
+        .neon-text-sakura { text-shadow: 0 0 10px rgba(255, 0, 234, 0.5); }
         /* Анимация появления */
         .fade-in { animation: fadeIn 0.5s ease-out; }
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
     </style>
 </head>
 <body class="min-h-screen bg-[#0a0a0f]">
+
+    <!-- Sakura Petals -->
+    <div class="sakura-container" id="sakura-fall"></div>
+    <script>
+        const container = document.getElementById('sakura-fall');
+        for (let i = 0; i < 15; i++) {
+            const petal = document.createElement('div');
+            petal.className = 'petal';
+            petal.style.left = Math.random() * 100 + 'vw';
+            petal.style.width = Math.random() * 10 + 5 + 'px';
+            petal.style.height = petal.style.width;
+            petal.style.animationDuration = Math.random() * 10 + 10 + 's';
+            petal.style.animationDelay = Math.random() * 10 + 's';
+            container.appendChild(petal);
+        }
+    </script>
 
     <!-- Глобальный фон (Fixed) -->
     <div class="fixed inset-0 z-0 pointer-events-none overflow-hidden">

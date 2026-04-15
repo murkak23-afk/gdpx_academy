@@ -46,21 +46,21 @@
         </div>
     </div>
 
-    <!-- Таблица (Glassmorphism) -->
-    <div class="bg-[#0a0a0f]/60 backdrop-blur-xl rounded-[24px] border border-white/10 shadow-[0_8px_30px_rgba(0,0,0,0.5)] overflow-hidden">
-        <div class="overflow-x-auto">
-            <table class="w-full text-left border-collapse">
-                <thead class="bg-white/5 border-b border-white/10 text-[11px] font-semibold text-white/60 uppercase tracking-[0.15em]">
-                    <tr>
-                        <th class="px-8 py-5">Референс</th>
-                        <th class="px-8 py-5">Категория</th>
-                        <th class="px-8 py-5">Номер SIM</th>
-                        <th class="px-8 py-5">Статус</th>
-                        <th class="px-8 py-5">Получатель</th>
-                        <th class="px-8 py-5 text-right">Контекст</th>
-                    </tr>
-                </thead>
-                <tbody class="divide-y divide-white/5 text-sm">
+    <!-- Таблица -->
+    <div class="overflow-x-auto fade-in">
+        <table class="premium-table">
+            <thead class="text-[11px] font-semibold text-white/40 uppercase tracking-[0.2em]">
+                <tr>
+                    <th class="text-left">eSIM / ID</th>
+                    <th class="text-left">Категория</th>
+                    <th class="text-center">Симбайер</th>
+                    <th class="text-center">Статус</th>
+                    <th class="text-center">Выплата</th>
+                    <th class="text-right">Действие</th>
+                </tr>
+            </thead>
+            <tbody class="text-sm">
+
                     {% for item in shipments %}
                     <tr class="hover:bg-white/5 transition-colors duration-300 group">
                         <td class="px-8 py-5">
