@@ -93,7 +93,10 @@
 
 <style>
     /* Скрываем элементы глобального шаблона (меню, хедеры), оставляем только чистый экран логина */
-    aside, header, main, .fixed.inset-0#hero { display: none !important; }
+    aside, header, .fixed.inset-0#hero { display: none !important; }
+    
+    /* Убираем отступы у main только для страницы логина */
+    main { padding: 0 !important; margin: 0 !important; width: 100% !important; }
     
     /* Анимация для кнопки */
     @keyframes shine {
