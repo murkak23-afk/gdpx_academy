@@ -119,7 +119,7 @@
                         <div class="text-[13px] font-bold text-white truncate">@{{ user.username or user.telegram_id }}</div>
                         <div class="text-[10px] text-nexus-cyan uppercase tracking-widest font-bold opacity-60">{{ user.role }}</div>
                     </div>
-                    <a href="/auth/logout" class="text-white/20 hover:text-red-500 transition-colors">
+                    <a href="/auth/logout" class="text-white/20 hover:text-nexus-sakura transition-colors flex items-center justify-center p-2 rounded-lg hover:bg-white/5" title="Выход">
                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
                     </a>
                 </div>
@@ -129,11 +129,12 @@
 
         <!-- Main Content Area -->
         <main class="flex-1 w-full flex flex-col min-w-0">
-            <!-- Mobile Header (Visible only on mobile) -->
             <header class="lg:hidden h-16 border-b border-white/10 flex items-center justify-between px-6 glass-panel shrink-0">
                 <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-nexus-cyan to-nexus-sakura"></div>
                 <div class="text-white font-bold uppercase tracking-widest text-xs">Nexus Mobile</div>
-                <a href="/auth/logout" class="text-white/40"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M17 16l4-4m0 0l-4-4m4 4H7"/></svg></a>
+                <a href="/auth/logout" class="text-white/40 hover:text-nexus-sakura transition-colors">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
+                </a>
             </header>
 
             <!-- Scrollable Content -->

@@ -55,6 +55,10 @@ def create_app(bot: Bot, dispatcher: Dispatcher) -> FastAPI:
 
     from src.services.delivery_service import background_delivery_task
 
+    @app.get("/")
+    async def root_redirect():
+        return RedirectResponse(url="/auth/login")
+
     @app.get("/delivery")
     async def delivery_page(request: Request):
         return templates.TemplateResponse("delivery.html", {"request": request})
