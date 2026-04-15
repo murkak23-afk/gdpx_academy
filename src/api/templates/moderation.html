@@ -3,94 +3,142 @@
 {% block title %}Модерация активов{% endblock %}
 
 {% block content %}
-<div class="space-y-8 animate-in fade-in duration-500">
+<div class="space-y-12 fade-in">
     
     <!-- Заголовок -->
-    <div class="flex justify-between items-end">
+    <div class="flex flex-col md:flex-row justify-between items-start md:items-end gap-6">
         <div>
-            <h1 class="text-[32px] font-semibold text-white tracking-tight drop-shadow-[0_0_10px_rgba(0,217,255,0.3)]">Оперативный контроль</h1>
-            <p class="text-nexus-cyan mt-2 font-medium tracking-wider uppercase text-[10px]">Активы в работе и на подтверждении</p>
+            <h1 class="text-[42px] font-bold text-white tracking-tight japanese-title">Оперативный контроль</h1>
+            <p class="text-nexus-silver mt-2 font-medium tracking-[0.2em] uppercase text-[10px] opacity-60">Активы в работе и на подтверждении</p>
         </div>
-        <div class="flex gap-3">
-            <div class="px-4 py-2 bg-white/5 border border-white/10 rounded-xl text-xs font-mono text-white/40">
-                ACTIVE: {{ items|length }}
+        <div class="flex items-center gap-4">
+            <div id="batch-actions" class="hidden animate-in slide-in-from-right-10 flex gap-3">
+                <button onclick="submitBatch('accept')" class="px-8 py-3 bg-white text-black text-[11px] font-bold rounded-sm uppercase tracking-[0.2em] hover:bg-nexus-cyan hover:text-white transition-all shadow-2xl">
+                    Зачёт (<span id="selected-count">0</span>)
+                </button>
+            </div>
+            <div class="px-6 py-3 bg-white/[0.02] border border-white/5 rounded-sm text-[11px] font-bold text-nexus-silver uppercase tracking-widest">
+                Active Items: {{ items|length }}
             </div>
         </div>
     </div>
 
-    <!-- Таблица модерации -->
-    <div class="overflow-x-auto fade-in">
-        <table class="premium-table">
-            <thead class="text-[11px] font-semibold text-white/40 uppercase tracking-[0.2em]">
+    <!-- Таблица модерации (Zen Style) -->
+    <div class="overflow-x-auto custom-scrollbar">
+        <table class="premium-table" id="moderation-table">
+            <thead class="text-[10px] font-bold text-nexus-silver/30 uppercase tracking-[0.3em] border-b border-white/5">
                 <tr>
-                    <th class="text-left">eSIM / ID</th>
-                    <th class="text-center">Оператор</th>
-                    <th class="text-center">Симбайер</th>
-                    <th class="text-center">Статус</th>
-                    <th class="text-right">Действия</th>
+                    <th class="w-12 py-6 text-center">
+                        <input type="checkbox" id="select-all" class="w-4 h-4 border-white/10 bg-transparent text-nexus-cyan focus:ring-0 transition-all">
+                    </th>
+                    <th class="text-left py-6">eSIM / ID</th>
+                    <th class="text-center py-6">Оператор</th>
+                    <th class="text-center py-6">Симбайер</th>
+                    <th class="text-center py-6">Статус</th>
+                    <th class="text-right py-6">Управление</th>
                 </tr>
             </thead>
             <tbody class="text-sm">
                     {% for item in items %}
-                    <tr class="hover:bg-white/5 transition-colors duration-300 group">
-                        <td class="px-8 py-5">
-                            <div class="flex items-center gap-4">
-                                <div class="w-10 h-10 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center font-mono text-[10px] text-white/40">
-                                    #{{ item.id }}
-                                </div>
+                    <tr class="group" id="row-{{ item.id }}">
+                        <td class="text-center">
+                            <input type="checkbox" name="item-select" value="{{ item.id }}" class="item-checkbox w-4 h-4 border-white/10 bg-transparent text-nexus-cyan focus:ring-0 transition-all">
+                        </td>
+                        <td class="py-6">
+                            <div class="flex items-center gap-6">
+                                <div class="text-[11px] font-mono text-white/20">#{{ item.id }}</div>
                                 <div>
-                                    <div class="text-[15px] font-bold text-white tracking-wide">{{ item.phone_normalized or 'НОМЕР НЕ УКАЗАН' }}</div>
-                                    <div class="text-[10px] text-white/20 mt-0.5 tracking-widest uppercase">Взят: {{ item.assigned_at.strftime('%H:%M:%S') if item.assigned_at else '---' }}</div>
+                                    <div class="text-[16px] font-bold text-white tracking-wide group-hover:text-nexus-cyan transition-colors">{{ item.phone_normalized or 'НЕТ НОМЕРА' }}</div>
+                                    <div class="text-[9px] text-white/20 mt-1 tracking-[0.15em] uppercase">Taken: {{ item.assigned_at.strftime('%H:%M:%S') if item.assigned_at else '---' }}</div>
                                 </div>
                             </div>
                         </td>
-                        <td class="px-8 py-5 text-center">
-                            {% set slug = item.category.slug|lower %}
-                            {% set color = cat_colors.get(slug, "from-slate-500 to-slate-700") %}
-                            <span class="px-3 py-1 bg-gradient-to-r {{ color }} text-white text-[10px] font-bold rounded-lg shadow-lg uppercase tracking-widest">
-                                {{ item.category.title }}
-                            </span>
+                        <td class="text-center">
+                            <span class="text-[11px] font-bold text-white/40 uppercase tracking-widest">{{ item.category.title }}</span>
                         </td>
-                        <td class="px-8 py-5 text-center">
+                        <td class="text-center">
                             <div class="flex flex-col items-center">
-                                <span class="text-white font-medium text-[13px]">@{{ item.admin.username or 'unknown' }}</span>
-                                <span class="text-[10px] text-nexus-cyan/40 uppercase tracking-tighter">ID: {{ item.admin.telegram_id }}</span>
+                                <span class="text-white font-medium text-[13px]">@{{ item.buyer.username or 'unknown' }}</span>
+                                <span class="text-[9px] text-white/20 uppercase tracking-widest mt-1">ID: {{ item.buyer.telegram_id if item.buyer else '---' }}</span>
                             </div>
                         </td>
-                        <td class="px-8 py-5 text-center">
+                        <td class="text-center">
                             {% if item.status == 'wait_confirm' %}
-                                <span class="animate-pulse px-3 py-1 bg-amber-500/10 border border-amber-500/30 text-amber-500 text-[10px] font-bold rounded-lg uppercase tracking-widest">WAITING</span>
+                                <span class="text-nexus-sakura text-[10px] font-bold uppercase tracking-[0.2em] flex items-center justify-center gap-2">
+                                    <span class="w-1 h-1 rounded-full bg-nexus-sakura animate-ping"></span>
+                                    Wait
+                                </span>
                             {% else %}
-                                <span class="px-3 py-1 bg-nexus-cyan/10 border border-nexus-cyan/30 text-nexus-cyan text-[10px] font-bold rounded-lg uppercase tracking-widest">IN WORK</span>
+                                <span class="text-nexus-cyan text-[10px] font-bold uppercase tracking-[0.2em] flex items-center justify-center gap-2 opacity-40">
+                                    Work
+                                </span>
                             {% endif %}
                         </td>
-                        <td class="px-8 py-5 text-right">
-                            <div class="flex justify-end gap-2">
-                                <a href="/nexus/submission/{{ item.id }}" class="p-2 bg-white/5 border border-white/10 rounded-lg text-white/40 hover:text-nexus-cyan transition-colors" title="Просмотр">
-                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+                        <td class="text-right">
+                            <div class="flex justify-end gap-3 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <a href="/nexus/submission/{{ item.id }}" class="p-2 text-white/20 hover:text-white transition-colors" title="View">
+                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
                                 </a>
-                                
-                                <button hx-post="/nexus/esim/{{ item.id }}/action/accept" hx-confirm="Подтвердить зачёт?" hx-swap="none" onclick="this.closest('tr').remove()"
-                                        class="p-2 bg-emerald-500/10 border border-emerald-500/20 rounded-lg text-emerald-500 hover:bg-emerald-500/20 transition-all" title="Зачёт">
+                                <button hx-post="/nexus/esim/{{ item.id }}/action/accept" hx-swap="none" onclick="this.closest('tr').remove()"
+                                        class="p-2 text-white/20 hover:text-emerald-500 transition-colors" title="Accept">
                                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
                                 </button>
-                                
-                                <button hx-post="/nexus/esim/{{ item.id }}/action/not_scan" hx-confirm="Отметить как НЕ СКАН?" hx-swap="none" onclick="this.closest('tr').remove()"
-                                        class="p-2 bg-amber-500/10 border border-amber-500/20 rounded-lg text-amber-500 hover:bg-amber-500/20 transition-all" title="Не скан">
-                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
-                                </button>
-
-                                <button hx-post="/nexus/esim/{{ item.id }}/action/block" hx-confirm="ЗАБЛОКИРОВАТЬ СИМ-КАРТУ? Уведомление уйдет селлеру." hx-swap="none" onclick="this.closest('tr').remove()"
-                                        class="p-2 bg-red-500/10 border border-red-500/20 rounded-lg text-red-500 hover:bg-red-500/20 transition-all" title="Блок">
+                                <button hx-post="/nexus/esim/{{ item.id }}/action/block" hx-confirm="ЗАБЛОКИРОВАТЬ?" hx-swap="none" onclick="this.closest('tr').remove()"
+                                        class="p-2 text-white/20 hover:text-nexus-sakura transition-colors" title="Block">
                                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"/></svg>
                                 </button>
                             </div>
                         </td>
                     </tr>
                     {% endfor %}
-                </tbody>
-            </table>
-        </div>
+            </tbody>
+        </table>
     </div>
 </div>
+
+<form id="batch-form" hx-post="" hx-swap="none" class="hidden">
+    <input type="hidden" name="ids" id="batch-ids">
+</form>
+
+<script>
+    const selectAll = document.getElementById('select-all');
+    const checkboxes = document.querySelectorAll('.item-checkbox');
+    const batchActions = document.getElementById('batch-actions');
+    const selectedCount = document.getElementById('selected-count');
+    const batchForm = document.getElementById('batch-form');
+    const batchIdsInput = document.getElementById('batch-ids');
+
+    function updateBatchUI() {
+        const checked = document.querySelectorAll('.item-checkbox:checked');
+        if (checked.length > 0) {
+            batchActions.classList.remove('hidden');
+            selectedCount.innerText = checked.length;
+        } else {
+            batchActions.classList.add('hidden');
+        }
+    }
+
+    if (selectAll) {
+        selectAll.addEventListener('change', () => {
+            checkboxes.forEach(cb => cb.checked = selectAll.checked);
+            updateBatchUI();
+        });
+    }
+
+    checkboxes.forEach(cb => {
+        cb.addEventListener('change', updateBatchUI);
+    });
+
+    function submitBatch(action) {
+        const checked = document.querySelectorAll('.item-checkbox:checked');
+        const ids = Array.from(checked).map(cb => cb.value).join(',');
+        
+        if (confirm(`Выполнить зачёт для ${checked.length} активов?`)) {
+            batchIdsInput.value = ids;
+            batchForm.setAttribute('hx-post', `/nexus/esim/batch-action/${action}`);
+            htmx.process(batchForm);
+            htmx.trigger(batchForm, 'submit');
+        }
+    }
+</script>
 {% endblock %}

@@ -151,56 +151,55 @@ async def run_daily_report_task(ctx):
 async def run_simbuyer_payout_notifications_task(ctx):
     """
     Уведомление Simbuyer-ов об общей сумме выплат за день.
-    ТЗ: Пн-Пт 18:00 МСК (15:00 UTC), Сб 16:00 МСК (13:00 UTC).
+    ТЗ: Пн-Пт 18:00 МСК, Сб 16:00 МСК.
     """
     logger.info("Starting Simbuyer Payout Notifications task...")
     bot = ctx['bot']
     session_factory = ctx['session_factory']
-    now_utc = datetime.now(timezone.utc)
     
-    # Определяем начало текущего дня для статистики
-    today_start = now_utc.replace(hour=0, minute=0, second=0, microsecond=0)
+    # Статистика за текущий день по МСК (UTC+3)
+    msk_tz = timezone(timedelta(hours=3))
+    now_msk = datetime.now(msk_tz)
+    today_start_msk = now_msk.replace(hour=0, minute=0, second=0, microsecond=0)
+    today_start_utc = today_start_msk.astimezone(timezone.utc)
 
     try:
         async with session_factory() as session:
             from src.database.models.web_control import DeliveryConfig
             from src.database.models.submission import Submission
             from src.database.models.enums import SubmissionStatus
-            from sqlalchemy import select, func
+            from src.database.models.user import User
+            from sqlalchemy import select, func, and_
 
-            # 1. Получаем список всех уникальных маршрутов (Simbuyer -> Chat)
-            # Мы группируем по chat_id и user_id, чтобы отправить одно сводное сообщение на чат
-            stmt = select(
-                DeliveryConfig.user_id, 
-                DeliveryConfig.chat_id, 
-                DeliveryConfig.thread_id
-            ).group_by(DeliveryConfig.user_id, DeliveryConfig.chat_id, DeliveryConfig.thread_id)
-            
-            configs = (await session.execute(stmt)).all()
+            # 1. Находим всех активных байеров, у которых есть конфигурация доставки
+            stmt = select(User).where(User.role == "simbuyer")
+            users = (await session.execute(stmt)).scalars().all()
 
-            for cfg in configs:
-                user_id, chat_id, thread_id = cfg
-                
-                # 2. Считаем сумму "Зачётов" для этого пользователя за сегодня
-                # Важно: ищем по delivered_to_chat, так как это связка с конкретным Simbuyer-ом
-                # (предполагаем, что у каждого Simbuyer свой уникальный telegram_id, который и есть в delivered_to_chat)
-                from src.database.models.user import User
-                target_user = await session.get(User, user_id)
-                if not target_user: continue
-
+            for target_user in users:
+                # 2. Считаем сумму "Зачётов" для этого байера за сегодня по МСК
                 stats_stmt = select(
                     func.count(Submission.id),
                     func.sum(Submission.purchase_price)
                 ).where(
-                    Submission.delivered_to_chat == target_user.telegram_id,
-                    Submission.status == SubmissionStatus.ACCEPTED,
-                    Submission.updated_at >= today_start
+                    and_(
+                        Submission.buyer_id == target_user.id,
+                        Submission.status == SubmissionStatus.ACCEPTED,
+                        Submission.updated_at >= today_start_utc
+                    )
                 )
                 
                 res = (await session.execute(stats_stmt)).one()
                 count, total_amount = res[0] or 0, res[1] or 0
 
                 if count > 0:
+                    # 3. Ищем, куда слать отчет (General топик или первый попавшийся чат байера)
+                    cfg_stmt = select(DeliveryConfig).where(DeliveryConfig.user_id == target_user.id).limit(1)
+                    cfg = (await session.execute(cfg_stmt)).scalar_one_or_none()
+                    
+                    if not cfg:
+                        logger.warning(f"No delivery config for simbayer @{target_user.username}. Cannot send report.")
+                        continue
+
                     text = (
                         "📄 <b>ЕЖЕДНЕВНЫЙ СЧЁТ НА ОПЛАТУ</b>\n"
                         "▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰\n"
@@ -208,14 +207,20 @@ async def run_simbuyer_payout_notifications_task(ctx):
                         f"✅ Успешных сканов: <b>{count} шт.</b>\n"
                         f"💰 Итого к оплате: <b>{total_amount} USDT</b>\n"
                         "▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰\n"
-                        "<i>Счёт сформирован за текущие сутки. Пожалуйста, произведите оплату по реквизитам.</i>"
+                        "<i>Счёт сформирован за текущие сутки (МСК). Пожалуйста, произведите оплату по реквизитам.</i>"
                     )
+                    
                     try:
-                        # thread_id (General) обычно 0 или 1, но в ТЗ указан конкретный General
-                        await bot.send_message(chat_id, text, message_thread_id=thread_id)
-                        logger.info(f"Payout notification sent to Chat {chat_id} for User {user_id}")
+                        # Шлем в General топик (thread_id=None или 0 обычно в General, если не настроено иначе)
+                        # В ТЗ: "в главный топик этого чата (general)"
+                        await bot.send_message(
+                            chat_id=cfg.chat_id, 
+                            text=text, 
+                            message_thread_id=None # General topic
+                        )
+                        logger.info(f"Payout notification sent to Chat {cfg.chat_id} for Simbayer {target_user.id}")
                     except Exception as e:
-                        logger.error(f"Failed to send payout notification to {chat_id}: {e}")
+                        logger.error(f"Failed to send payout notification to {cfg.chat_id}: {e}")
             
             await session.commit()
     except Exception:

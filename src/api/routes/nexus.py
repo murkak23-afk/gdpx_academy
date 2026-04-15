@@ -169,6 +169,66 @@ async def get_my_esim(request: Request, user: User = Depends(get_current_user)):
             "active_page": "my-esim"
         })
 
+@router.post("/esim/batch-action/{action}")
+async def process_esim_batch_action(
+    action: str, 
+    ids: str = Form(...), 
+    user_data: dict = Depends(get_current_user)
+):
+    """Массовая обработка eSIM (например, массовый зачёт)."""
+    async with SessionFactory() as session:
+        user = await session.get(User, user_data.get("user_id"))
+        if user.role not in [UserRole.OWNER, UserRole.ADMIN]:
+            raise HTTPException(status_code=403)
+            
+        try:
+            target_ids = [int(i) for i in ids.split(",") if i.strip()]
+        except ValueError:
+            return HTMLResponse(content="Invalid IDs")
+
+        if not target_ids:
+            return HTMLResponse(content="No IDs selected")
+
+        stmt = select(Submission).where(Submission.id.in_(target_ids))
+        items = (await session.execute(stmt)).scalars().all()
+        
+        count = 0
+        for item in items:
+            old_status = item.status
+            new_status = None
+            
+            if action == "accept": new_status = SubmissionStatus.ACCEPTED
+            elif action == "block": new_status = SubmissionStatus.BLOCKED
+            elif action == "not_scan": new_status = SubmissionStatus.NOT_A_SCAN
+            
+            if new_status and old_status != new_status:
+                item.status = new_status
+                item.reviewed_at = datetime.now(timezone.utc)
+                count += 1
+                
+                # Пишем в лог модерации
+                from src.database.models.submission import ReviewAction
+                action_log = ReviewAction(
+                    submission_id=item.id,
+                    admin_id=user.id,
+                    from_status=old_status,
+                    to_status=new_status,
+                    comment="Массовая обработка через веб-панель"
+                )
+                session.add(action_log)
+
+        if count > 0:
+            await session.commit()
+            await log_admin_action(
+                admin_id=user.id,
+                action=f"BATCH_{action.upper()}",
+                target_type="submission",
+                target_id=0,
+                details=f"Массово обработано {count} шт."
+            )
+
+        return HTMLResponse(content=f'<script>window.location.reload();</script>')
+
 @router.get("/reports", response_class=HTMLResponse)
 async def get_reports(request: Request, user: User = Depends(get_current_user)):
     async with SessionFactory() as session:
@@ -226,11 +286,13 @@ async def export_reports_csv(user: User = Depends(admin_only)):
 async def view_submission(sub_id: int, request: Request, user: User = Depends(get_current_user)):
     """Детальная страница одной eSIM (скана)."""
     async with SessionFactory() as session:
-        stmt = (
-            select(Submission)
-            .options(joinedload(Submission.category), joinedload(Submission.seller))
-            .where(Submission.id == sub_id)
-        )
+        # Базовая выборка с категорией
+        stmt = select(Submission).options(joinedload(Submission.category)).where(Submission.id == sub_id)
+        
+        # Загружаем продавца только для админов и овнера (Изоляция данных)
+        if user.role in [UserRole.OWNER, UserRole.ADMIN]:
+            stmt = stmt.options(joinedload(Submission.seller))
+            
         res = await session.execute(stmt)
         sub = res.scalar_one_or_none()
         
@@ -575,7 +637,7 @@ async def take_esim_from_inventory(
             return HTMLResponse(content=f'<div class="text-amber-400 p-4 bg-amber-900/20 border border-amber-900 rounded-lg text-sm">Недостаточно на складе.</div>')
 
         # 3. Запускаем общую задачу выдачи
-        background_tasks.add_task(background_delivery_task, bot, category_id, cfg.chat_id, cfg.thread_id, count)
+        background_tasks.add_task(background_delivery_task, bot, category_id, user.id, cfg.chat_id, cfg.thread_id, count)
         
         # Логируем
         await log_admin_action(
@@ -802,7 +864,7 @@ async def get_moderation_panel(request: Request, user_data: dict = Depends(get_c
         # Загружаем симки в работе
         stmt = (
             select(Submission)
-            .options(joinedload(Submission.category), joinedload(Submission.seller), joinedload(Submission.admin))
+            .options(joinedload(Submission.category), joinedload(Submission.seller), joinedload(Submission.buyer))
             .where(Submission.status.in_([SubmissionStatus.IN_WORK, SubmissionStatus.WAIT_CONFIRM]))
             .order_by(Submission.assigned_at.desc())
         )
@@ -827,25 +889,39 @@ async def get_moderation_panel(request: Request, user_data: dict = Depends(get_c
 
 @router.get("/search")
 async def search_submissions(q: str, user_data: dict = Depends(get_current_user)):
-    """API для глобального поиска по номеру телефона (полный или последние 3-4-5 цифр)."""
+    """API для глобального поиска по номеру телефона или ID."""
     async with SessionFactory() as session:
         user = await session.get(User, user_data.get("user_id"))
+        is_admin = user.role in [UserRole.OWNER, UserRole.ADMIN]
         
-        # Если в поиске только цифры и их мало (3-5), ищем по концу строки
-        if q.isdigit() and len(q) < 10:
-            search_pattern = f"%{q}"
+        # 1. Формируем условия поиска
+        conditions = []
+        
+        # Если в поиске только цифры
+        if q.isdigit():
+            # Если это похоже на ID (короткое число)
+            if len(q) < 7:
+                conditions.append(Submission.id == int(q))
+            
+            # Поиск по номеру (полный или последние цифры)
+            if len(q) >= 3:
+                conditions.append(Submission.phone_normalized.like(f"%{q}"))
         else:
-            # Иначе ищем вхождение в любом месте (более гибко)
-            search_pattern = f"%{q}%"
+            # Поиск по вхождению текста (если есть)
+            conditions.append(Submission.phone_normalized.like(f"%{q}%"))
+
+        if not conditions:
+            return HTMLResponse(content='<div class="p-12 text-center text-white/10 uppercase tracking-widest text-xs italic">Введите минимум 3 цифры...</div>')
 
         stmt = (
             select(Submission)
             .options(joinedload(Submission.category))
-            .where(Submission.phone_normalized.like(search_pattern))
+            .where(or_(*conditions))
             .order_by(Submission.updated_at.desc())
             .limit(15)
         )
-        # Если SIMBUYER - фильтруем только его симки
+        
+        # Ограничение доступа для байеров
         if user.role == UserRole.SIMBUYER:
             stmt = stmt.where(Submission.delivered_to_chat == user.telegram_id)
             
@@ -853,15 +929,24 @@ async def search_submissions(q: str, user_data: dict = Depends(get_current_user)
         
         html = ""
         for res in results:
-            # Добавляем цветовой бейдж статуса для удобства
             status_color = "text-nexus-cyan"
             if res.status == SubmissionStatus.ACCEPTED: status_color = "text-emerald-500"
             elif res.status == SubmissionStatus.BLOCKED: status_color = "text-red-500"
             elif res.status == SubmissionStatus.NOT_A_SCAN: status_color = "text-amber-500"
 
+            # Кнопка "В Бот" только для админов
+            bot_btn = ""
+            if is_admin:
+                bot_btn = f"""
+                <button hx-post="/nexus/submission/{res.id}/show-in-bot" hx-swap="outerHTML"
+                        class="p-2 bg-white/5 border border-white/10 rounded-lg text-white/40 hover:text-nexus-cyan transition-all" title="Показать в Telegram">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/></svg>
+                </button>
+                """
+
             html += f"""
-            <a href="/nexus/submission/{res.id}" class="flex items-center justify-between p-4 hover:bg-white/5 border-b border-white/5 transition-all group">
-                <div class="flex items-center gap-4">
+            <div class="flex items-center justify-between p-4 hover:bg-white/5 border-b border-white/5 transition-all group">
+                <a href="/nexus/submission/{res.id}" class="flex items-center gap-4 flex-1">
                     <div class="w-10 h-10 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center font-mono text-[10px] text-white/40 group-hover:border-nexus-cyan/30 transition-all">
                         #{res.id}
                     </div>
@@ -869,9 +954,12 @@ async def search_submissions(q: str, user_data: dict = Depends(get_current_user)
                         <div class="text-white font-bold group-hover:text-nexus-cyan transition-colors">{res.phone_normalized or 'Н/Д'}</div>
                         <div class="text-[10px] text-white/40 uppercase tracking-widest">{res.category.title}</div>
                     </div>
+                </a>
+                <div class="flex items-center gap-3">
+                    <div class="{status_color} font-mono text-[10px] uppercase tracking-widest font-bold px-2 py-1 bg-white/5 rounded border border-white/5">{res.status}</div>
+                    {bot_btn}
                 </div>
-                <div class="{status_color} font-mono text-[10px] uppercase tracking-widest font-bold px-2 py-1 bg-white/5 rounded border border-white/5">{res.status}</div>
-            </a>
+            </div>
             """
         return HTMLResponse(content=html if html else '<div class="p-12 text-center text-white/10 uppercase tracking-widest text-xs italic">Ничего не найдено</div>')
 

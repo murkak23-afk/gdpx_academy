@@ -12,7 +12,7 @@ from src.core.constants import DIVIDER
 
 logger = logging.getLogger(__name__)
 
-async def background_delivery_task(bot: Bot, category_id: int, chat_id: int, thread_id: int, count: int):
+async def background_delivery_task(bot: Bot, category_id: int, buyer_id: int, chat_id: int, thread_id: int, count: int):
     """
     Фоновая задача выдачи eSIM. 
     Вынесена в отдельный сервис для предотвращения циклических импортов.
@@ -21,25 +21,21 @@ async def background_delivery_task(bot: Bot, category_id: int, chat_id: int, thr
         async with UnitOfWork(session=session) as uow:
             sub_svc = SubmissionService(uow)
             # Берем симки из очереди (метод уже переводит их в IN_WORK)
-            items = await sub_svc.get_material_from_warehouse_batch(category_id, count)
+            items = await sub_svc.take_from_warehouse(category_id, count)
 
             if not items:
                 logger.warning(f"⚠️ Склад пуст для категории {category_id}. Выдача в чат {chat_id} отменена.")
                 return
 
-            # Получаем персональную цену для этого чата (покупателя)
-            buyer_stmt = select(User).where(User.telegram_id == chat_id)
-            buyer = (await session.execute(buyer_stmt)).scalar_one_or_none()
-
-            price_val = 0
-            if buyer:
-                price_stmt = select(SimbuyerPrice.price).where(
-                    and_(SimbuyerPrice.user_id == buyer.id, SimbuyerPrice.category_id == category_id)
-                )
-                price_val = (await session.execute(price_stmt)).scalar() or 0
+            # Получаем персональную цену для этого покупателя
+            price_stmt = select(SimbuyerPrice.price).where(
+                and_(SimbuyerPrice.user_id == buyer_id, SimbuyerPrice.category_id == category_id)
+            )
+            price_val = (await session.execute(price_stmt)).scalar() or 0
 
             for item in items:
                 # Фиксируем параметры выдачи
+                item.buyer_id = buyer_id
                 item.purchase_price = price_val
                 item.delivered_to_chat = chat_id
                 item.delivered_to_thread = thread_id

@@ -67,11 +67,13 @@ class Submission(Base, TimestampMixin):
     # Фиксация места и цены отгрузки
     delivered_to_chat: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     delivered_to_thread: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    buyer_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
     purchase_price: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)
 
     # Строковые отношения 
     seller: Mapped["User"] = relationship("User", foreign_keys=[user_id], back_populates="submissions")
     admin: Mapped["User | None"] = relationship("User", foreign_keys=[admin_id], back_populates="assigned_submissions")
+    buyer: Mapped["User | None"] = relationship("User", foreign_keys=[buyer_id])
     category: Mapped["Category"] = relationship("Category", back_populates="submissions")
     review_actions: Mapped[list["ReviewAction"]] = relationship(
         "ReviewAction", back_populates="submission", cascade="all, delete-orphan"

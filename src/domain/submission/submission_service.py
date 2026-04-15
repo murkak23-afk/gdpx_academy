@@ -554,7 +554,7 @@ class SubmissionService:
             .where(Submission.category_id == category_id, Submission.status == SubmissionStatus.PENDING)
             .order_by(Submission.created_at.asc())
             .limit(count)
-            .with_for_update()
+            .with_for_update(skip_locked=True)
         )
         id_result = await self._uow.session.execute(id_stmt)
         ids = [row[0] for row in id_result.all()]

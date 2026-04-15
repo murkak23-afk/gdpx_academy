@@ -3,132 +3,139 @@
 {% block title %}GDPX // NEXUS DASHBOARD{% endblock %}
 
 {% block content %}
-<div class="space-y-12 animate-in fade-in slide-in-from-bottom-6 duration-1000">
+<div class="space-y-16 fade-in">
     
-    <!-- Приветствие -->
-    <div class="flex justify-between items-center">
+    <!-- Приветствие (Zen Style) -->
+    <div class="flex flex-col md:flex-row justify-between items-start md:items-end gap-8">
         <div>
-            <h1 class="text-[42px] font-bold tracking-tight text-white leading-tight">Добро пожаловать в <span class="bg-gradient-to-r from-nexus-cyan to-nexus-sakura bg-clip-text text-transparent">Nexus</span></h1>
-            <p class="text-white/40 mt-2 font-medium tracking-[0.1em] uppercase text-[12px]">Центральный узел управления операциями GDPX</p>
+            <div class="text-[10px] text-nexus-sakura font-bold tracking-[0.4em] uppercase mb-3 opacity-80">System Status: Online</div>
+            <h1 class="text-[56px] font-bold tracking-tight text-white leading-none japanese-title">Добро пожаловать</h1>
+            <p class="text-nexus-silver mt-4 font-medium tracking-[0.15em] uppercase text-[11px] max-w-md leading-relaxed opacity-60">
+                Центральный узел управления операциями GDPX. <br>Гармония данных и эффективности.
+            </p>
         </div>
-        <div class="px-6 py-3 bg-white/5 border border-white/10 rounded-2xl backdrop-blur-md">
-            <span class="text-nexus-cyan font-mono text-[14px]" id="clock"></span>
+        <div class="px-8 py-4 bg-white/[0.02] border border-white/5 rounded-sm backdrop-blur-md">
+            <span class="text-nexus-cyan font-mono text-[16px] tracking-[0.2em]" id="clock"></span>
         </div>
     </div>
 
-    <!-- Сетка статистики (Stats Cards) -->
+    <!-- Сетка статистики (Zen Cards) -->
     <div id="stats-grid" hx-get="/nexus" hx-trigger="every 30s" hx-select="#stats-grid" hx-swap="outerHTML" 
-         class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
+         class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
         
         <!-- Склад -->
-        <div class="premium-card p-10 flex flex-col justify-between min-h-[220px] relative overflow-hidden group">
-            <div class="absolute -top-12 -right-12 w-24 h-24 bg-nexus-cyan/10 rounded-full blur-[40px] group-hover:bg-nexus-cyan/20 transition-all duration-700"></div>
+        <div class="premium-card p-10 flex flex-col justify-between min-h-[260px] relative overflow-hidden group">
+            <div class="absolute -right-6 -bottom-8 text-[120px] font-bold text-white/[0.02] japanese-title group-hover:text-nexus-cyan/[0.05] transition-all duration-1000">蔵</div>
             <div>
-                <div class="text-white/20 text-[10px] font-bold uppercase tracking-[0.3em] mb-4">Доступно на складе</div>
-                <div class="flex items-baseline gap-3">
-                    <span class="text-[52px] font-bold text-white neon-text-cyan">{{ stats.stock }}</span>
-                    <span class="text-nexus-cyan/40 text-[14px] font-medium tracking-widest uppercase">В ОЖИДАНИИ</span>
+                <div class="text-nexus-silver text-[10px] font-bold uppercase tracking-[0.3em] mb-6 opacity-40">Склад / Warehouse</div>
+                <div class="flex items-baseline gap-4">
+                    <span class="text-[64px] font-light text-white japanese-title leading-none">{{ stats.stock }}</span>
                 </div>
             </div>
             <div class="mt-auto">
-                <div class="h-[2px] w-full bg-white/5 rounded-full overflow-hidden">
-                    <div class="h-full bg-nexus-cyan shadow-[0_0_15px_#00d9ff] w-[{{ (stats.stock / 10)|round }}%]"></div>
+                <div class="text-[10px] text-nexus-cyan font-bold tracking-[0.2em] uppercase opacity-80 mb-2">Inventory Ready</div>
+                <div class="h-[1px] w-full bg-white/5 overflow-hidden">
+                    <div class="h-full bg-nexus-cyan shadow-[0_0_15px_#00d9ff] transition-all duration-1000" style="width: {{ [stats.stock, 100]|min }}%"></div>
                 </div>
             </div>
         </div>
 
         <!-- Оборот (Amount) -->
-        <div class="premium-card p-10 flex flex-col justify-between min-h-[220px] relative overflow-hidden group">
-            <div class="absolute -top-12 -right-12 w-24 h-24 bg-nexus-sakura/10 rounded-full blur-[40px] group-hover:bg-nexus-sakura/20 transition-all duration-700"></div>
+        <div class="premium-card p-10 flex flex-col justify-between min-h-[260px] relative overflow-hidden group">
+            <div class="absolute -right-6 -bottom-8 text-[120px] font-bold text-white/[0.02] japanese-title group-hover:text-nexus-sakura/[0.05] transition-all duration-1000">金</div>
             <div>
-                <div class="text-white/20 text-[10px] font-bold uppercase tracking-[0.3em] mb-4">
-                    {{ 'Сумма к оплате (USDT)' if user.role == 'simbuyer' else 'Доход за день (USDT)' }}
+                <div class="text-nexus-silver text-[10px] font-bold uppercase tracking-[0.3em] mb-6 opacity-40">
+                    {{ 'К оплате / Payout' if user.role == 'simbuyer' else 'Доход / Revenue' }}
                 </div>
-                <div class="flex items-baseline gap-3">
-                    <span class="text-[52px] font-bold text-white neon-text-sakura">{{ stats.today_amount }}</span>
-                    <span class="text-nexus-sakura/40 text-[14px] font-medium tracking-widest uppercase">
-                        {{ 'ЗАДОЛЖЕННОСТЬ' if user.role == 'simbuyer' else 'ПРИНЯТО' }}
-                    </span>
+                <div class="flex items-baseline gap-4">
+                    <span class="text-[64px] font-light text-white japanese-title leading-none">{{ stats.today_amount }}</span>
+                    <span class="text-[14px] text-nexus-sakura font-bold tracking-widest uppercase opacity-60">USDT</span>
                 </div>
             </div>
-            <div class="mt-auto flex items-center gap-2 text-[11px] text-nexus-sakura/80 font-bold uppercase tracking-wider">
+            <div class="mt-auto flex items-center gap-3 text-[10px] text-nexus-sakura font-bold uppercase tracking-widest">
                 <span class="w-1.5 h-1.5 rounded-full bg-nexus-sakura animate-pulse shadow-[0_0_10px_#ff00ea]"></span>
-                ОБНОВЛЯЕТСЯ LIVE
+                LIVE UPDATES
             </div>
         </div>
 
         <!-- Оборот (Count) -->
-        <div class="premium-card p-10 flex flex-col justify-between min-h-[220px] relative overflow-hidden group">
-            <div class="absolute -top-12 -right-12 w-24 h-24 bg-white/5 rounded-full blur-[40px] group-hover:bg-white/10 transition-all duration-700"></div>
+        <div class="premium-card p-10 flex flex-col justify-between min-h-[260px] relative overflow-hidden group">
+            <div class="absolute -right-6 -bottom-8 text-[120px] font-bold text-white/[0.02] japanese-title group-hover:text-white/[0.05] transition-all duration-1000">今</div>
             <div>
-                <div class="text-white/20 text-[10px] font-bold uppercase tracking-[0.3em] mb-4">Операции за сегодня</div>
-                <div class="flex items-baseline gap-3">
-                    <span class="text-[52px] font-bold text-white">{{ stats.today_count }}</span>
-                    <span class="text-white/40 text-[14px] font-medium tracking-widest uppercase">Сканов</span>
+                <div class="text-nexus-silver text-[10px] font-bold uppercase tracking-[0.3em] mb-6 opacity-40">За сутки / Daily</div>
+                <div class="flex items-baseline gap-4">
+                    <span class="text-[64px] font-light text-white japanese-title leading-none">{{ stats.today_count }}</span>
+                    <span class="text-[14px] text-white/20 font-bold tracking-widest uppercase">PCS</span>
                 </div>
             </div>
-            <p class="mt-auto text-[12px] text-white/30 tracking-wide">За последние 24 часа</p>
+            <div class="mt-auto text-[10px] text-white/30 tracking-[0.2em] uppercase font-bold">Processed Assets</div>
         </div>
 
-        <!-- Воркеры / Информация -->
-        <div class="premium-card p-10 flex flex-col justify-between min-h-[220px] relative overflow-hidden group">
+        <!-- Воркеры / Статус -->
+        <div class="premium-card p-10 flex flex-col justify-between min-h-[260px] relative overflow-hidden group">
+            <div class="absolute -right-6 -bottom-8 text-[120px] font-bold text-white/[0.02] japanese-title group-hover:text-nexus-cyan/[0.05] transition-all duration-1000">員</div>
             {% if user.role == 'owner' or user.role == 'admin' %}
-            <div class="absolute -top-12 -right-12 w-24 h-24 bg-nexus-cyan/10 rounded-full blur-[40px] group-hover:bg-nexus-cyan/20 transition-all duration-700"></div>
             <div>
-                <div class="text-white/20 text-[10px] font-bold uppercase tracking-[0.3em] mb-4">Активные Агенты</div>
-                <div class="flex items-baseline gap-3">
-                    <span class="text-[52px] font-bold text-white neon-text-cyan">{{ stats.workers }}</span>
-                    <span class="text-nexus-cyan/40 text-[14px] font-medium tracking-widest uppercase">Всего</span>
+                <div class="text-nexus-silver text-[10px] font-bold uppercase tracking-[0.3em] mb-6 opacity-40">Агенты / Agents</div>
+                <div class="flex items-baseline gap-4">
+                    <span class="text-[64px] font-light text-white japanese-title leading-none">{{ stats.workers }}</span>
                 </div>
             </div>
-            <div class="mt-auto text-[12px] text-nexus-cyan font-bold tracking-[0.1em] uppercase">Команда в строю</div>
+            <div class="mt-auto text-[10px] text-nexus-cyan font-bold tracking-[0.2em] uppercase">Active Personnel</div>
             {% else %}
-            <div class="absolute -top-12 -right-12 w-24 h-24 bg-emerald-500/10 rounded-full blur-[40px] group-hover:bg-emerald-500/20 transition-all duration-700"></div>
             <div>
-                <div class="text-white/20 text-[10px] font-bold uppercase tracking-[0.3em] mb-4">Системный статус</div>
-                <div class="flex items-baseline gap-3">
-                    <span class="text-[32px] font-bold text-white uppercase tracking-tighter">ONLINE</span>
-                </div>
+                <div class="text-nexus-silver text-[10px] font-bold uppercase tracking-[0.3em] mb-6 opacity-40">Статус / Status</div>
+                <div class="text-[32px] font-light text-white japanese-title leading-none mt-4">ACTIVE</div>
             </div>
-            <div class="mt-auto text-[12px] text-emerald-500 font-bold tracking-[0.1em] uppercase flex items-center gap-2">
+            <div class="mt-auto flex items-center gap-2 text-[10px] text-emerald-500 font-bold uppercase tracking-widest">
                 <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_10px_#10b981]"></span>
-                Все системы в норме
+                System Stable
             </div>
             {% endif %}
         </div>
 
     </div>
 
-    <!-- Быстрые действия -->
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <a href="/nexus/tickets" class="group bg-gradient-to-br from-white/5 to-transparent p-10 rounded-[40px] border border-white/10 hover:border-nexus-cyan/50 hover:shadow-[0_0_50px_rgba(0,217,255,0.1)] transition-all relative overflow-hidden">
+    <!-- Быстрые действия (Minimal Blocks) -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-8 pt-6">
+        <a href="/nexus/tickets" class="premium-card p-12 group relative overflow-hidden">
             <div class="relative z-10">
-                <h3 class="text-2xl font-bold text-white mb-2 group-hover:text-nexus-cyan transition-colors tracking-tight">Центр Поддержки</h3>
-                <p class="text-white/40 text-[14px] leading-relaxed max-w-[240px]">Решение споров и общение с симбайерами по активам.</p>
+                <div class="text-nexus-cyan font-bold text-[10px] tracking-[0.3em] uppercase mb-6 opacity-60">Communication</div>
+                <h3 class="text-[28px] font-bold text-white mb-4 japanese-title group-hover:text-nexus-cyan transition-colors">Поддержка</h3>
+                <p class="text-nexus-silver text-[13px] leading-relaxed opacity-40">Решение споров и общение по активам.</p>
             </div>
-            <svg class="absolute -bottom-6 -right-6 w-32 h-32 text-white/5 group-hover:text-nexus-cyan/10 transition-all duration-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/></svg>
         </a>
 
         {% if user.role == 'owner' or user.role == 'admin' %}
-        <a href="/nexus/categories" class="group bg-gradient-to-br from-white/5 to-transparent p-10 rounded-[40px] border border-white/10 hover:border-nexus-sakura/50 hover:shadow-[0_0_50px_rgba(255,0,234,0.1)] transition-all relative overflow-hidden">
+        <a href="/nexus/categories" class="premium-card p-12 group relative overflow-hidden">
             <div class="relative z-10">
-                <h3 class="text-2xl font-bold text-white mb-2 group-hover:text-nexus-sakura transition-colors tracking-tight">Рынок Активов</h3>
-                <p class="text-white/40 text-[14px] leading-relaxed max-w-[240px]">Управление категориями, лимитами и базовыми ценами.</p>
+                <div class="text-nexus-sakura font-bold text-[10px] tracking-[0.3em] uppercase mb-6 opacity-60">Marketplace</div>
+                <h3 class="text-[28px] font-bold text-white mb-4 japanese-title group-hover:text-nexus-sakura transition-colors">Категории</h3>
+                <p class="text-nexus-silver text-[13px] leading-relaxed opacity-40">Управление лимитами и ценами.</p>
             </div>
-            <svg class="absolute -bottom-6 -right-6 w-32 h-32 text-white/5 group-hover:text-nexus-sakura/10 transition-all duration-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>
         </a>
 
-        <a href="/nexus/users" class="group bg-gradient-to-br from-white/5 to-transparent p-10 rounded-[40px] border border-white/10 hover:border-white/30 hover:shadow-[0_0_50px_rgba(255,255,255,0.05)] transition-all relative overflow-hidden">
+        <a href="/nexus/users" class="premium-card p-12 group relative overflow-hidden">
             <div class="relative z-10">
-                <h3 class="text-2xl font-bold text-white mb-2 group-hover:text-white transition-colors tracking-tight">Управление Командой</h3>
-                <p class="text-white/40 text-[14px] leading-relaxed max-w-[240px]">Контроль доступа, изменение ролей и блокировка воркеров.</p>
+                <div class="text-white font-bold text-[10px] tracking-[0.3em] uppercase mb-6 opacity-60">Personnel</div>
+                <h3 class="text-[28px] font-bold text-white mb-4 japanese-title group-hover:text-white transition-colors">Команда</h3>
+                <p class="text-nexus-silver text-[13px] leading-relaxed opacity-40">Контроль доступа и ролей воркеров.</p>
             </div>
-            <svg class="absolute -bottom-6 -right-6 w-32 h-32 text-white/5 group-hover:text-white/10 transition-all duration-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
         </a>
         {% endif %}
     </div>
 
 </div>
+
+<script>
+    function updateClock() {
+        const now = new Date();
+        document.getElementById('clock').innerText = now.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    }
+    setInterval(updateClock, 1000);
+    updateClock();
+</script>
+{% endblock %}
 
 <script>
     function updateClock() {
