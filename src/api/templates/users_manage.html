@@ -8,16 +8,26 @@
     <!-- Заголовок -->
     <div class="flex justify-between items-end">
         <div>
-            <h1 class="text-[32px] font-semibold text-white tracking-tight drop-shadow-[0_0_10px_rgba(0,217,255,0.3)]">Воркеры и Доступы</h1>
-            <p class="text-nexus-cyan mt-2 font-medium tracking-wider">Управление ролями и мониторинг активности команды</p>
+            <h1 class="text-[32px] font-semibold text-white tracking-tight drop-shadow-[0_0_10px_rgba(0,217,255,0.3)]">
+                {{ 'Черный Список' if is_blacklist_view else 'Воркеры и Доступы' }}
+            </h1>
+            <p class="text-nexus-cyan mt-2 font-medium tracking-wider">
+                {{ 'Список заблокированных пользователей без доступа к системе' if is_blacklist_view else 'Управление ролями и мониторинг активности команды' }}
+            </p>
         </div>
         <div class="flex gap-3">
-            <button class="px-5 py-2.5 bg-white/5 border border-white/10 rounded-xl text-sm font-semibold text-white/60 hover:bg-white/10 transition-all">
-                БЛОК-ЛИСТ
-            </button>
-            <button onclick="openCreateUserModal()" class="px-5 py-2.5 bg-gradient-to-r from-nexus-cyan to-nexus-sakura rounded-xl text-sm font-bold text-white shadow-lg shadow-blue-500/20 active:scale-95 transition-all">
-                + НОВЫЙ СОТРУДНИК
-            </button>
+            {% if is_blacklist_view %}
+                <a href="/nexus/users" class="px-5 py-2.5 bg-white/5 border border-white/10 rounded-xl text-sm font-semibold text-white/60 hover:bg-white/10 transition-all uppercase">
+                    Назад к списку
+                </a>
+            {% else %}
+                <a href="/nexus/users/blacklist" class="px-5 py-2.5 bg-red-500/10 border border-red-500/20 rounded-xl text-sm font-semibold text-red-500 hover:bg-red-500/20 transition-all uppercase">
+                    БЛОК-ЛИСТ
+                </a>
+                <button onclick="openCreateUserModal()" class="px-5 py-2.5 bg-gradient-to-r from-nexus-cyan to-nexus-sakura rounded-xl text-sm font-bold text-white shadow-lg shadow-blue-500/20 active:scale-95 transition-all">
+                    + НОВЫЙ СОТРУДНИК
+                </button>
+            {% endif %}
         </div>
     </div>
 
@@ -71,6 +81,11 @@
                                 <a href="/nexus/users/{{ u.id }}/delivery" class="px-4 py-2 bg-nexus-cyan/10 border border-nexus-cyan/20 rounded-lg text-[11px] font-bold text-nexus-cyan uppercase tracking-widest hover:bg-nexus-cyan/20 transition-all">
                                     Маршруты
                                 </a>
+                                <button hx-post="/nexus/users/{{ u.id }}/toggle-active" hx-confirm="Вы уверены, что хотите изменить статус доступа этого пользователя?"
+                                        {% if u.id == user.user_id %}disabled class="opacity-0 pointer-events-none"{% endif %}
+                                        class="px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-[11px] font-bold {{ 'text-emerald-500' if not u.is_active else 'text-red-500' }} uppercase tracking-widest hover:border-white/30 transition-all">
+                                    {{ 'Разблок.' if not u.is_active else 'Блок' }}
+                                </button>
                                 <button onclick="openRoleModal('{{ u.id }}', '{{ u.full_name }}', '{{ u.role }}')" 
                                         {% if u.id == user.user_id %}disabled class="opacity-0 pointer-events-none"{% endif %}
                                         class="px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-[11px] font-bold text-white/40 uppercase tracking-widest hover:border-white/30 hover:text-white transition-all">

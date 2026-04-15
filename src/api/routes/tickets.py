@@ -1,3 +1,4 @@
+from src.api.deps import templates
 from __future__ import annotations
 
 from fastapi import APIRouter, Request, Depends, Form, HTTPException
@@ -13,7 +14,7 @@ router = APIRouter(prefix="/nexus/tickets", tags=["Tickets"])
 
 @router.get("", response_class=HTMLResponse)
 async def get_tickets(request: Request, user_data: dict = Depends(get_current_user)):
-    from src.api.app import templates
+    
     async with SessionFactory() as session:
         stmt = select(SupportTicket).order_by(SupportTicket.created_at.desc())
         result = await session.execute(stmt)
@@ -44,7 +45,7 @@ async def create_ticket(
 @router.get("/{ticket_id}", response_class=HTMLResponse)
 async def view_ticket(ticket_id: int, request: Request, user_data: dict = Depends(get_current_user)):
     """Страница переписки внутри конкретного тикета."""
-    from src.api.app import templates
+    
     async with SessionFactory() as session:
         # Подгружаем тикет и связанные сообщения (отсортированные по времени)
         stmt = select(SupportTicket).options(
@@ -75,7 +76,7 @@ async def send_message(
     user_data: dict = Depends(get_current_user)
 ):
     """HTMX-обработчик отправки нового сообщения."""
-    from src.api.app import templates
+    
     async with SessionFactory() as session:
         new_msg = ChatMessage(
             ticket_id=ticket_id,

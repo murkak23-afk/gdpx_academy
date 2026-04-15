@@ -41,15 +41,19 @@
         <div class="premium-card p-10 flex flex-col justify-between min-h-[220px] relative overflow-hidden group">
             <div class="absolute -top-12 -right-12 w-24 h-24 bg-nexus-sakura/10 rounded-full blur-[40px] group-hover:bg-nexus-sakura/20 transition-all duration-700"></div>
             <div>
-                <div class="text-white/20 text-[10px] font-bold uppercase tracking-[0.3em] mb-4">Доход за день (USDT)</div>
+                <div class="text-white/20 text-[10px] font-bold uppercase tracking-[0.3em] mb-4">
+                    {{ 'Сумма к оплате (USDT)' if user.role == 'simbuyer' else 'Доход за день (USDT)' }}
+                </div>
                 <div class="flex items-baseline gap-3">
                     <span class="text-[52px] font-bold text-white neon-text-sakura">{{ stats.today_amount }}</span>
-                    <span class="text-nexus-sakura/40 text-[14px] font-medium tracking-widest uppercase">ПРИНЯТО</span>
+                    <span class="text-nexus-sakura/40 text-[14px] font-medium tracking-widest uppercase">
+                        {{ 'ЗАДОЛЖЕННОСТЬ' if user.role == 'simbuyer' else 'ПРИНЯТО' }}
+                    </span>
                 </div>
             </div>
             <div class="mt-auto flex items-center gap-2 text-[11px] text-nexus-sakura/80 font-bold uppercase tracking-wider">
                 <span class="w-1.5 h-1.5 rounded-full bg-nexus-sakura animate-pulse shadow-[0_0_10px_#ff00ea]"></span>
-                В РЕАЛЬНОМ ВРЕМЕНИ
+                ОБНОВЛЯЕТСЯ LIVE
             </div>
         </div>
 
@@ -66,8 +70,9 @@
             <p class="mt-auto text-[12px] text-white/30 tracking-wide">За последние 24 часа</p>
         </div>
 
-        <!-- Воркеры -->
+        <!-- Воркеры / Информация -->
         <div class="premium-card p-10 flex flex-col justify-between min-h-[220px] relative overflow-hidden group">
+            {% if user.role == 'owner' or user.role == 'admin' %}
             <div class="absolute -top-12 -right-12 w-24 h-24 bg-nexus-cyan/10 rounded-full blur-[40px] group-hover:bg-nexus-cyan/20 transition-all duration-700"></div>
             <div>
                 <div class="text-white/20 text-[10px] font-bold uppercase tracking-[0.3em] mb-4">Активные Агенты</div>
@@ -77,6 +82,19 @@
                 </div>
             </div>
             <div class="mt-auto text-[12px] text-nexus-cyan font-bold tracking-[0.1em] uppercase">Команда в строю</div>
+            {% else %}
+            <div class="absolute -top-12 -right-12 w-24 h-24 bg-emerald-500/10 rounded-full blur-[40px] group-hover:bg-emerald-500/20 transition-all duration-700"></div>
+            <div>
+                <div class="text-white/20 text-[10px] font-bold uppercase tracking-[0.3em] mb-4">Системный статус</div>
+                <div class="flex items-baseline gap-3">
+                    <span class="text-[32px] font-bold text-white uppercase tracking-tighter">ONLINE</span>
+                </div>
+            </div>
+            <div class="mt-auto text-[12px] text-emerald-500 font-bold tracking-[0.1em] uppercase flex items-center gap-2">
+                <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_10px_#10b981]"></span>
+                Все системы в норме
+            </div>
+            {% endif %}
         </div>
 
     </div>

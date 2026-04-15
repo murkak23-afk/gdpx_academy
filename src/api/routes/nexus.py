@@ -11,11 +11,77 @@ from src.database.models.user import User
 from src.database.models.submission import Submission
 from src.database.models.category import Category
 from src.database.models.enums import SubmissionStatus, UserRole
-from src.database.models.web_control import SimbuyerPrice
+from src.database.models.web_control import SimbuyerPrice, SupportTicket, ChatMessage, DeliveryConfig, WebAccount
+from src.database.models.admin_audit import AdminAuditLog
 from src.services.auth_service import AuthService
 from src.core.utils.audit_logger import log_admin_action
+from src.core.bot import bot
 
 from fastapi import APIRouter, Request, Depends, HTTPException, Form, BackgroundTasks
+from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
+import io
+
+@router.get("/media/{file_id}")
+async def get_media_proxy(file_id: str, user_data: dict = Depends(get_current_user)):
+    """Прокси для отображения фото из Telegram по file_id."""
+    try:
+        from src.core.bot import bot
+        file = await bot.get_file(file_id)
+        # Скачиваем файл в память
+        dest = io.BytesIO()
+        await bot.download_file(file.file_path, destination=dest)
+        dest.seek(0)
+        return StreamingResponse(dest, media_type="image/jpeg")
+    except Exception as e:
+        logger.error(f"Failed to proxy media {file_id}: {e}")
+        return HTMLResponse(content="Media error", status_code=404)
+
+@router.get("/users/blacklist", response_class=HTMLResponse)
+async def get_blacklist(request: Request, user_data: dict = Depends(get_current_user)):
+    """Просмотр заблокированных пользователей."""
+    async with SessionFactory() as session:
+        user = await session.get(User, user_data.get("user_id"))
+        if user.role not in [UserRole.OWNER, UserRole.ADMIN]:
+            raise HTTPException(status_code=403, detail="Permission denied")
+            
+        stmt = select(User).where(User.is_active == False).order_by(User.updated_at.desc())
+        blocked_users = (await session.execute(stmt)).scalars().all()
+        
+        return templates.TemplateResponse("users_manage.html", {
+            "request": request,
+            "user": user,
+            "all_users": blocked_users,
+            "roles": [r.value for r in UserRole],
+            "active_page": "users",
+            "is_blacklist_view": True
+        })
+
+@router.post("/users/{target_id}/toggle-active")
+async def toggle_user_active(target_id: int, user_data: dict = Depends(get_current_user)):
+    """Блокировка/разблокировка пользователя."""
+    async with SessionFactory() as session:
+        user = await session.get(User, user_data.get("user_id"))
+        if user.role not in [UserRole.OWNER, UserRole.ADMIN]:
+            raise HTTPException(status_code=403, detail="Permission denied")
+            
+        target = await session.get(User, target_id)
+        if target:
+            if target.id == user.id:
+                raise HTTPException(status_code=400, detail="Cannot block yourself")
+                
+            target.is_active = not target.is_active
+            await session.commit()
+            
+            await log_admin_action(
+                admin_id=user.id,
+                action="BLOCK_USER" if not target.is_active else "UNBLOCK_USER",
+                target_type="user",
+                target_id=target.id,
+                details=f"Статус изменен на {'BLOCKED' if not target.is_active else 'ACTIVE'}"
+            )
+            return HTMLResponse(content='<script>window.location.reload();</script>')
+        return HTTPException(status_code=404)
+
 from src.services.delivery_service import background_delivery_task
 from src.database.uow import UnitOfWork
 from src.domain.submission.submission_service import SubmissionService
@@ -32,9 +98,9 @@ async def get_current_user(request: Request):
         raise HTTPException(status_code=303, detail="Invalid session")
     return payload
 
+from src.api.deps import templates
 @router.get("", response_class=HTMLResponse)
 async def get_dashboard(request: Request, user_data: dict = Depends(get_current_user)):
-    from src.api.app import templates
     async with SessionFactory() as session:
         user = await session.get(User, user_data.get("user_id"))
         
@@ -75,7 +141,7 @@ async def get_dashboard(request: Request, user_data: dict = Depends(get_current_
 
 @router.get("/inventory", response_class=HTMLResponse)
 async def get_inventory(request: Request, user_data: dict = Depends(get_current_user)):
-    from src.api.app import templates
+    
     async with SessionFactory() as session:
         user = await session.get(User, user_data.get("user_id"))
         
@@ -85,8 +151,14 @@ async def get_inventory(request: Request, user_data: dict = Depends(get_current_
         
         # Получаем персональные цены для этого пользователя
         price_stmt = select(SimbuyerPrice).where(SimbuyerPrice.user_id == user.id)
-        prices = {p.category_id: p.price for p in (await session.execute(price_stmt)).scalars().all()}
+        custom_prices_raw = (await session.execute(price_stmt)).scalars().all()
+        prices = {p.category_id: p.price for p in custom_prices_raw}
         
+        # Заполняем пропуски базовыми ценами категорий для корректного отображения
+        for cat in categories:
+            if cat.id not in prices:
+                prices[cat.id] = cat.payout_rate
+
         stock_data = {}
         for cat in categories:
             count = await session.scalar(
@@ -106,7 +178,7 @@ async def get_inventory(request: Request, user_data: dict = Depends(get_current_
 
 @router.get("/my-esim", response_class=HTMLResponse)
 async def get_my_esim(request: Request, user_data: dict = Depends(get_current_user)):
-    from src.api.app import templates
+    
     async with SessionFactory() as session:
         user = await session.get(User, user_data.get("user_id"))
         
@@ -125,11 +197,12 @@ async def get_my_esim(request: Request, user_data: dict = Depends(get_current_us
 
 @router.get("/reports", response_class=HTMLResponse)
 async def get_reports(request: Request, user_data: dict = Depends(get_current_user)):
-    from src.api.app import templates
+    
     async with SessionFactory() as session:
         user = await session.get(User, user_data.get("user_id"))
         
-        # Считаем сводку за сегодня (с 00:00 UTC)
+        # Считаем сводку за сегодня (с 00:00 текущего дня)
+        # ВАЖНО: берем все симки, которые были ОБНОВЛЕНЫ сегодня (т.е. получили статус)
         today_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
         
         base_stmt = select(Submission).where(Submission.updated_at >= today_start)
@@ -139,8 +212,9 @@ async def get_reports(request: Request, user_data: dict = Depends(get_current_us
         # Сбор данных для KPI
         all_today = (await session.execute(base_stmt)).scalars().all()
         
+        # Считаем только те, что были ВЫДАНЫ или ЗАВЕРШЕНЫ сегодня
         stats = {
-            "total_taken": len(all_today),
+            "total_taken": len([s for s in all_today if s.status != SubmissionStatus.PENDING]),
             "blocks": len([s for s in all_today if s.status == SubmissionStatus.BLOCKED]),
             "not_scans": len([s for s in all_today if s.status == SubmissionStatus.NOT_A_SCAN]),
             "accepted": len([s for s in all_today if s.status == SubmissionStatus.ACCEPTED]),
@@ -150,8 +224,8 @@ async def get_reports(request: Request, user_data: dict = Depends(get_current_us
         # Коэффициент успеха
         stats["success_rate"] = round((stats["accepted"] / stats["total_taken"] * 100), 1) if stats["total_taken"] > 0 else 0
 
-        # Список для таблицы (последние 50)
-        stmt_list = base_stmt.options(joinedload(Submission.category)).order_by(Submission.updated_at.desc()).limit(50)
+        # Список для таблицы (последние 500 за сегодня)
+        stmt_list = base_stmt.options(joinedload(Submission.category)).order_by(Submission.updated_at.desc()).limit(500)
         shipments = (await session.execute(stmt_list)).scalars().all()
 
         return templates.TemplateResponse("reports.html", {
@@ -194,7 +268,7 @@ async def export_reports_csv(user_data: dict = Depends(get_current_user)):
 @router.get("/submission/{sub_id}", response_class=HTMLResponse)
 async def view_submission(sub_id: int, request: Request, user_data: dict = Depends(get_current_user)):
     """Детальная страница одной eSIM (скана)."""
-    from src.api.app import templates
+    
     async with SessionFactory() as session:
         user = await session.get(User, user_data.get("user_id"))
         
@@ -223,7 +297,7 @@ async def view_submission(sub_id: int, request: Request, user_data: dict = Depen
 @router.get("/categories", response_class=HTMLResponse)
 async def get_categories_manage(request: Request, user_data: dict = Depends(get_current_user)):
     """Страница управления категориями (для OWNER и ADMIN)."""
-    from src.api.app import templates
+    
     async with SessionFactory() as session:
         user = await session.get(User, user_data.get("user_id"))
         if user.role not in [UserRole.OWNER, UserRole.ADMIN]:
@@ -263,7 +337,7 @@ async def toggle_category(cat_id: int, user_data: dict = Depends(get_current_use
             
             # Возвращаем только кнопку/статус (для HTMX)
             status_text = "ACTIVE" if cat.is_active else "INACTIVE"
-            status_color = "text-nexus-cyan border-nexus-cyan/30 bg-nexus-cyan/10" if cat.is_active else "text-white/20 border-white/5 bg-white/5"
+            status_color = "text-nexus-cyan border-nexus-cyan/30 bg-nexus-cyan/10 shadow-[0_0_10px_rgba(0,217,255,0.1)]" if cat.is_active else "text-white/20 border-white/5 bg-white/5"
             return HTMLResponse(content=f'<span class="px-3 py-1 text-[10px] border rounded-lg uppercase tracking-widest font-bold {status_color}">{status_text}</span>')
         return HTMLResponse(content="Error")
 
@@ -292,10 +366,56 @@ async def update_category_price(cat_id: int, price: Decimal = Form(...), user_da
             return RedirectResponse(url="/nexus/categories", status_code=303)
         return HTTPException(status_code=404)
 
+@router.post("/categories/create")
+async def create_category(
+    title: str = Form(...),
+    slug: str = Form(...),
+    payout_rate: Decimal = Form(...),
+    user_data: dict = Depends(get_current_user)
+):
+    """Создание новой категории активов."""
+    async with SessionFactory() as session:
+        user = await session.get(User, user_data.get("user_id"))
+        if user.role not in [UserRole.OWNER, UserRole.ADMIN]:
+            raise HTTPException(status_code=403)
+            
+        new_cat = Category(
+            title=title,
+            slug=slug,
+            payout_rate=payout_rate,
+            is_active=True
+        )
+        session.add(new_cat)
+        await session.commit()
+        await log_admin_action(admin_id=user.id, action="CREATE_CATEGORY", target_type="category", target_id=new_cat.id, details=f"Создана кат. {title} (slug: {slug})")
+        return RedirectResponse(url="/nexus/categories", status_code=303)
+
+@router.post("/categories/{cat_id}/update")
+async def update_category(
+    cat_id: int,
+    title: str = Form(...),
+    payout_rate: Decimal = Form(...),
+    user_data: dict = Depends(get_current_user)
+):
+    """Обновление существующей категории."""
+    async with SessionFactory() as session:
+        user = await session.get(User, user_data.get("user_id"))
+        if user.role not in [UserRole.OWNER, UserRole.ADMIN]:
+            raise HTTPException(status_code=403)
+            
+        cat = await session.get(Category, cat_id)
+        if cat:
+            cat.title = title
+            cat.payout_rate = payout_rate
+            await session.commit()
+            await log_admin_action(admin_id=user.id, action="UPDATE_CATEGORY", target_type="category", target_id=cat.id, details=f"Обновлена кат. {title}, цена {payout_rate}")
+            return RedirectResponse(url="/nexus/categories", status_code=303)
+        return HTTPException(status_code=404)
+
 @router.get("/users/{target_id}/delivery", response_class=HTMLResponse)
 async def get_user_delivery_settings(target_id: int, request: Request, user_data: dict = Depends(get_current_user)):
     """Страница настройки персональных маршрутов выдачи пользователя."""
-    from src.api.app import templates
+    
     async with SessionFactory() as session:
         user = await session.get(User, user_data.get("user_id"))
         if user.role not in [UserRole.OWNER, UserRole.ADMIN]:
@@ -376,7 +496,7 @@ async def delete_delivery_config(cfg_id: int, user_data: dict = Depends(get_curr
 @router.get("/users/{target_id}/prices", response_class=HTMLResponse)
 async def get_user_prices_settings(target_id: int, request: Request, user_data: dict = Depends(get_current_user)):
     """Страница настройки персональных цен пользователя."""
-    from src.api.app import templates
+    
     async with SessionFactory() as session:
         user = await session.get(User, user_data.get("user_id"))
         if user.role not in [UserRole.OWNER, UserRole.ADMIN]:
@@ -447,6 +567,70 @@ async def delete_user_price(price_id: int, user_data: dict = Depends(get_current
             return RedirectResponse(url=f"/nexus/users/{target_id}/prices", status_code=303)
         return HTTPException(status_code=404)
 
+from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
+import io
+
+@router.get("/media/{file_id}")
+async def get_media_proxy(file_id: str, user_data: dict = Depends(get_current_user)):
+    """Прокси для отображения фото из Telegram по file_id."""
+    try:
+        from src.core.bot import bot
+        file = await bot.get_file(file_id)
+        # Скачиваем файл в память
+        dest = io.BytesIO()
+        await bot.download_file(file.file_path, destination=dest)
+        dest.seek(0)
+        return StreamingResponse(dest, media_type="image/jpeg")
+    except Exception as e:
+        logger.error(f"Failed to proxy media {file_id}: {e}")
+        return HTMLResponse(content="Media error", status_code=404)
+
+@router.get("/users/blacklist", response_class=HTMLResponse)
+async def get_blacklist(request: Request, user_data: dict = Depends(get_current_user)):
+    """Просмотр заблокированных пользователей."""
+    async with SessionFactory() as session:
+        user = await session.get(User, user_data.get("user_id"))
+        if user.role not in [UserRole.OWNER, UserRole.ADMIN]:
+            raise HTTPException(status_code=403, detail="Permission denied")
+            
+        stmt = select(User).where(User.is_active == False).order_by(User.updated_at.desc())
+        blocked_users = (await session.execute(stmt)).scalars().all()
+        
+        return templates.TemplateResponse("users_manage.html", {
+            "request": request,
+            "user": user,
+            "all_users": blocked_users,
+            "roles": [r.value for r in UserRole],
+            "active_page": "users",
+            "is_blacklist_view": True
+        })
+
+@router.post("/users/{target_id}/toggle-active")
+async def toggle_user_active(target_id: int, user_data: dict = Depends(get_current_user)):
+    """Блокировка/разблокировка пользователя."""
+    async with SessionFactory() as session:
+        user = await session.get(User, user_data.get("user_id"))
+        if user.role not in [UserRole.OWNER, UserRole.ADMIN]:
+            raise HTTPException(status_code=403, detail="Permission denied")
+            
+        target = await session.get(User, target_id)
+        if target:
+            if target.id == user.id:
+                raise HTTPException(status_code=400, detail="Cannot block yourself")
+                
+            target.is_active = not target.is_active
+            await session.commit()
+            
+            await log_admin_action(
+                admin_id=user.id,
+                action="BLOCK_USER" if not target.is_active else "UNBLOCK_USER",
+                target_type="user",
+                target_id=target.id,
+                details=f"Статус изменен на {'BLOCKED' if not target.is_active else 'ACTIVE'}"
+            )
+            return HTMLResponse(content='<script>window.location.reload();</script>')
+        return HTTPException(status_code=404)
+
 from src.services.delivery_service import background_delivery_task
 
 @router.post("/inventory/take", response_class=HTMLResponse)
@@ -493,10 +677,86 @@ async def take_esim_from_inventory(
         
         return HTMLResponse(content='<script>window.location.href="/nexus/my-esim"</script>')
 
+@router.post("/submission/{sub_id}/show-in-bot")
+async def show_in_bot(sub_id: int, user_data: dict = Depends(get_current_user)):
+    """Отправка карточки сим-карты в личку админу/овнеру в телеграм."""
+    async with SessionFactory() as session:
+        user = await session.get(User, user_data.get("user_id"))
+        if user.role not in [UserRole.OWNER, UserRole.ADMIN]:
+            raise HTTPException(status_code=403)
+            
+        stmt = select(Submission).options(
+            joinedload(Submission.category), 
+            joinedload(Submission.seller)
+        ).where(Submission.id == sub_id)
+        sub = (await session.execute(stmt)).scalar_one_or_none()
+        
+        if not sub:
+            return HTMLResponse(content="Not Found")
+
+        text = (
+            f"🔍 *ДЕТАЛИ СИМ-КАРТЫ #{sub.id}*\n\n"
+            f"📱 Номер: `{sub.phone_normalized or 'Н/Д'}`\n"
+            f"🏷 Категория: *{sub.category.title}*\n"
+            f"⚙️ Статус: `{sub.status.upper()}`\n\n"
+            f"👤 Продавец: @{sub.seller.username or 'unknown'} (`{sub.seller.telegram_id}`)\n"
+            f"📅 Создана: {sub.created_at.strftime('%d.%m.%Y %H:%M')}\n"
+        )
+        
+        try:
+            await bot.send_message(user.telegram_id, text, parse_mode="Markdown")
+            return HTMLResponse(content='<span class="text-[10px] text-emerald-400 font-bold uppercase tracking-widest">Отправлено в бот ✅</span>')
+        except Exception as e:
+            logger.error(f"Failed to send card to {user.telegram_id}: {e}")
+            return HTMLResponse(content='<span class="text-[10px] text-red-400 font-bold uppercase tracking-widest">Ошибка отправки ❌</span>')
+
+@router.get("/submission/{sub_id}/discuss")
+async def discuss_submission(sub_id: int, user_data: dict = Depends(get_current_user)):
+    """Переход в чат обсуждения конкретной сим-карты (создает тикет, если его нет)."""
+    async with SessionFactory() as session:
+        user = await session.get(User, user_data.get("user_id"))
+        
+        # 1. Ищем саму симку
+        sub = await session.get(Submission, sub_id)
+        if not sub:
+            raise HTTPException(status_code=404, detail="eSIM не найдена")
+
+        # 2. Ищем существующий открытый тикет для этой симки
+        from src.database.models.web_control import SupportTicket
+        stmt = select(SupportTicket).where(
+            SupportTicket.submission_id == sub_id,
+            SupportTicket.status == "open"
+        )
+        ticket = (await session.execute(stmt)).scalar_one_or_none()
+
+        if not ticket:
+            # 3. Создаем новый тикет, если обсуждение еще не начато
+            ticket = SupportTicket(
+                creator_id=user.id,
+                submission_id=sub_id,
+                category_id=sub.category_id,
+                subject=f"Обсуждение eSIM #{sub_id}",
+                status="open"
+            )
+            session.add(ticket)
+            await session.commit()
+            await session.refresh(ticket)
+            
+            # Пишем аудит-лог
+            await log_admin_action(
+                admin_id=user.id,
+                action="START_DISCUSSION",
+                target_type="submission",
+                target_id=sub_id,
+                details=f"Начато обсуждение в тикете #{ticket.id}"
+            )
+
+        return RedirectResponse(url=f"/nexus/tickets/{ticket.id}", status_code=303)
+
 @router.get("/users", response_class=HTMLResponse)
 async def get_users_manage(request: Request, user_data: dict = Depends(get_current_user)):
     """Страница управления пользователями (для OWNER и ADMIN)."""
-    from src.api.app import templates
+    
     async with SessionFactory() as session:
         user = await session.get(User, user_data.get("user_id"))
         if user.role not in [UserRole.OWNER, UserRole.ADMIN]:
@@ -598,7 +858,7 @@ async def update_user_role(target_id: int, new_role: str = Form(...), user_data:
 @router.get("/audit", response_class=HTMLResponse)
 async def get_audit_log(request: Request, user_data: dict = Depends(get_current_user)):
     """Страница журнала аудита (только для OWNER)."""
-    from src.api.app import templates
+    
     async with SessionFactory() as session:
         user = await session.get(User, user_data.get("user_id"))
         if user.role != UserRole.OWNER:
@@ -622,7 +882,7 @@ async def get_audit_log(request: Request, user_data: dict = Depends(get_current_
 @router.get("/moderation", response_class=HTMLResponse)
 async def get_moderation_panel(request: Request, user_data: dict = Depends(get_current_user)):
     """Панель модерации активных симок (для OWNER и ADMIN)."""
-    from src.api.app import templates
+    
     async with SessionFactory() as session:
         user = await session.get(User, user_data.get("user_id"))
         if user.role not in [UserRole.OWNER, UserRole.ADMIN]:
@@ -656,16 +916,23 @@ async def get_moderation_panel(request: Request, user_data: dict = Depends(get_c
 
 @router.get("/search")
 async def search_submissions(q: str, user_data: dict = Depends(get_current_user)):
-    """API для глобального поиска по номеру телефона."""
+    """API для глобального поиска по номеру телефона (полный или последние 3-4-5 цифр)."""
     async with SessionFactory() as session:
         user = await session.get(User, user_data.get("user_id"))
         
-        # Ищем по номеру (нормализованному)
+        # Если в поиске только цифры и их мало (3-5), ищем по концу строки
+        if q.isdigit() and len(q) < 10:
+            search_pattern = f"%{q}"
+        else:
+            # Иначе ищем вхождение в любом месте (более гибко)
+            search_pattern = f"%{q}%"
+
         stmt = (
             select(Submission)
             .options(joinedload(Submission.category))
-            .where(Submission.phone_normalized.like(f"%{q}%"))
-            .limit(10)
+            .where(Submission.phone_normalized.like(search_pattern))
+            .order_by(Submission.updated_at.desc())
+            .limit(15)
         )
         # Если SIMBUYER - фильтруем только его симки
         if user.role == UserRole.SIMBUYER:
@@ -675,16 +942,27 @@ async def search_submissions(q: str, user_data: dict = Depends(get_current_user)
         
         html = ""
         for res in results:
+            # Добавляем цветовой бейдж статуса для удобства
+            status_color = "text-nexus-cyan"
+            if res.status == SubmissionStatus.ACCEPTED: status_color = "text-emerald-500"
+            elif res.status == SubmissionStatus.BLOCKED: status_color = "text-red-500"
+            elif res.status == SubmissionStatus.NOT_A_SCAN: status_color = "text-amber-500"
+
             html += f"""
-            <a href="/nexus/submission/{res.id}" class="flex items-center justify-between p-4 hover:bg-white/5 border-b border-white/5 transition-colors">
-                <div>
-                    <div class="text-white font-bold">{res.phone_normalized or 'Н/Д'}</div>
-                    <div class="text-[10px] text-white/40 uppercase tracking-widest">{res.category.title} #{res.id}</div>
+            <a href="/nexus/submission/{res.id}" class="flex items-center justify-between p-4 hover:bg-white/5 border-b border-white/5 transition-all group">
+                <div class="flex items-center gap-4">
+                    <div class="w-10 h-10 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center font-mono text-[10px] text-white/40 group-hover:border-nexus-cyan/30 transition-all">
+                        #{res.id}
+                    </div>
+                    <div>
+                        <div class="text-white font-bold group-hover:text-nexus-cyan transition-colors">{res.phone_normalized or 'Н/Д'}</div>
+                        <div class="text-[10px] text-white/40 uppercase tracking-widest">{res.category.title}</div>
+                    </div>
                 </div>
-                <div class="text-nexus-cyan font-mono text-xs uppercase">{res.status}</div>
+                <div class="{status_color} font-mono text-[10px] uppercase tracking-widest font-bold px-2 py-1 bg-white/5 rounded border border-white/5">{res.status}</div>
             </a>
             """
-        return HTMLResponse(content=html if html else '<div class="p-8 text-center text-white/20">Ничего не найдено</div>')
+        return HTMLResponse(content=html if html else '<div class="p-12 text-center text-white/10 uppercase tracking-widest text-xs italic">Ничего не найдено</div>')
 
 @router.post("/esim/{sub_id}/action/{action}")
 async def process_esim_action(sub_id: int, action: str, user_data: dict = Depends(get_current_user)):
@@ -710,8 +988,10 @@ async def process_esim_action(sub_id: int, action: str, user_data: dict = Depend
                 return HTMLResponse(content='<div class="text-red-400 p-2 bg-red-900/20 border border-red-900 rounded">❌ Недостаточно прав для этого действия.</div>')
 
         # ПРИМЕНЕНИЕ СТАТУСА
+        notification_text = None
         if action == "block": 
             sub.status = SubmissionStatus.BLOCKED
+            notification_text = f"⚠️ *ОПЕРАТИВНЫЙ КОНТРОЛЬ*\n\nВаша сим-карта `{sub.phone_normalized}` была *ЗАБЛОКИРОВАНА*.\nКатегория: {sub.category.title}\nID: #`{sub.id}`"
         elif action == "not_scan": 
             sub.status = SubmissionStatus.NOT_A_SCAN
         elif action == "accept" and not is_simbuyer: # Только Админ/Овнер
@@ -720,6 +1000,13 @@ async def process_esim_action(sub_id: int, action: str, user_data: dict = Depend
         if old_status != sub.status:
             await session.commit()
             
+            # УВЕДОМЛЕНИЕ СЕЛЛЕРУ (ТЗ: "уведомление поступет селлеру в личку")
+            if notification_text and sub.seller_id:
+                try:
+                    await bot.send_message(sub.seller_id, notification_text, parse_mode="Markdown")
+                except Exception as e:
+                    logger.error(f"Failed to notify seller {sub.seller_id}: {e}")
+
             # ВИЗУАЛЬНЫЙ ЛОГ В ТИКЕТАХ (Улучшение 2)
             from src.database.models.submission import SupportTicket, ChatMessage
             ticket_stmt = select(SupportTicket).where(SupportTicket.submission_id == sub.id)

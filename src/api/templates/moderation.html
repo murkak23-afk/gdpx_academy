@@ -66,12 +66,23 @@
                         </td>
                         <td class="px-8 py-5 text-right">
                             <div class="flex justify-end gap-2">
-                                <a href="/nexus/submission/{{ item.id }}" class="p-2 bg-white/5 border border-white/10 rounded-lg text-white/40 hover:text-nexus-cyan transition-colors">
+                                <a href="/nexus/submission/{{ item.id }}" class="p-2 bg-white/5 border border-white/10 rounded-lg text-white/40 hover:text-nexus-cyan transition-colors" title="Просмотр">
                                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
                                 </a>
+                                
                                 <button hx-post="/nexus/esim/{{ item.id }}/action/accept" hx-confirm="Подтвердить зачёт?" hx-swap="none" onclick="this.closest('tr').remove()"
-                                        class="p-2 bg-emerald-500/10 border border-emerald-500/20 rounded-lg text-emerald-500 hover:bg-emerald-500/20 transition-all">
+                                        class="p-2 bg-emerald-500/10 border border-emerald-500/20 rounded-lg text-emerald-500 hover:bg-emerald-500/20 transition-all" title="Зачёт">
                                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+                                </button>
+                                
+                                <button hx-post="/nexus/esim/{{ item.id }}/action/not_scan" hx-confirm="Отметить как НЕ СКАН?" hx-swap="none" onclick="this.closest('tr').remove()"
+                                        class="p-2 bg-amber-500/10 border border-amber-500/20 rounded-lg text-amber-500 hover:bg-amber-500/20 transition-all" title="Не скан">
+                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+                                </button>
+
+                                <button hx-post="/nexus/esim/{{ item.id }}/action/block" hx-confirm="ЗАБЛОКИРОВАТЬ СИМ-КАРТУ? Уведомление уйдет селлеру." hx-swap="none" onclick="this.closest('tr').remove()"
+                                        class="p-2 bg-red-500/10 border border-red-500/20 rounded-lg text-red-500 hover:bg-red-500/20 transition-all" title="Блок">
+                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"/></svg>
                                 </button>
                             </div>
                         </td>
