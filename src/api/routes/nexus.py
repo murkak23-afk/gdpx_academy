@@ -523,6 +523,27 @@ async def get_users_manage(request: Request, user_data: dict = Depends(get_curre
             "active_page": "users"
         })
 
+@router.get("/users/restricted", response_class=HTMLResponse)
+async def get_restricted_users(request: Request, user_data: dict = Depends(get_current_user)):
+    """Страница заблокированных воркеров (Блэк-лист)."""
+    from src.api.app import templates
+    async with SessionFactory() as session:
+        user = await session.get(User, user_data.get("user_id"))
+        if user.role not in [UserRole.OWNER, UserRole.ADMIN]:
+            raise HTTPException(status_code=403)
+            
+        stmt = select(User).where(User.is_restricted == True).order_by(User.updated_at.desc())
+        restricted = (await session.execute(stmt)).scalars().all()
+        
+        return templates.TemplateResponse("users_manage.html", {
+            "request": request,
+            "user": user,
+            "all_users": restricted,
+            "roles": [r.value for r in UserRole],
+            "active_page": "users",
+            "is_blacklist": True
+        })
+
 @router.post("/users/create")
 async def create_new_user(
     telegram_id: int = Form(...),

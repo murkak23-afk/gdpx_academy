@@ -8,13 +8,25 @@
     <!-- Заголовок -->
     <div class="flex justify-between items-end">
         <div>
-            <h1 class="text-[32px] font-semibold text-white tracking-tight drop-shadow-[0_0_10px_rgba(0,217,255,0.3)]">Воркеры и Доступы</h1>
-            <p class="text-nexus-cyan mt-2 font-medium tracking-wider">Управление ролями и мониторинг активности команды</p>
+            <h1 class="text-[32px] font-semibold text-white tracking-tight drop-shadow-[0_0_10px_rgba(0,217,255,0.3)]">
+                {{ 'Черный список' if is_blacklist else 'Воркеры и Доступы' }}
+            </h1>
+            <p class="text-nexus-cyan mt-2 font-medium tracking-wider">
+                {{ 'Список заблокированных учетных записей' if is_blacklist else 'Управление ролями и мониторинг активности команды' }}
+            </p>
         </div>
         <div class="flex gap-3">
-            <button class="px-5 py-2.5 bg-white/5 border border-white/10 rounded-xl text-sm font-semibold text-white/60 hover:bg-white/10 transition-all">
+            {% if is_blacklist %}
+            <a href="/nexus/users" class="px-5 py-2.5 bg-white/5 border border-white/10 rounded-xl text-sm font-semibold text-white/60 hover:bg-white/10 transition-all flex items-center gap-2">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/></svg>
+                К СПИСКУ
+            </a>
+            {% else %}
+            <a href="/nexus/users/restricted" class="px-5 py-2.5 bg-white/5 border border-white/10 rounded-xl text-sm font-semibold text-white/60 hover:bg-white/10 transition-all flex items-center gap-2">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"/></svg>
                 БЛОК-ЛИСТ
-            </button>
+            </a>
+            {% endif %}
             <button onclick="openCreateUserModal()" class="px-5 py-2.5 bg-gradient-to-r from-nexus-cyan to-nexus-sakura rounded-xl text-sm font-bold text-white shadow-lg shadow-blue-500/20 active:scale-95 transition-all">
                 + НОВЫЙ СОТРУДНИК
             </button>
