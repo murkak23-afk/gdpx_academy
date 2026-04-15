@@ -44,30 +44,45 @@ def _get_upload_header() -> str:
 async def start_submission(event: Message | CallbackQuery, state: FSMContext, session: AsyncSession, ui: MessageManager) -> None:
     """Шаг 1: Выбор оператора."""
     user_id = event.from_user.id
-    categories = await CategoryService(session=session).get_active_categories()
-    if not categories:
-        msg = "🔴 Нет активных операторов для загрузки"
-        if isinstance(event, CallbackQuery): await event.answer(msg, show_alert=True)
-        else: await event.answer(msg)
-        return
+    print(f"DEBUG: Start submission for {user_id}")
+    
+    try:
+        categories = await CategoryService(session=session).get_active_categories()
+        print(f"DEBUG: Found {len(categories)} categories")
+        
+        if not categories:
+            msg = "🔴 Нет активных операторов для загрузки"
+            if isinstance(event, CallbackQuery): await event.answer(msg, show_alert=True)
+            else: await event.answer(msg)
+            return
 
-    user = await UserService(session=session).get_by_telegram_id(user_id)
-    fav_ids = user.favorite_categories or []
+        user = await UserService(session=session).get_by_telegram_id(user_id)
+        fav_ids = user.favorite_categories or []
+        print(f"DEBUG: User profile loaded, favorites: {fav_ids}")
 
-    await state.set_state(SubmissionState.waiting_for_category)
-    banner = media.get("esim.png")
+        await state.set_state(SubmissionState.waiting_for_category)
+        banner = media.get("esim.png")
+        print(f"DEBUG: Banner retrieved: {banner}")
 
-    text = (
-        f"{_get_upload_header()}"
-        f"<b>ШАГ 1/2 ✦ ВЫБОР ОПЕРАТОРА</b>\n\n"
-        f"Выберите целевого оператора для интеграции активов.\n"
-        f"<i>⚠️ Ставка выкупа (USDT) фиксируется в момент загрузки и защищена от изменений.</i>"
-    )
+        text = (
+            f"{_get_upload_header()}"
+            f"<b>ШАГ 1/2 ✦ ВЫБОР ОПЕРАТОРА</b>\n\n"
+            f"Выберите целевого оператора для интеграции активов.\n"
+            f"<i>⚠️ Ставка выкупа (USDT) фиксируется в момент загрузки и защищена от изменений.</i>"
+        )
 
-    kb = await get_categories_kb(categories, fav_ids)
-    await ui.display(event=event, text=text, reply_markup=kb, photo=banner)
-    if isinstance(event, CallbackQuery):
-        await event.answer()
+        kb = await get_categories_kb(categories, fav_ids)
+        print(f"DEBUG: Keyboard generated, calling display...")
+        
+        await ui.display(event=event, text=text, reply_markup=kb, photo=banner)
+        if isinstance(event, CallbackQuery):
+            await event.answer()
+            
+    except Exception as e:
+        print(f"DEBUG ERROR: {e}")
+        import traceback
+        traceback.print_exc()
+        raise e
 
 
 @router.callback_query(SellerAssetCD.filter(), StateFilter(SubmissionState.waiting_for_category))
