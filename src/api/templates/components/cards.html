@@ -14,7 +14,7 @@
             </span>
         </div>
         
-        <!-- Правый бейдж: Оператор (оставляем как было) -->
+        <!-- Правый бейдж: Оператор -->
         <div class="px-3 py-1 bg-gradient-to-r from-nexus-cyan/10 to-nexus-sakura/10 border border-nexus-cyan/20 rounded-[8px] min-w-0 flex-1 flex justify-end">
             <span class="text-[11px] font-bold bg-gradient-to-r from-nexus-cyan to-nexus-sakura bg-clip-text text-transparent tracking-widest uppercase truncate text-right">
                 {{ category.title }}
@@ -22,7 +22,7 @@
         </div>
     </div>
 
-    <!-- Body: Цифра чуть меньше -->
+    <!-- Body: Цифра -->
     <div class="mt-2 flex-1 flex flex-col justify-center relative z-10">
         <div class="text-[56px] font-light tracking-tighter text-white leading-none group-hover:scale-105 origin-left transition-transform duration-500 drop-shadow-[0_0_15px_rgba(255,255,255,0.2)]">
             {{ stock_count }}
@@ -55,14 +55,64 @@
 {% endmacro %}
 
 {% macro ticket_card(ticket) %}
-<a href="/nexus/tickets/{{ ticket.id }}" class="block p-6 bg-white/5 backdrop-blur-xl border border-white/10 rounded-[20px] hover:border-nexus-cyan transition-all duration-300 shadow-[0_8px_30px_rgba(0,0,0,0.5)] hover:shadow-[0_10px_30px_rgba(0,217,255,0.15)] hover:-translate-y-1">
-    <div class="flex justify-between items-center mb-4">
-        <div class="px-3 py-1 bg-nexus-sakura/20 border border-nexus-sakura/30 rounded-lg">
-            <span class="text-[10px] font-bold text-nexus-sakura tracking-widest uppercase shadow-[0_0_10px_rgba(255,0,234,0.3)]">#{{ ticket.id }}</span>
+<div onclick="window.location.href='/nexus/tickets/{{ ticket.id }}'" class="premium-card p-8 flex flex-col gap-6 cursor-pointer relative group overflow-hidden">
+    <!-- Декоративный блеск -->
+    <div class="absolute -top-12 -right-12 w-24 h-24 bg-nexus-sakura/5 rounded-full blur-[40px] group-hover:bg-nexus-sakura/15 transition-all duration-500"></div>
+
+    <div class="flex justify-between items-center relative z-10">
+        <div class="px-3 py-1 bg-nexus-sakura/10 border border-nexus-sakura/20 rounded-lg">
+            <span class="text-[10px] font-bold text-nexus-sakura tracking-widest uppercase neon-text-sakura">Ticket #{{ ticket.id }}</span>
         </div>
-        <span class="text-[10px] bg-white/5 border border-white/10 px-3 py-1 rounded-lg text-white/60 tracking-widest uppercase">{{ ticket.status }}</span>
+        <div class="px-3 py-1 bg-white/5 border border-white/10 rounded-lg">
+            <span class="text-[9px] font-bold text-white/40 tracking-widest uppercase">{{ ticket.status }}</span>
+        </div>
     </div>
-    <div class="font-medium text-[16px] text-white tracking-wide mb-2 line-clamp-1">{{ ticket.subject }}</div>
-    <div class="text-[12px] text-white/40 tracking-wider">Ref: <a href="/nexus/submission/{{ ticket.submission_id }}" class="text-nexus-cyan hover:underline decoration-nexus-cyan/30 underline-offset-4">#{{ ticket.submission_id }}</a></div>
-</a>
+
+    <div class="relative z-10">
+        <div class="text-[18px] font-bold text-white tracking-wide line-clamp-2 leading-snug group-hover:text-nexus-cyan transition-colors duration-300">
+            {{ ticket.subject }}
+        </div>
+        <div class="mt-4 flex items-center gap-3">
+            <div class="text-[11px] text-white/30 uppercase tracking-[0.2em]">Reference</div>
+            <div class="px-2 py-0.5 bg-nexus-cyan/10 border border-nexus-cyan/20 rounded text-[11px] font-mono text-nexus-cyan font-bold shadow-[0_0_10px_rgba(0,217,255,0.1)]">
+                #{{ ticket.submission_id }}
+            </div>
+        </div>
+    </div>
+
+    <div class="mt-auto pt-6 border-t border-white/5 flex items-center justify-between relative z-10">
+        <div class="flex items-center gap-2">
+            <div class="w-6 h-6 rounded-full bg-white/10 flex items-center justify-center text-[10px] font-bold text-white/60">
+                {{ ticket.creator.full_name[0]|upper if ticket.creator else '?' }}
+            </div>
+            <span class="text-[11px] text-white/40">@{{ ticket.creator.username or 'anon' }}</span>
+        </div>
+        <div class="text-[10px] text-white/20 font-mono">
+            {{ ticket.created_at.strftime('%d.%m.%y') }}
+        </div>
+    </div>
+</div>
+{% endmacro %}
+
+{% macro chat_message(msg, current_user_id) %}
+<div class="flex {{ 'justify-end' if msg.sender_id == current_user_id else 'justify-start' }} mb-6 animate-in fade-in slide-in-from-bottom-2">
+    <div class="max-w-[80%] flex flex-col {{ 'items-end' if msg.sender_id == current_user_id else 'items-start' }}">
+        <!-- Имя отправителя (если не системное) -->
+        {% if msg.sender_id %}
+        <div class="flex items-center gap-2 mb-1.5 px-2">
+            <span class="text-[10px] font-bold text-white/30 uppercase tracking-widest">{{ msg.sender.full_name }}</span>
+        </div>
+        {% endif %}
+
+        <!-- Тело сообщения -->
+        <div class="px-5 py-3.5 rounded-[22px] {{ 'bg-nexus-cyan/10 border border-nexus-cyan/20 text-white shadow-[0_0_20px_rgba(0,217,255,0.05)]' if msg.sender_id == current_user_id else 'bg-white/5 border border-white/10 text-white/80' if msg.sender_id else 'bg-nexus-sakura/5 border border-dashed border-nexus-sakura/20 text-nexus-sakura/80 w-full text-center italic text-[12px]' }}">
+            {{ msg.text|safe }}
+        </div>
+        
+        <!-- Время -->
+        <div class="mt-1.5 px-2">
+            <span class="text-[9px] font-mono text-white/20">{{ msg.created_at.strftime('%H:%M') }}</span>
+        </div>
+    </div>
+</div>
 {% endmacro %}

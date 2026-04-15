@@ -8,7 +8,8 @@ from sqlalchemy import select, func, and_
 from sqlalchemy.orm import joinedload
 from src.database.session import SessionFactory
 from src.database.models.user import User
-from src.database.models.submission import Submission
+from src.database.models.submission import Submission, SupportTicket, ChatMessage
+from src.database.models.admin_audit import AdminAuditLog
 from src.database.models.category import Category
 from src.database.models.enums import SubmissionStatus, UserRole
 from src.database.models.web_control import SimbuyerPrice
@@ -129,29 +130,27 @@ async def get_reports(request: Request, user_data: dict = Depends(get_current_us
     async with SessionFactory() as session:
         user = await session.get(User, user_data.get("user_id"))
         
-        # Считаем сводку за сегодня (с 00:00 UTC)
-        today_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
-        
-        base_stmt = select(Submission).where(Submission.updated_at >= today_start)
+        # Общая статистика: считаем ВСЕ записи
+        base_stmt = select(Submission)
         if user.role == UserRole.SIMBUYER:
             base_stmt = base_stmt.where(Submission.delivered_to_chat == user.telegram_id)
 
-        # Сбор данных для KPI
-        all_today = (await session.execute(base_stmt)).scalars().all()
+        all_items_res = await session.execute(base_stmt)
+        all_items = all_items_res.scalars().all()
         
         stats = {
-            "total_taken": len(all_today),
-            "blocks": len([s for s in all_today if s.status == SubmissionStatus.BLOCKED]),
-            "not_scans": len([s for s in all_today if s.status == SubmissionStatus.NOT_A_SCAN]),
-            "accepted": len([s for s in all_today if s.status == SubmissionStatus.ACCEPTED]),
-            "total_spend": sum([s.purchase_price or 0 for s in all_today if s.status == SubmissionStatus.ACCEPTED])
+            "total_taken": len(all_items),
+            "blocks": len([s for s in all_items if s.status == SubmissionStatus.BLOCKED]),
+            "not_scans": len([s for s in all_items if s.status == SubmissionStatus.NOT_A_SCAN]),
+            "accepted": len([s for s in all_items if s.status == SubmissionStatus.ACCEPTED]),
+            "total_spend": sum([s.purchase_price or 0 for s in all_items if s.status == SubmissionStatus.ACCEPTED])
         }
         
         # Коэффициент успеха
         stats["success_rate"] = round((stats["accepted"] / stats["total_taken"] * 100), 1) if stats["total_taken"] > 0 else 0
 
-        # Список для таблицы (последние 50)
-        stmt_list = base_stmt.options(joinedload(Submission.category)).order_by(Submission.updated_at.desc()).limit(50)
+        # Список для таблицы (последние 100)
+        stmt_list = base_stmt.options(joinedload(Submission.category)).order_by(Submission.updated_at.desc()).limit(100)
         shipments = (await session.execute(stmt_list)).scalars().all()
 
         return templates.TemplateResponse("reports.html", {
@@ -161,6 +160,17 @@ async def get_reports(request: Request, user_data: dict = Depends(get_current_us
             "stats": stats,
             "active_page": "reports"
         })
+
+@router.get("/media/{file_id}")
+async def get_tg_media(file_id: str, request: Request):
+    """Прокси для отображения фото из Telegram в браузере."""
+    bot = request.app.state.bot
+    try:
+        file = await bot.get_file(file_id)
+        file_url = f"https://api.telegram.org/file/bot{bot.token}/{file.file_path}"
+        return RedirectResponse(url=file_url)
+    except:
+        raise HTTPException(status_code=404)
 
 @router.get("/reports/export")
 async def export_reports_csv(user_data: dict = Depends(get_current_user)):

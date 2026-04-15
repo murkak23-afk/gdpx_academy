@@ -25,22 +25,27 @@
                 <tr>
                     <th class="text-left">eSIM / ID</th>
                     <th class="text-center">Оператор</th>
-                    <th class="text-center">Симбайер</th>
+                    <th class="text-center">Покупатель</th>
                     <th class="text-center">Статус</th>
                     <th class="text-right">Действия</th>
                 </tr>
+
             </thead>
             <tbody class="text-sm">
                     {% for item in items %}
                     <tr class="hover:bg-white/5 transition-colors duration-300 group">
                         <td class="px-8 py-5">
                             <div class="flex items-center gap-4">
-                                <div class="w-10 h-10 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center font-mono text-[10px] text-white/40">
-                                    #{{ item.id }}
+                                <div class="w-12 h-12 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center overflow-hidden shrink-0">
+                                    {% if item.telegram_file_id %}
+                                        <img src="/nexus/media/{{ item.telegram_file_id }}" class="w-full h-full object-cover cursor-zoom-in hover:scale-110 transition-transform" onclick="window.open(this.src)">
+                                    {% else %}
+                                        <span class="text-[10px] text-white/20">НЕТ ФОТО</span>
+                                    {% endif %}
                                 </div>
                                 <div>
-                                    <div class="text-[15px] font-bold text-white tracking-wide">{{ item.phone_normalized or 'НОМЕР НЕ УКАЗАН' }}</div>
-                                    <div class="text-[10px] text-white/20 mt-0.5 tracking-widest uppercase">Взят: {{ item.assigned_at.strftime('%H:%M:%S') if item.assigned_at else '---' }}</div>
+                                    <div class="text-[15px] font-bold text-white tracking-wide">#{{ item.id }}</div>
+                                    <div class="text-[11px] text-nexus-cyan font-mono">{{ item.phone_normalized or 'Н/Д' }}</div>
                                 </div>
                             </div>
                         </td>
@@ -66,16 +71,27 @@
                         </td>
                         <td class="px-8 py-5 text-right">
                             <div class="flex justify-end gap-2">
-                                <a href="/nexus/submission/{{ item.id }}" class="p-2 bg-white/5 border border-white/10 rounded-lg text-white/40 hover:text-nexus-cyan transition-colors">
+                                <!-- Детали -->
+                                <a href="/nexus/submission/{{ item.id }}" class="p-2.5 bg-white/5 border border-white/10 rounded-xl text-white/40 hover:text-white transition-all" title="Детали">
                                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
                                 </a>
+                                <!-- Зачёт -->
                                 <button hx-post="/nexus/esim/{{ item.id }}/action/accept" hx-confirm="Подтвердить зачёт?" hx-swap="none" onclick="this.closest('tr').remove()"
-                                        class="p-2 bg-emerald-500/10 border border-emerald-500/20 rounded-lg text-emerald-500 hover:bg-emerald-500/20 transition-all">
+                                        class="p-2.5 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-emerald-500 hover:bg-emerald-500/30 transition-all" title="Зачёт">
                                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+                                </button>
+                                <!-- Не скан -->
+                                <button hx-post="/nexus/esim/{{ item.id }}/action/not_scan" hx-confirm="Отметить как Не Скан?" hx-swap="none" onclick="this.closest('tr').remove()"
+                                        class="p-2.5 bg-amber-500/10 border border-amber-500/20 rounded-xl text-amber-500 hover:bg-amber-500/30 transition-all" title="Не скан">
+                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+                                </button>
+                                <!-- Брак (Блок) -->
+                                <button hx-post="/nexus/esim/{{ item.id }}/action/block" hx-confirm="ЗАБЛОКИРОВАТЬ АКТИВ?" hx-swap="none" onclick="this.closest('tr').remove()"
+                                        class="p-2.5 bg-red-500/10 border border-red-500/20 rounded-xl text-red-500 hover:bg-red-500/30 transition-all" title="Брак / Блок">
+                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"/></svg>
                                 </button>
                             </div>
                         </td>
-                    </tr>
                     {% endfor %}
                 </tbody>
             </table>

@@ -123,16 +123,17 @@
         <div class="absolute top-0 left-0 w-full h-full bg-[url('https://www.transparenttextures.com/patterns/stardust.png')] opacity-20"></div>
     </div>
 
-    <div class="relative z-10 flex min-h-screen w-full">
-        
+    <title>{% block title %}SYNDICATE // CONTROL{% endblock %}</title>
+    ...
         <!-- Sidebar: Виден только на ПК -->
         <aside class="hidden lg:flex w-72 glass-panel border-r border-white/10 flex-col sticky top-0 h-screen shrink-0">
             <div class="p-8">
                 <div class="flex items-center gap-3">
                     <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-nexus-cyan to-nexus-sakura"></div>
-                    <h2 class="text-[14px] font-bold text-white tracking-widest uppercase">Nexus Panel</h2>
+                    <h2 class="text-[14px] font-bold text-white tracking-widest uppercase">SYNDICATE PANEL</h2>
                 </div>
             </div>
+
             
             <nav class="flex-1 px-4 space-y-2">
                 {% if user and (user.role == 'admin' or user.role == 'owner') %}
@@ -197,8 +198,8 @@
         <main class="flex-1 w-full flex flex-col min-w-0">
             <header class="lg:hidden h-16 border-b border-white/10 flex items-center justify-between px-6 glass-panel shrink-0">
                 <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-nexus-cyan to-nexus-sakura"></div>
-                <div class="text-white font-bold uppercase tracking-widest text-xs">Nexus Mobile</div>
-                <a href="/auth/logout" class="text-white/40 hover:text-nexus-sakura transition-colors">
+                <div class="text-white font-bold uppercase tracking-widest text-xs">SYNDICATE MOBILE</div>
+                <a href="/auth/logout" class="text-white/40 hover:text-nexus-error transition-colors">
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
                 </a>
             </header>

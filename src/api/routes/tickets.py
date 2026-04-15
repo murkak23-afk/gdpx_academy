@@ -15,11 +15,16 @@ router = APIRouter(prefix="/nexus/tickets", tags=["Tickets"])
 async def get_tickets(request: Request, user_data: dict = Depends(get_current_user)):
     from src.api.app import templates
     async with SessionFactory() as session:
-        stmt = select(SupportTicket).order_by(SupportTicket.created_at.desc())
+        stmt = (
+            select(SupportTicket)
+            .options(joinedload(SupportTicket.creator))
+            .order_by(SupportTicket.created_at.desc())
+        )
         result = await session.execute(stmt)
         tickets = result.scalars().all()
         return templates.TemplateResponse("tickets.html", {
             "request": request, 
+            "user": {"user_id": user_data.get("user_id"), "role": user_data.get("role")},
             "tickets": tickets, 
             "active_page": "tickets"
         })
@@ -48,6 +53,7 @@ async def view_ticket(ticket_id: int, request: Request, user_data: dict = Depend
     async with SessionFactory() as session:
         # Подгружаем тикет и связанные сообщения (отсортированные по времени)
         stmt = select(SupportTicket).options(
+            joinedload(SupportTicket.creator),
             joinedload(SupportTicket.messages).joinedload(ChatMessage.sender)
         ).where(SupportTicket.id == ticket_id)
         

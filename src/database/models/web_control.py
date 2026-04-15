@@ -63,7 +63,7 @@ class DeliveryConfig(Base, TimestampMixin):
     thread_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
 
     user = relationship("User")
-    category = relationship("Category")
+    category = relationship("src.database.models.category.Category")
 
 class SimbuyerPrice(Base, TimestampMixin):
     """Персональные цены для конкретных покупателей."""

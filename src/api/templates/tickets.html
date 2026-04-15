@@ -1,15 +1,21 @@
 {% extends "base.html" %}
 {% import "components/cards.html" as cards %}
 
-{% block title %}GDPX // SUPPORT CENTER{% endblock %}
+{% block title %}SYNDICATE // SUPPORT{% endblock %}
 
 {% block content %}
-<div class="space-y-8">
+<div class="space-y-8 animate-in fade-in duration-500">
+    
     <!-- Header -->
     <div class="flex justify-between items-end">
         <div>
-            <h1 class="text-[32px] font-semibold text-[#111111] tracking-tight">Чат / Тикеты</h1>
-            <p class="text-[#666666] mt-2">Центр оперативной поддержки и обсуждения активов</p>
+            <h1 class="text-[32px] font-semibold text-white tracking-tight drop-shadow-[0_0_10px_rgba(0,217,255,0.3)]">Центр Поддержки</h1>
+            <p class="text-nexus-cyan mt-2 font-medium tracking-wider uppercase text-[10px]">Оперативное решение споров по активам</p>
+        </div>
+        <div class="flex gap-3">
+            <div class="px-4 py-2 bg-white/5 border border-white/10 rounded-xl text-xs font-mono text-white/40">
+                TICKETS: {{ tickets|length }}
+            </div>
         </div>
     </div>
 
@@ -21,14 +27,14 @@
         {% endfor %}
     </div>
     {% else %}
-    <div class="flex flex-col items-center justify-center py-20 text-center">
-        <div class="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mb-4">
-            <svg class="w-8 h-8 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
+    <div class="premium-card p-20 text-center flex flex-col items-center justify-center">
+        <div class="w-20 h-20 bg-nexus-cyan/10 rounded-full flex items-center justify-center mb-6 shadow-[0_0_30px_rgba(0,217,255,0.1)]">
+            <svg class="w-10 h-10 text-nexus-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
             </svg>
         </div>
-        <h3 class="text-lg font-semibold text-slate-900">Тикетов пока нет</h3>
-        <p class="text-slate-500 max-w-sm mx-auto mt-2">Когда у клиентов возникнут вопросы по eSIM, они появятся здесь.</p>
+        <h3 class="text-xl font-bold text-white tracking-widest uppercase">Тикетов пока нет</h3>
+        <p class="text-white/30 max-w-xs mx-auto mt-3 text-sm">Здесь будут отображаться все открытые обсуждения по eSIM.</p>
     </div>
     {% endif %}
 </div>
