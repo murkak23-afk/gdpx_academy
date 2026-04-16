@@ -610,11 +610,11 @@ async def take_esim_from_inventory(
     background_tasks: BackgroundTasks,
     category_id: int = Form(...),
     count: int = Form(1),
-    user_data: dict = Depends(get_current_user)
+    user: User = Depends(get_current_user),
+    bot: Bot = Depends(get_bot)
 ):
     """Выдача eSIM из инвентаря для симбайера."""
     async with SessionFactory() as session:
-        user = await session.get(User, user_data.get("user_id"))
         
         # 1. Ищем конфигурацию доставки (персональный чат/топик симбайера)
         from src.database.models.web_control import DeliveryConfig
@@ -650,10 +650,9 @@ async def take_esim_from_inventory(
         return HTMLResponse(content='<script>window.location.href="/nexus/my-esim"</script>')
 
 @router.post("/submission/{sub_id}/show-in-bot")
-async def show_in_bot(sub_id: int, user_data: dict = Depends(get_current_user)):
+async def show_in_bot(sub_id: int, user: User = Depends(get_current_user), bot: Bot = Depends(get_bot)):
     """Отправка карточки сим-карты в личку админу/овнеру в телеграм."""
     async with SessionFactory() as session:
-        user = await session.get(User, user_data.get("user_id"))
         if user.role not in [UserRole.OWNER, UserRole.ADMIN]:
             raise HTTPException(status_code=403)
             
@@ -963,11 +962,9 @@ async def search_submissions(q: str, user_data: dict = Depends(get_current_user)
         return HTMLResponse(content=html if html else '<div class="p-12 text-center text-white/10 uppercase tracking-widest text-xs italic">Ничего не найдено</div>')
 
 @router.post("/esim/{sub_id}/action/{action}")
-async def process_esim_action(sub_id: int, action: str, user_data: dict = Depends(get_current_user)):
+async def process_esim_action(sub_id: int, action: str, user: User = Depends(get_current_user), bot: Bot = Depends(get_bot)):
     """Обработка действий с eSIM (изменение статуса)."""
     async with SessionFactory() as session:
-        user = await session.get(User, user_data.get("user_id"))
-            
         sub = await session.get(Submission, sub_id)
         if not sub:
             return HTMLResponse(content='<div class="text-red-400">Not found</div>')
