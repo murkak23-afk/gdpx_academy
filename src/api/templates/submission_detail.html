@@ -60,11 +60,11 @@
             <div class="bg-[#0a0a0f]/60 backdrop-blur-2xl border border-white/10 rounded-[32px] p-8 shadow-[0_15px_50px_rgba(0,0,0,0.4)] overflow-hidden">
                 <h3 class="text-white/20 text-[10px] font-bold uppercase tracking-[0.3em] mb-6">Visual Proof / Content</h3>
                 <div class="aspect-video bg-white/5 rounded-2xl border border-white/5 flex items-center justify-center relative group overflow-hidden">
-                    {% if sub.media_file_id %}
-                        <img src="/nexus/media/{{ sub.media_file_id }}" alt="eSIM Proof" 
+                    {% if sub.telegram_file_id %}
+                        <img src="/nexus/media/{{ sub.telegram_file_id }}" alt="eSIM Proof" 
                              class="w-full h-full object-contain group-hover:scale-110 transition-transform duration-700">
                         <div class="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                            <a href="/nexus/media/{{ sub.media_file_id }}" target="_blank" class="px-6 py-3 bg-white/10 backdrop-blur-md border border-white/20 rounded-full text-white text-xs font-bold uppercase tracking-widest">Открыть оригинал</a>
+                            <a href="/nexus/media/{{ sub.telegram_file_id }}" target="_blank" class="px-6 py-3 bg-white/10 backdrop-blur-md border border-white/20 rounded-full text-white text-xs font-bold uppercase tracking-widest">Открыть оригинал</a>
                         </div>
                     {% else %}
                         <div class="text-white/10 text-[12px] uppercase tracking-widest">No Media Provided</div>

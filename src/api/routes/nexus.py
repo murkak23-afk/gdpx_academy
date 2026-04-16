@@ -656,7 +656,7 @@ async def take_esim_from_inventory(
         return HTMLResponse(content='<script>window.location.href="/nexus/my-esim"</script>')
 
 @router.post("/submission/{sub_id}/show-in-bot")
-async def show_in_bot(sub_id: int, user: User = Depends(get_current_user), bot: Bot = Depends(get_bot)):
+async def show_in_bot(sub_id: int, request: Request, user: User = Depends(get_current_user), bot: Bot = Depends(get_bot)):
     """Отправка карточки сим-карты в личку админу/овнеру в телеграм."""
     async with SessionFactory() as session:
         if user.role not in [UserRole.OWNER, UserRole.ADMIN]:
@@ -672,16 +672,21 @@ async def show_in_bot(sub_id: int, user: User = Depends(get_current_user), bot: 
             return HTMLResponse(content="Not Found")
 
         text = (
-            f"🔍 *ДЕТАЛИ СИМ-КАРТЫ #{sub.id}*\n\n"
-            f"📱 Номер: `{sub.phone_normalized or 'Н/Д'}`\n"
-            f"🏷 Категория: *{sub.category.title}*\n"
-            f"⚙️ Статус: `{sub.status.upper()}`\n\n"
-            f"👤 Продавец: @{sub.seller.username or 'unknown'} (`{sub.seller.telegram_id}`)\n"
-            f"📅 Создана: {sub.created_at.strftime('%d.%m.%Y %H:%M')}\n"
+            f"🏮 *GDPX PROTOCOL: КАРТОЧКА #{sub.id}*\n"
+            f"━━━━━━━━━━━━━━━━━━\n\n"
+            f"📱 *НОМЕР:* `{sub.phone_normalized or 'Н/Д'}`\n"
+            f"🏷 *КАТЕГОРИЯ:* `{sub.category.title}`\n"
+            f"⚙️ *СТАТУС:* `{sub.status.upper()}`\n\n"
+            f"👤 *ПРОДАВЕЦ:* @{sub.seller.username or 'unknown'}\n"
+            f"📅 *СОЗДАНА:* _{sub.created_at.strftime('%d.%m.%Y %H:%M')}_\n\n"
+            f"🔗 [Открыть в панели](https://{request.base_url.hostname}/nexus/submission/{sub.id})"
         )
         
         try:
-            await bot.send_message(user.telegram_id, text, parse_mode="Markdown")
+            if sub.category.photo_file_id:
+                await bot.send_photo(user.telegram_id, sub.category.photo_file_id, caption=text, parse_mode="Markdown")
+            else:
+                await bot.send_message(user.telegram_id, text, parse_mode="Markdown")
             return HTMLResponse(content='<span class="text-[10px] text-emerald-400 font-bold uppercase tracking-widest">Отправлено в бот ✅</span>')
         except Exception as e:
             logger.error(f"Failed to send card to {user.telegram_id}: {e}")
@@ -730,13 +735,12 @@ async def discuss_submission(sub_id: int, user: User = Depends(get_current_user)
 @router.get("/owner/buyers", response_class=HTMLResponse)
 async def get_owner_buyers(request: Request, q: Optional[str] = None, user: User = Depends(get_current_user)):
     """Страница управления покупателями (OWNER only)."""
-
     async with SessionFactory() as session:
         if user.role != UserRole.OWNER:
             raise HTTPException(status_code=403, detail="Permission denied")
 
-        # Показываем только тех, у кого есть WebAccount (покупатели/админы)
-        stmt = select(User).join(WebAccount, User.id == WebAccount.user_id).where(User.role == UserRole.SIMBUYER)
+        # Показываем только тех, кто является SIMBUYER
+        stmt = select(User).where(User.role == UserRole.SIMBUYER)
 
         if q:
             q = q.strip()
@@ -760,6 +764,39 @@ async def get_owner_buyers(request: Request, q: Optional[str] = None, user: User
             "all_users": users,
             "roles": [r.value for r in UserRole],
             "active_page": "owner_buyers",
+            "search_query": q or ""
+        })
+
+@router.get("/owner/sellers", response_class=HTMLResponse)
+async def get_owner_sellers(request: Request, q: Optional[str] = None, user: User = Depends(get_current_user)):
+    """Страница управления продавцами (OWNER only)."""
+    async with SessionFactory() as session:
+        if user.role != UserRole.OWNER:
+            raise HTTPException(status_code=403, detail="Permission denied")
+
+        stmt = select(User).where(User.role == UserRole.SELLER)
+
+        if q:
+            q = q.strip()
+            if q.isdigit():
+                stmt = stmt.where(User.telegram_id == int(q))
+            elif q.startswith('@'):
+                stmt = stmt.where(User.username.ilike(f"%{q[1:]}%"))
+            else:
+                stmt = stmt.where(or_(
+                    User.username.ilike(f"%{q}%"),
+                    User.full_name.ilike(f"%{q}%"),
+                    User.telegram_id.cast(String).ilike(f"%{q}%")
+                ))
+
+        stmt = stmt.order_by(User.created_at.desc())
+        sellers = (await session.execute(stmt)).scalars().all()
+
+        return templates.TemplateResponse("owner_sellers.html", {
+            "request": request,
+            "user": user,
+            "sellers": sellers,
+            "active_page": "owner_sellers",
             "search_query": q or ""
         })
 
@@ -905,7 +942,7 @@ async def get_simbuyer_cabinet(target_id: int, request: Request, user: User = De
         web_acc_stmt = select(WebAccount).where(WebAccount.user_id == target.id)
         web_acc = (await session.execute(web_acc_stmt)).scalar_one_or_none()
         
-        categories_stmt = select(Category).order_by(Category.name)
+        categories_stmt = select(Category).order_by(Category.title)
         categories = (await session.execute(categories_stmt)).scalars().all()
         
         prices_stmt = select(SimbuyerPrice).where(SimbuyerPrice.user_id == target.id)
@@ -977,6 +1014,7 @@ async def update_simbuyer_config(
             if password: web_acc.password_hash = AuthService.hash_password(password)
             
         await session.commit()
+        await log_admin_action(admin_id=user.id, action="UPDATE_SIMBUYER_CABINET", target_type="user", target_id=target_id, details="Обновлена ценовая политика и доступы")
         
         # УВЕДОМЛЕНИЕ ПОКУПАТЕЛЮ (Улучшение #3)
         try:
@@ -985,43 +1023,6 @@ async def update_simbuyer_config(
         except Exception as e:
             logger.error(f"Failed to notify simbuyer {target_id}: {e}")
             
-        return RedirectResponse(url=f"/nexus/owner/buyers/{target_id}/cabinet", status_code=303)
-            
-        form_data = await request.form()
-        
-        # 1. Обновление цен по категориям
-        # Очищаем старые цены для этого юзера
-        from sqlalchemy import delete
-        await session.execute(delete(SimbuyerPrice).where(SimbuyerPrice.user_id == target_id))
-        
-        for key, value in form_data.items():
-            if key.startswith("price_") and value:
-                cat_id = int(key.replace("price_", ""))
-                new_price = SimbuyerPrice(
-                    user_id=target_id,
-                    category_id=cat_id,
-                    price=Decimal(value)
-                )
-                session.add(new_price)
-        
-        # 2. Обновление логина/пароля веб-аккаунта (если переданы)
-        login = form_data.get("login")
-        password = form_data.get("password")
-        
-        if login or password:
-            web_acc_stmt = select(WebAccount).where(WebAccount.user_id == target_id)
-            web_acc = (await session.execute(web_acc_stmt)).scalar_one_or_none()
-            
-            if not web_acc:
-                web_acc = WebAccount(user_id=target_id, login=login or f"user_{target_id}")
-                session.add(web_acc)
-            
-            if login: web_acc.login = login
-            if password: web_acc.password_hash = AuthService.hash_password(password)
-            
-        await session.commit()
-        await log_admin_action(admin_id=user.id, action="UPDATE_SIMBUYER_CABINET", target_type="user", target_id=target_id, details="Обновлена ценовая политика и доступы")
-        
         return RedirectResponse(url=f"/nexus/users/{target_id}/cabinet", status_code=303)
 
 @router.post("/users/create")
