@@ -173,11 +173,10 @@ async def get_my_esim(request: Request, user: User = Depends(get_current_user)):
 async def process_esim_batch_action(
     action: str, 
     ids: str = Form(...), 
-    user_data: dict = Depends(get_current_user)
+    user: User = Depends(get_current_user)
 ):
     """Массовая обработка eSIM (например, массовый зачёт)."""
     async with SessionFactory() as session:
-        user = await session.get(User, user_data.get("user_id"))
         if user.role not in [UserRole.OWNER, UserRole.ADMIN]:
             raise HTTPException(status_code=403)
             
@@ -467,13 +466,11 @@ async def delete_delivery_config(cfg_id: int, user: User = Depends(admin_only)):
         return HTTPException(status_code=404)
 
 @router.get("/users/{target_id}/prices", response_class=HTMLResponse)
-async def get_user_prices_settings(target_id: int, request: Request, user_data: dict = Depends(get_current_user)):
+async def get_user_prices_settings(target_id: int, request: Request, user: User = Depends(get_current_user)):
     """Страница настройки персональных цен пользователя."""
-    
+
     async with SessionFactory() as session:
-        user = await session.get(User, user_data.get("user_id"))
-        if user.role not in [UserRole.OWNER, UserRole.ADMIN]:
-            raise HTTPException(status_code=403, detail="Permission denied")
+        if user.role not in [UserRole.OWNER, UserRole.ADMIN]:            raise HTTPException(status_code=403, detail="Permission denied")
             
         target = await session.get(User, target_id)
         if not target:
@@ -497,16 +494,14 @@ async def get_user_prices_settings(target_id: int, request: Request, user_data: 
 
 @router.post("/users/{target_id}/prices/add")
 async def add_user_price_config(
-    target_id: int, 
-    category_id: int = Form(...), 
-    price: Decimal = Form(...), 
-    user_data: dict = Depends(get_current_user)
+    target_id: int,
+    category_id: int = Form(...),
+    price: Decimal = Form(...),
+    user: User = Depends(get_current_user)
 ):
     """Добавление/обновление персональной цены."""
     async with SessionFactory() as session:
-        user = await session.get(User, user_data.get("user_id"))
-        if user.role not in [UserRole.OWNER, UserRole.ADMIN]:
-            raise HTTPException(status_code=403, detail="Permission denied")
+        if user.role not in [UserRole.OWNER, UserRole.ADMIN]:            raise HTTPException(status_code=403, detail="Permission denied")
             
         from src.database.models.web_control import SimbuyerPrice
         # Ищем, нет ли уже цены для этой категории
@@ -524,10 +519,9 @@ async def add_user_price_config(
         return RedirectResponse(url=f"/nexus/users/{target_id}/prices", status_code=303)
 
 @router.post("/users/prices/{price_id}/delete")
-async def delete_user_price(price_id: int, user_data: dict = Depends(get_current_user)):
+async def delete_user_price(price_id: int, user: User = Depends(get_current_user)):
     """Удаление персональной цены."""
     async with SessionFactory() as session:
-        user = await session.get(User, user_data.get("user_id"))
         if user.role not in [UserRole.OWNER, UserRole.ADMIN]:
             raise HTTPException(status_code=403, detail="Permission denied")
             
@@ -558,10 +552,9 @@ async def get_media_proxy(file_id: str, user: User = Depends(get_current_user), 
         return HTMLResponse(content="Media error", status_code=404)
 
 @router.get("/users/blacklist", response_class=HTMLResponse)
-async def get_blacklist(request: Request, user_data: dict = Depends(get_current_user)):
+async def get_blacklist(request: Request, user: User = Depends(get_current_user)):
     """Просмотр заблокированных пользователей."""
     async with SessionFactory() as session:
-        user = await session.get(User, user_data.get("user_id"))
         if user.role not in [UserRole.OWNER, UserRole.ADMIN]:
             raise HTTPException(status_code=403, detail="Permission denied")
             
@@ -578,10 +571,9 @@ async def get_blacklist(request: Request, user_data: dict = Depends(get_current_
         })
 
 @router.post("/users/{target_id}/toggle-active")
-async def toggle_user_active(target_id: int, user_data: dict = Depends(get_current_user)):
+async def toggle_user_active(target_id: int, user: User = Depends(get_current_user)):
     """Блокировка/разблокировка пользователя."""
     async with SessionFactory() as session:
-        user = await session.get(User, user_data.get("user_id"))
         if user.role not in [UserRole.OWNER, UserRole.ADMIN]:
             raise HTTPException(status_code=403, detail="Permission denied")
             
@@ -682,13 +674,10 @@ async def show_in_bot(sub_id: int, user: User = Depends(get_current_user), bot: 
             return HTMLResponse(content='<span class="text-[10px] text-red-400 font-bold uppercase tracking-widest">Ошибка отправки ❌</span>')
 
 @router.get("/submission/{sub_id}/discuss")
-async def discuss_submission(sub_id: int, user_data: dict = Depends(get_current_user)):
+async def discuss_submission(sub_id: int, user: User = Depends(get_current_user)):
     """Переход в чат обсуждения конкретной сим-карты (создает тикет, если его нет)."""
     async with SessionFactory() as session:
-        user = await session.get(User, user_data.get("user_id"))
-        
-        # 1. Ищем саму симку
-        sub = await session.get(Submission, sub_id)
+        # 1. Ищем саму симку        sub = await session.get(Submission, sub_id)
         if not sub:
             raise HTTPException(status_code=404, detail="eSIM не найдена")
 
@@ -725,13 +714,11 @@ async def discuss_submission(sub_id: int, user_data: dict = Depends(get_current_
         return RedirectResponse(url=f"/nexus/tickets/{ticket.id}", status_code=303)
 
 @router.get("/users", response_class=HTMLResponse)
-async def get_users_manage(request: Request, user_data: dict = Depends(get_current_user)):
+async def get_users_manage(request: Request, user: User = Depends(get_current_user)):
     """Страница управления пользователями (для OWNER и ADMIN)."""
-    
+
     async with SessionFactory() as session:
-        user = await session.get(User, user_data.get("user_id"))
-        if user.role not in [UserRole.OWNER, UserRole.ADMIN]:
-            raise HTTPException(status_code=403, detail="Permission denied")
+        if user.role not in [UserRole.OWNER, UserRole.ADMIN]:            raise HTTPException(status_code=403, detail="Permission denied")
             
         stmt = select(User).order_by(User.created_at.desc())
         users = (await session.execute(stmt)).scalars().all()
@@ -750,11 +737,10 @@ async def create_new_user(
     login: str = Form(...),
     password: str = Form(...),
     role: str = Form(...),
-    user_data: dict = Depends(get_current_user)
+    current_admin: User = Depends(get_current_user)
 ):
     """Создание нового сотрудника и WebAccount."""
     async with SessionFactory() as session:
-        current_admin = await session.get(User, user_data.get("user_id"))
         if current_admin.role != UserRole.OWNER:
             raise HTTPException(status_code=403, detail="Only OWNER can create users")
             
@@ -798,10 +784,9 @@ async def create_new_user(
         return RedirectResponse(url="/nexus/users", status_code=303)
 
 @router.post("/users/{target_id}/role")
-async def update_user_role(target_id: int, new_role: str = Form(...), user_data: dict = Depends(get_current_user)):
+async def update_user_role(target_id: int, new_role: str = Form(...), user: User = Depends(get_current_user)):
     """Изменение роли пользователя."""
     async with SessionFactory() as session:
-        user = await session.get(User, user_data.get("user_id"))
         if user.role not in [UserRole.OWNER, UserRole.ADMIN]:
             raise HTTPException(status_code=403, detail="Permission denied")
             
@@ -827,13 +812,11 @@ async def update_user_role(target_id: int, new_role: str = Form(...), user_data:
         return HTTPException(status_code=404)
 
 @router.get("/audit", response_class=HTMLResponse)
-async def get_audit_log(request: Request, user_data: dict = Depends(get_current_user)):
+async def get_audit_log(request: Request, user: User = Depends(get_current_user)):
     """Страница журнала аудита (только для OWNER)."""
-    
+
     async with SessionFactory() as session:
-        user = await session.get(User, user_data.get("user_id"))
-        if user.role != UserRole.OWNER:
-            raise HTTPException(status_code=403, detail="Permission denied")
+        if user.role != UserRole.OWNER:            raise HTTPException(status_code=403, detail="Permission denied")
             
         stmt = (
             select(AdminAuditLog)
@@ -851,13 +834,11 @@ async def get_audit_log(request: Request, user_data: dict = Depends(get_current_
         })
 
 @router.get("/moderation", response_class=HTMLResponse)
-async def get_moderation_panel(request: Request, user_data: dict = Depends(get_current_user)):
+async def get_moderation_panel(request: Request, user: User = Depends(get_current_user)):
     """Панель модерации активных симок (для OWNER и ADMIN)."""
-    
+
     async with SessionFactory() as session:
-        user = await session.get(User, user_data.get("user_id"))
-        if user.role not in [UserRole.OWNER, UserRole.ADMIN]:
-            raise HTTPException(status_code=403, detail="Permission denied")
+        if user.role not in [UserRole.OWNER, UserRole.ADMIN]:            raise HTTPException(status_code=403, detail="Permission denied")
             
         # Загружаем симки в работе
         stmt = (
@@ -886,10 +867,9 @@ async def get_moderation_panel(request: Request, user_data: dict = Depends(get_c
         })
 
 @router.get("/search")
-async def search_submissions(q: str, user_data: dict = Depends(get_current_user)):
+async def search_submissions(q: str, user: User = Depends(get_current_user)):
     """API для глобального поиска по номеру телефона или ID."""
     async with SessionFactory() as session:
-        user = await session.get(User, user_data.get("user_id"))
         is_admin = user.role in [UserRole.OWNER, UserRole.ADMIN]
         
         # 1. Формируем условия поиска
