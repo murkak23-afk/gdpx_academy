@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+
+{% block title %}SIMBUYER CABINET // GDPX{% endblock %}
+
+{% block content %}
+<div class="space-y-12 fade-in">
+    
+    <!-- Заголовок -->
+    <div class="flex flex-col md:flex-row justify-between items-start md:items-end gap-6">
+        <div>
+            <div class="text-[10px] text-nexus-sakura font-bold tracking-[0.4em] uppercase mb-3 opacity-80">Account Control</div>
+            <h1 class="text-[42px] font-bold tracking-tight text-white leading-none japanese-title">Кабинет: {{ target.username or target.id }}</h1>
+            <p class="text-nexus-silver mt-4 font-medium tracking-[0.15em] uppercase text-[11px] opacity-60">
+                Настройка индивидуальных условий и доступа для СИМбайера.
+            </p>
+        </div>
+        <a href="/nexus/users" class="px-6 py-3 bg-white/5 border border-white/10 rounded-xl text-[10px] font-bold text-white/40 uppercase tracking-widest hover:text-white hover:bg-white/10 transition-all">
+            ← Назад к списку
+        </a>
+    </div>
+
+    <form action="/nexus/users/{{ target.id }}/cabinet/config" method="post" class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        
+        <!-- Секция 1: Доступ к Web Nexus -->
+        <div class="lg:col-span-1 space-y-8">
+            <div class="premium-card p-10">
+                <div class="text-nexus-cyan font-bold text-[10px] tracking-[0.3em] uppercase mb-8 opacity-60">Web Access</div>
+                <h3 class="text-[20px] font-bold text-white mb-8 japanese-title">Учетные данные</h3>
+                
+                <div class="space-y-6">
+                    <div>
+                        <label class="text-[10px] font-bold text-white/30 uppercase tracking-[0.2em] mb-2 block">Логин</label>
+                        <input type="text" name="login" value="{{ web_acc.login if web_acc else '' }}" 
+                               placeholder="Придумайте логин"
+                               class="w-full bg-white/5 border border-white/10 rounded-xl px-5 py-3.5 text-white focus:outline-none focus:border-nexus-cyan/50 transition-all">
+                    </div>
+                    <div>
+                        <label class="text-[10px] font-bold text-white/30 uppercase tracking-[0.2em] mb-2 block">Новый пароль</label>
+                        <input type="password" name="password" placeholder="••••••••"
+                               class="w-full bg-white/5 border border-white/10 rounded-xl px-5 py-3.5 text-white focus:outline-none focus:border-nexus-cyan/50 transition-all">
+                        <p class="text-[9px] text-white/20 mt-2 italic">Оставьте пустым, если не хотите менять</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="premium-card p-10 bg-nexus-sakura/5 border-nexus-sakura/20">
+                <div class="text-nexus-sakura font-bold text-[10px] tracking-[0.3em] uppercase mb-4">Danger Zone</div>
+                <p class="text-[11px] text-nexus-silver opacity-60 mb-6">Изменения вступают в силу мгновенно. СИМбайер получит доступ к панели с этими данными.</p>
+                <button type="submit" class="w-full py-4 bg-nexus-sakura text-white rounded-xl font-bold text-[12px] tracking-widest uppercase hover:shadow-[0_0_20px_rgba(255,0,234,0.4)] transition-all">
+                    Сохранить настройки
+                </button>
+            </div>
+        </div>
+
+        <!-- Секция 2: Ценовая политика -->
+        <div class="lg:col-span-2">
+            <div class="premium-card p-10">
+                <div class="flex justify-between items-center mb-8">
+                    <div>
+                        <div class="text-nexus-cyan font-bold text-[10px] tracking-[0.3em] uppercase mb-1 opacity-60">Pricing Policy</div>
+                        <h3 class="text-[24px] font-bold text-white japanese-title">Цены по категориям</h3>
+                    </div>
+                    <div class="text-[10px] text-white/20 font-mono">CURRENCY: USDT</div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {% for cat in categories %}
+                    <div class="p-6 bg-white/[0.02] border border-white/5 rounded-2xl flex items-center justify-between group hover:border-white/10 transition-all">
+                        <div>
+                            <div class="text-[12px] font-bold text-white mb-1">{{ cat.name }}</div>
+                            <div class="text-[9px] text-white/20 uppercase tracking-tighter">Category ID: {{ cat.id }}</div>
+                        </div>
+                        <div class="relative">
+                            <input type="number" step="0.01" name="price_{{ cat.id }}" 
+                                   value="{{ prices_map.get(cat.id, '') }}" 
+                                   placeholder="0.00"
+                                   class="w-24 bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-right text-nexus-cyan font-bold focus:outline-none focus:border-nexus-cyan transition-all">
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+
+                <div class="mt-8 p-6 bg-white/[0.01] border border-dashed border-white/10 rounded-2xl">
+                    <p class="text-[11px] text-nexus-silver opacity-40 leading-relaxed italic">
+                        * Если цена не указана, СИМбайер не сможет подтверждать заявки этой категории через Nexus. 
+                        Цены указываются за 1 единицу актива.
+                    </p>
+                </div>
+            </div>
+        </div>
+
+    </form>
+</div>
+{% endblock %}

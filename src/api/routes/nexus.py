@@ -22,6 +22,7 @@ from src.database.models.admin_audit import AdminAuditLog
 from src.api.deps import templates, get_current_user, RoleChecker, get_db, get_bot
 from src.core.utils.audit_logger import log_admin_action
 from aiogram import Bot
+from src.services.auth_service import AuthService
 from src.services.delivery_service import background_delivery_task
 from src.domain.submission.submission_service import SubmissionService
 
@@ -726,14 +727,17 @@ async def discuss_submission(sub_id: int, user: User = Depends(get_current_user)
 
         return RedirectResponse(url=f"/nexus/tickets/{ticket.id}", status_code=303)
 
-@router.get("/users", response_class=HTMLResponse)
-async def get_users_manage(request: Request, q: Optional[str] = None, user: User = Depends(get_current_user)):
-    """Страница управления пользователями (для OWNER и ADMIN)."""
+@router.get("/owner/buyers", response_class=HTMLResponse)
+async def get_owner_buyers(request: Request, q: Optional[str] = None, user: User = Depends(get_current_user)):
+    """Страница управления покупателями (OWNER only)."""
 
     async with SessionFactory() as session:
-        if user.role not in [UserRole.OWNER, UserRole.ADMIN]:            raise HTTPException(status_code=403, detail="Permission denied")
-            
-        stmt = select(User)
+        if user.role != UserRole.OWNER:
+            raise HTTPException(status_code=403, detail="Permission denied")
+
+        # Показываем только тех, у кого есть WebAccount (покупатели/админы)
+        stmt = select(User).join(WebAccount, User.id == WebAccount.user_id).where(User.role == UserRole.SIMBUYER)
+
         if q:
             q = q.strip()
             if q.isdigit():
@@ -749,15 +753,118 @@ async def get_users_manage(request: Request, q: Optional[str] = None, user: User
 
         stmt = stmt.order_by(User.created_at.desc())
         users = (await session.execute(stmt)).scalars().all()
-        
+
         return templates.TemplateResponse("users_manage.html", {
             "request": request,
             "user": user,
             "all_users": users,
             "roles": [r.value for r in UserRole],
-            "active_page": "users",
+            "active_page": "owner_buyers",
             "search_query": q or ""
         })
+
+@router.get("/owner/sellers", response_class=HTMLResponse)
+async def get_owner_sellers(request: Request, q: Optional[str] = None, user: User = Depends(get_current_user)):
+    """Страница управления продавцами (OWNER only)."""
+    async with SessionFactory() as session:
+        if user.role != UserRole.OWNER: raise HTTPException(status_code=403)
+
+        stmt = select(User).where(User.role == UserRole.SELLER)
+        if q:
+            q = q.strip()
+            stmt = stmt.where(or_(User.username.ilike(f"%{q}%"), User.full_name.ilike(f"%{q}%")))
+
+        sellers = (await session.execute(stmt.order_by(User.created_at.desc()))).scalars().all()
+        return templates.TemplateResponse("owner_sellers.html", {"request": request, "user": user, "sellers": sellers, "active_page": "owner_sellers"})
+
+@router.get("/owner/admins", response_class=HTMLResponse)
+async def get_owner_admins(request: Request, user: User = Depends(get_current_user)):
+    """Страница управления админами (OWNER only)."""
+    async with SessionFactory() as session:
+        if user.role != UserRole.OWNER: raise HTTPException(status_code=403)
+
+        stmt = select(User).where(User.role == UserRole.ADMIN)
+        admins = (await session.execute(stmt)).scalars().all()
+        return templates.TemplateResponse("owner_admins.html", {"request": request, "user": user, "admins": admins, "active_page": "owner_admins"})
+
+@router.get("/users/{target_id}/cabinet", response_class=HTMLResponse)
+async def get_simbuyer_cabinet(target_id: int, request: Request, user: User = Depends(get_current_user)):
+    """Личный кабинет управления СИМбайером (настройка цен и доступов)."""
+    async with SessionFactory() as session:
+        if user.role not in [UserRole.OWNER, UserRole.ADMIN]:
+            raise HTTPException(status_code=403, detail="Permission denied")
+        
+        target = await session.get(User, target_id)
+        if not target:
+            raise HTTPException(status_code=404, detail="User not found")
+            
+        web_acc_stmt = select(WebAccount).where(WebAccount.user_id == target.id)
+        web_acc = (await session.execute(web_acc_stmt)).scalar_one_or_none()
+        
+        categories_stmt = select(Category).order_by(Category.name)
+        categories = (await session.execute(categories_stmt)).scalars().all()
+        
+        prices_stmt = select(SimbuyerPrice).where(SimbuyerPrice.user_id == target.id)
+        prices_list = (await session.execute(prices_stmt)).scalars().all()
+        prices_map = {p.category_id: p.price for p in prices_list}
+        
+        return templates.TemplateResponse("simbuyer_cabinet.html", {
+            "request": request,
+            "user": user,
+            "target": target,
+            "web_acc": web_acc,
+            "categories": categories,
+            "prices_map": prices_map,
+            "active_page": "users"
+        })
+
+@router.post("/users/{target_id}/cabinet/config")
+async def update_simbuyer_config(
+    target_id: int,
+    request: Request,
+    user: User = Depends(get_current_user)
+):
+    """Обновление ценовой политики и доступов СИМбайера."""
+    async with SessionFactory() as session:
+        if user.role not in [UserRole.OWNER, UserRole.ADMIN]:
+            raise HTTPException(status_code=403, detail="Permission denied")
+            
+        form_data = await request.form()
+        
+        # 1. Обновление цен по категориям
+        # Очищаем старые цены для этого юзера
+        from sqlalchemy import delete
+        await session.execute(delete(SimbuyerPrice).where(SimbuyerPrice.user_id == target_id))
+        
+        for key, value in form_data.items():
+            if key.startswith("price_") and value:
+                cat_id = int(key.replace("price_", ""))
+                new_price = SimbuyerPrice(
+                    user_id=target_id,
+                    category_id=cat_id,
+                    price=Decimal(value)
+                )
+                session.add(new_price)
+        
+        # 2. Обновление логина/пароля веб-аккаунта (если переданы)
+        login = form_data.get("login")
+        password = form_data.get("password")
+        
+        if login or password:
+            web_acc_stmt = select(WebAccount).where(WebAccount.user_id == target_id)
+            web_acc = (await session.execute(web_acc_stmt)).scalar_one_or_none()
+            
+            if not web_acc:
+                web_acc = WebAccount(user_id=target_id, login=login or f"user_{target_id}")
+                session.add(web_acc)
+            
+            if login: web_acc.login = login
+            if password: web_acc.password_hash = AuthService.hash_password(password)
+            
+        await session.commit()
+        await log_admin_action(admin_id=user.id, action="UPDATE_SIMBUYER_CABINET", target_type="user", target_id=target_id, details="Обновлена ценовая политика и доступы")
+        
+        return RedirectResponse(url=f"/nexus/users/{target_id}/cabinet", status_code=303)
 
 @router.post("/users/create")
 async def create_new_user(
@@ -809,7 +916,8 @@ async def create_new_user(
         await session.commit()
         await log_admin_action(admin_id=current_admin.id, action="CREATE_USER", target_type="user", target_id=user.id, details=f"Создан аккаунт {login} с ролью {role}")
         
-        return RedirectResponse(url="/nexus/users", status_code=303)
+        # Сразу перекидываем в кабинет для настройки цен и параметров
+        return RedirectResponse(url=f"/nexus/users/{user.id}/cabinet", status_code=303)
 
 @router.post("/users/{target_id}/role")
 async def update_user_role(target_id: int, new_role: str = Form(...), user: User = Depends(get_current_user)):
@@ -838,6 +946,26 @@ async def update_user_role(target_id: int, new_role: str = Form(...), user: User
             )
             return RedirectResponse(url="/nexus/users", status_code=303)
         return HTTPException(status_code=404)
+
+@router.post("/users/{target_id}/delete")
+async def delete_user(target_id: int, user: User = Depends(get_current_user)):
+    """Полное удаление покупателя и его веб-доступа."""
+    async with SessionFactory() as session:
+        if user.role != UserRole.OWNER:
+            raise HTTPException(status_code=403, detail="Only OWNER can delete users")
+        
+        target = await session.get(User, target_id)
+        if target:
+            # Удаляем цены, веб-аккаунт и самого юзера (каскад сработает для цен/логов если настроено, но лучше вручную)
+            from sqlalchemy import delete
+            await session.execute(delete(SimbuyerPrice).where(SimbuyerPrice.user_id == target_id))
+            await session.execute(delete(WebAccount).where(WebAccount.user_id == target_id))
+            await session.delete(target)
+            
+            await session.commit()
+            await log_admin_action(admin_id=user.id, action="DELETE_USER", target_type="user", target_id=target_id, details="Полное удаление аккаунта и веб-доступа")
+            
+        return RedirectResponse(url="/nexus/owner/buyers", status_code=303)
 
 @router.get("/audit", response_class=HTMLResponse)
 async def get_audit_log(request: Request, user: User = Depends(get_current_user)):

@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+
+{% block title %}Управление Продавцами // GDPX{% endblock %}
+
+{% block content %}
+<div class="space-y-8 fade-in">
+    
+    <!-- Заголовок -->
+    <div class="flex justify-between items-end">
+        <div>
+            <div class="text-[10px] text-nexus-sakura font-bold tracking-[0.4em] uppercase mb-3 opacity-80">Supply Side</div>
+            <h1 class="text-[32px] font-bold text-white japanese-title leading-none">Управление Продавцами</h1>
+            <p class="text-nexus-silver mt-4 font-medium tracking-[0.15em] uppercase text-[11px] opacity-60">
+                Мониторинг базы селлеров бота и управление их репутацией.
+            </p>
+        </div>
+        <div class="px-6 py-4 bg-white/[0.02] border border-white/5 rounded-xl">
+            <span class="text-white/20 text-[10px] font-bold uppercase tracking-widest">Total Sellers:</span>
+            <span class="text-nexus-cyan font-mono text-[16px] ml-2">{{ sellers|length }}</span>
+        </div>
+    </div>
+
+    <!-- Поиск -->
+    <div class="bg-white/5 border border-white/10 rounded-2xl p-4">
+        <form action="/nexus/owner/sellers" method="get" class="flex gap-4">
+            <input type="text" name="q" placeholder="Поиск продавца по @username или имени..." 
+                   class="flex-1 bg-white/5 border border-white/10 rounded-xl px-6 py-3 text-white focus:outline-none focus:border-nexus-cyan transition-all">
+            <button type="submit" class="px-8 py-3 bg-white/5 border border-white/10 rounded-xl text-white font-bold hover:bg-white/10 transition-all uppercase text-[11px] tracking-widest">
+                Найти
+            </button>
+        </form>
+    </div>
+
+    <!-- Список продавцов -->
+    <div class="premium-card overflow-hidden">
+        <div class="overflow-x-auto">
+            <table class="w-full text-left border-collapse">
+                <thead>
+                    <tr class="border-b border-white/5">
+                        <th class="px-8 py-6 text-[10px] font-bold text-white/30 uppercase tracking-[0.2em]">Продавец</th>
+                        <th class="px-8 py-6 text-[10px] font-bold text-white/30 uppercase tracking-[0.2em] text-center">ID / TG</th>
+                        <th class="px-8 py-6 text-[10px] font-bold text-white/30 uppercase tracking-[0.2em] text-center">Статус</th>
+                        <th class="px-8 py-6 text-[10px] font-bold text-white/30 uppercase tracking-[0.2em] text-center">Регистрация</th>
+                        <th class="px-8 py-6 text-[10px] font-bold text-white/30 uppercase tracking-[0.2em] text-right">Действия</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-white/[0.02]">
+                    {% for s in sellers %}
+                    <tr class="hover:bg-white/[0.02] transition-colors group">
+                        <td class="px-8 py-5">
+                            <div class="flex items-center gap-4">
+                                <div class="w-10 h-10 rounded-full bg-gradient-to-br from-white/10 to-white/5 flex items-center justify-center text-white font-bold text-xs">
+                                    {{ s.full_name[:1] }}
+                                </div>
+                                <div>
+                                    <div class="font-bold text-white group-hover:text-nexus-cyan transition-colors">{{ s.full_name }}</div>
+                                    <div class="text-[10px] text-white/20">@{{ s.username or 'none' }}</div>
+                                </div>
+                            </div>
+                        </td>
+                        <td class="px-8 py-5 text-center font-mono text-white/40 text-[12px]">{{ s.telegram_id }}</td>
+                        <td class="px-8 py-5 text-center">
+                            {% if s.is_active %}
+                                <span class="px-3 py-1 bg-emerald-500/10 border border-emerald-500/20 rounded-lg text-emerald-500 text-[9px] font-bold uppercase tracking-widest">Active</span>
+                            {% else %}
+                                <span class="px-3 py-1 bg-red-500/10 border border-red-500/20 rounded-lg text-red-500 text-[9px] font-bold uppercase tracking-widest">Banned</span>
+                            {% endif %}
+                        </td>
+                        <td class="px-8 py-5 text-center text-white/20 text-[11px]">{{ s.created_at.strftime('%d.%m.%Y') }}</td>
+                        <td class="px-8 py-5 text-right">
+                            <div class="flex justify-end gap-2">
+                                <a href="/nexus/owner/sellers/{{ s.id }}" class="px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-[10px] font-bold text-white/40 uppercase tracking-widest hover:text-white hover:border-white/30 transition-all">
+                                    Карточка
+                                </a>
+                                <button hx-post="/nexus/users/{{ s.id }}/toggle-active" 
+                                        class="px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-[10px] font-bold {{ 'text-red-500' if s.is_active else 'text-emerald-500' }} uppercase tracking-widest hover:border-white/30 transition-all">
+                                    {{ 'Бан' if s.is_active else 'Разблок.' }}
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

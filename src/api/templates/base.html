@@ -213,20 +213,31 @@
                 <a href="/nexus/tickets" class="flex items-center py-3 px-4 rounded-xl transition-all {% if active_page == 'tickets' %}sidebar-active{% else %}text-slate-400 hover:bg-white/5 hover:text-white{% endif %}">
                     <span>Поддержка</span>
                 </a>
+
+                {% if user and user.role == 'owner' %}
+                <!-- OWNER CONSOLE -->
+                <div class="pt-6 pb-2 px-4 flex items-center gap-2">
+                    <span class="w-1.5 h-1.5 rounded-full bg-nexus-sakura shadow-[0_0_8px_#ff00ea]"></span>
+                    <span class="text-[10px] font-bold text-nexus-sakura uppercase tracking-[0.2em]">Owner Console</span>
+                </div>
+                <a href="/nexus/owner/buyers" class="flex items-center py-3 px-4 rounded-xl transition-all {% if active_page == 'owner_buyers' %}sidebar-active{% else %}text-slate-400 hover:bg-white/5 hover:text-white{% endif %}">
+                    <span class="mr-3 text-lg">👤</span><span>Покупатели</span>
+                </a>
+                <a href="/nexus/owner/sellers" class="flex items-center py-3 px-4 rounded-xl transition-all {% if active_page == 'owner_sellers' %}sidebar-active{% else %}text-slate-400 hover:bg-white/5 hover:text-white{% endif %}">
+                    <span class="mr-3 text-lg">🚜</span><span>Продавцы</span>
+                </a>
+                <a href="/nexus/owner/admins" class="flex items-center py-3 px-4 rounded-xl transition-all {% if active_page == 'owner_admins' %}sidebar-active{% else %}text-slate-400 hover:bg-white/5 hover:text-white{% endif %}">
+                    <span class="mr-3 text-lg">🛡</span><span>Админы</span>
+                </a>
+                <a href="/nexus/audit" class="flex items-center py-3 px-4 rounded-xl transition-all {% if active_page == 'audit' %}sidebar-active{% else %}text-slate-400 hover:bg-white/5 hover:text-white{% endif %}">
+                    <span class="mr-3 text-lg">📜</span><span>Журнал действий</span>
+                </a>
+                {% endif %}
                 
                 {% if user and (user.role == 'owner' or user.role == 'admin') %}
                 <div class="pt-4 pb-2 px-4 text-[10px] font-bold text-white/20 uppercase tracking-[0.2em]">Management</div>
                 <a href="/nexus/categories" class="flex items-center py-3 px-4 rounded-xl transition-all {% if active_page == 'categories' %}sidebar-active{% else %}text-slate-400 hover:bg-white/5 hover:text-white{% endif %}">
                     <span>Категории</span>
-                </a>
-                <a href="/nexus/users" class="flex items-center py-3 px-4 rounded-xl transition-all {% if active_page == 'users' %}sidebar-active{% else %}text-slate-400 hover:bg-white/5 hover:text-white{% endif %}">
-                    <span>Пользователи</span>
-                </a>
-                {% endif %}
-                
-                {% if user and user.role == 'owner' %}
-                <a href="/nexus/audit" class="flex items-center py-3 px-4 rounded-xl transition-all {% if active_page == 'audit' %}sidebar-active{% else %}text-slate-400 hover:bg-white/5 hover:text-white{% endif %}">
-                    <span>Журнал Аудита</span>
                 </a>
                 {% endif %}
             </nav>

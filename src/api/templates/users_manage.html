@@ -9,31 +9,22 @@
     <div class="flex justify-between items-end">
         <div>
             <h1 class="text-[32px] font-semibold text-white tracking-tight drop-shadow-[0_0_10px_rgba(0,217,255,0.3)]">
-                {{ 'Черный Список' if is_blacklist_view else 'Воркеры и Доступы' }}
+                Управление Покупателями
             </h1>
             <p class="text-nexus-cyan mt-2 font-medium tracking-wider">
-                {{ 'Список заблокированных пользователей без доступа к системе' if is_blacklist_view else 'Управление ролями и мониторинг активности команды' }}
+                Настройка индивидуальных условий и личных кабинетов СИМбайеров
             </p>
         </div>
         <div class="flex gap-3">
-            {% if is_blacklist_view %}
-                <a href="/nexus/users" class="px-5 py-2.5 bg-white/5 border border-white/10 rounded-xl text-sm font-semibold text-white/60 hover:bg-white/10 transition-all uppercase">
-                    Назад к списку
-                </a>
-            {% else %}
-                <a href="/nexus/users/blacklist" class="px-5 py-2.5 bg-red-500/10 border border-red-500/20 rounded-xl text-sm font-semibold text-red-500 hover:bg-red-500/20 transition-all uppercase">
-                    БЛОК-ЛИСТ
-                </a>
-                <button onclick="openCreateUserModal()" class="px-5 py-2.5 bg-gradient-to-r from-nexus-cyan to-nexus-sakura rounded-xl text-sm font-bold text-white shadow-lg shadow-blue-500/20 active:scale-95 transition-all">
-                    + НОВЫЙ СОТРУДНИК
-                </button>
-            {% endif %}
+            <button onclick="openCreateUserModal()" class="px-5 py-2.5 bg-gradient-to-r from-nexus-cyan to-nexus-sakura rounded-xl text-sm font-bold text-white shadow-lg shadow-blue-500/20 active:scale-95 transition-all">
+                + НОВЫЙ ПОКУПАТЕЛЬ
+            </button>
         </div>
     </div>
 
     <!-- Поиск -->
     <div class="bg-white/5 border border-white/10 rounded-2xl p-4">
-        <form action="/nexus/users" method="get" class="flex gap-4">
+        <form action="/nexus/owner/buyers" method="get" class="flex gap-4">
             <div class="relative flex-1">
                 <span class="absolute left-5 top-1/2 -translate-y-1/2 text-white/20">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
@@ -96,11 +87,8 @@
                         </td>
                         <td class="px-8 py-5 text-right">
                             <div class="flex justify-end gap-2">
-                                <a href="/nexus/users/{{ u.id }}/prices" class="px-4 py-2 bg-nexus-sakura/10 border border-nexus-sakura/20 rounded-lg text-[11px] font-bold text-nexus-sakura uppercase tracking-widest hover:bg-nexus-sakura/20 transition-all">
-                                    Цены
-                                </a>
-                                <a href="/nexus/users/{{ u.id }}/delivery" class="px-4 py-2 bg-nexus-cyan/10 border border-nexus-cyan/20 rounded-lg text-[11px] font-bold text-nexus-cyan uppercase tracking-widest hover:bg-nexus-cyan/20 transition-all">
-                                    Маршруты
+                                <a href="/nexus/users/{{ u.id }}/cabinet" class="px-4 py-2 bg-nexus-cyan/10 border border-nexus-cyan/20 rounded-lg text-[11px] font-bold text-nexus-cyan uppercase tracking-widest hover:bg-nexus-cyan/20 transition-all">
+                                    Кабинет
                                 </a>
                                 <button hx-post="/nexus/users/{{ u.id }}/toggle-active" hx-confirm="Вы уверены, что хотите изменить статус доступа этого пользователя?"
                                         {% if u.id == user.user_id %}disabled class="opacity-0 pointer-events-none"{% endif %}
@@ -111,6 +99,11 @@
                                         {% if u.id == user.user_id %}disabled class="opacity-0 pointer-events-none"{% endif %}
                                         class="px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-[11px] font-bold text-white/40 uppercase tracking-widest hover:border-white/30 hover:text-white transition-all">
                                     Роль
+                                </button>
+                                <button hx-post="/nexus/users/{{ u.id }}/delete" hx-confirm="ВНИМАНИЕ: Это полностью удалит покупателя и его личный кабинет. Продолжить?"
+                                        {% if u.id == user.user_id %}disabled class="opacity-0 pointer-events-none"{% endif %}
+                                        class="px-4 py-2 bg-red-500/10 border border-red-500/20 rounded-lg text-[11px] font-bold text-red-500 uppercase tracking-widest hover:bg-red-500/20 transition-all">
+                                    Удалить
                                 </button>
                             </div>
                         </td>
