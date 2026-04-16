@@ -43,65 +43,98 @@
         <div class="absolute top-1/2 left-0 w-full h-[1px] bg-gradient-to-r from-transparent via-white/5 to-transparent -rotate-[15deg]"></div>
     </div>
 
-    <!-- КОНТЕЙНЕР КАРТОЧКИ -->
-    <div class="relative z-10 w-full max-w-[400px] animate-in fade-in slide-in-from-bottom-8 duration-1000 ease-out">
-        
+    <!-- КОНТЕЙНЕР АВТОРИЗАЦИИ (Скрыт изначально) -->
+    <div id="login-form-container" class="relative z-10 w-full max-w-[400px] hidden opacity-0 transition-all duration-1000">
         <!-- Карточка Glassmorphism -->
         <div class="bg-white/[0.01] backdrop-blur-[40px] p-8 sm:p-10 rounded-[40px] border border-white/10 shadow-[0_40px_120px_rgba(0,0,0,0.9)] relative overflow-hidden group text-center">
-            
             <div class="absolute inset-0 bg-gradient-to-br from-nexus-cyan/[0.03] to-nexus-sakura/[0.03] opacity-50"></div>
-
-            <!-- ЛОГОТИП И ЗАГОЛОВОК (КОМПАКТНЫЕ) -->
-            <div class="text-center mb-8 relative">
-                <div class="relative inline-block mb-6 animate-rotate-y" style="perspective: 1000px;">
-                    <div class="absolute inset-0 bg-nexus-cyan blur-[40px] opacity-20 rounded-full"></div>
-                    <img src="/assets/logo.png" class="w-60 h-auto relative z-10 drop-shadow-[0_0_20px_rgba(0,217,255,0.5)]" alt="GDPX">
-                    <div class="hidden w-40 h-32 mx-auto rounded-full bg-gradient-to-br from-nexus-cyan to-nexus-sakura p-1 relative z-10 shadow-[0_0_40px_rgba(0,217,255,0.3)]">
-                        <div class="w-full h-full bg-[#0a0a0f] rounded-full flex items-center justify-center">
-                            <span class="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-nexus-cyan to-white tracking-widest">GDPX</span>
-                        </div>
-                    </div>
-                </div>
-
-                <h2 class="text-[22px] sm:text-[24px] font-bold text-white tracking-[0.4em] uppercase drop-shadow-[0_0_10px_rgba(255,255,255,0.3)]">Академия GDPX</h2>
-                <div class="h-[1px] w-16 bg-gradient-to-r from-transparent via-white/30 to-transparent mx-auto my-4"></div>
-                <p class="text-nexus-cyan text-[9px] sm:text-[10px] tracking-[0.5em] uppercase font-black drop-shadow-[0_0_8px_rgba(0,217,255,0.6)]">Access Restricted</p>
+            <!-- Мини-логотип -->
+            <div class="mb-8 relative">
+                <img src="/assets/logo.png" id="small-logo" class="w-32 h-auto mx-auto drop-shadow-[0_0_20px_rgba(0,217,255,0.3)]" alt="GDPX">
             </div>
-
+            <h2 class="text-[20px] font-bold text-white tracking-[0.4em] uppercase mb-8 japanese-title">ACCESS PROTOCOL</h2>
             <!-- ФОРМА -->
             <form hx-post="/auth/login" hx-target="#error-container" class="flex flex-col gap-5 relative z-10">
-                
                 <div class="relative group/input">
-                    <div class="absolute -inset-0.5 bg-gradient-to-r from-nexus-cyan to-nexus-sakura rounded-[18px] opacity-0 group-hover/input:opacity-30 transition duration-500 blur-sm"></div>
                     <input type="text" name="login" required autocomplete="off"
-                           class="relative w-full bg-black/40 border border-white/10 rounded-[16px] px-6 py-4 outline-none focus:border-nexus-cyan focus:bg-white/[0.05] text-white placeholder:text-white/10 font-medium tracking-widest text-[13px] transition-all duration-300" 
+                           class="w-full bg-black/40 border border-white/10 rounded-[16px] px-6 py-4 outline-none focus:border-nexus-cyan text-white placeholder:text-white/10 font-medium tracking-widest text-[13px] transition-all" 
                            placeholder="USERNAME / ID">
                 </div>
-
                 <div class="relative group/input">
-                    <div class="absolute -inset-0.5 bg-gradient-to-r from-nexus-cyan to-nexus-sakura rounded-[18px] opacity-0 group-hover/input:opacity-30 transition duration-500 blur-sm"></div>
                     <input type="password" name="password" required 
-                           class="relative w-full bg-black/40 border border-white/10 rounded-[16px] px-6 py-4 outline-none focus:border-nexus-sakura focus:bg-white/[0.05] text-white placeholder:text-white/10 font-medium tracking-widest text-[13px] transition-all duration-300" 
+                           class="w-full bg-black/40 border border-white/10 rounded-[16px] px-6 py-4 outline-none focus:border-nexus-sakura text-white placeholder:text-white/10 font-medium tracking-widest text-[13px] transition-all" 
                            placeholder="PASSWORD">
                 </div>
-
-                <div id="error-container" class="min-h-[20px]"></div>
-                
-                <button type="submit" onclick="this.innerHTML='<span class=\'animate-pulse\'>AUTHENTICATING...</span>';"
-                        class="relative w-full h-[56px] mt-1 rounded-[16px] font-black text-white text-[13px] tracking-[0.3em] uppercase bg-gradient-to-r from-nexus-cyan to-nexus-sakura overflow-hidden group/btn shadow-[0_0_30px_rgba(255,0,234,0.3)] hover:shadow-[0_0_50px_rgba(0,217,255,0.5)] transition-all duration-700 hover:-translate-y-1 active:scale-[0.98]">
-                    
-                    <div class="absolute top-0 -inset-full h-full w-1/2 z-5 block transform -skew-x-12 bg-gradient-to-r from-transparent to-white opacity-20 group-hover/btn:animate-[shine_2s_ease-in-out_infinite]"></div>
-                    
-                    <span class="relative z-10">ВОЙТИ В СИСТЕМУ</span>
+                <div id="error-container"></div>
+                <button type="submit" class="w-full h-[56px] rounded-[16px] font-black text-white text-[12px] tracking-[0.3em] uppercase bg-gradient-to-r from-nexus-cyan to-nexus-sakura shadow-[0_0_30px_rgba(0,217,255,0.2)] active:scale-95 transition-all">
+                    INITIATE LINK
                 </button>
             </form>
-
-            <!-- Техническая подпись -->
-            <div class="mt-12 pointer-events-none opacity-20">
-                <p class="text-[9px] font-mono tracking-[0.5em] text-white">THUG CORE v2.3 // JAPANESE MINIMALISM EDITION</p>
-            </div>
         </div>
     </div>
+
+    <!-- ЦЕНТРАЛЬНЫЙ ЛОГОТИП (КЛЮЧ) -->
+    <div id="intro-key" class="relative z-20 flex flex-col items-center justify-center cursor-pointer transition-all duration-1000">
+        <div id="logo-shockwave" class="absolute w-64 h-64 rounded-full border-2 border-nexus-cyan opacity-0 pointer-events-none"></div>
+        <div id="big-logo-wrap" class="relative transition-all duration-1000 ease-in-out hover:scale-110">
+            <div class="absolute inset-0 bg-nexus-cyan blur-[60px] opacity-20 rounded-full animate-pulse"></div>
+            <img src="/assets/logo.png" id="big-logo" class="w-80 h-auto relative z-10 drop-shadow-[0_0_40px_rgba(0,217,255,0.6)]" alt="GDPX">
+        </div>
+        <p id="entry-text" class="mt-12 text-nexus-cyan text-[10px] tracking-[0.6em] uppercase font-bold animate-pulse">Click to Authenticate</p>
+    </div>
+</div>
+
+<script>
+    const introKey = document.getElementById('intro-key');
+    const bigLogoWrap = document.getElementById('big-logo-wrap');
+    const shockwave = document.getElementById('logo-shockwave');
+    const formContainer = document.getElementById('login-form-container');
+    const entryText = document.getElementById('entry-text');
+
+    introKey.onclick = () => {
+        playCinematicSound('action');
+        
+        // 1. Эффект ударной волны
+        shockwave.animate([
+            { transform: 'scale(1)', opacity: 1 },
+            { transform: 'scale(4)', opacity: 0 }
+        ], { duration: 800, easing: 'ease-out' });
+
+        // 2. Анимация монетки (Coin Flip) и перемещение
+        bigLogoWrap.style.transition = 'all 1.2s cubic-bezier(0.34, 1.56, 0.64, 1)';
+        bigLogoWrap.style.transform = 'rotateY(720deg) scale(0.2)';
+        entryText.style.opacity = '0';
+        
+        // Находим позицию маленького логотипа
+        const targetLogo = document.getElementById('small-logo');
+        const targetRect = targetLogo.getBoundingClientRect();
+        const currentRect = bigLogoWrap.getBoundingClientRect();
+        
+        const deltaX = targetRect.left + (targetRect.width/2) - (currentRect.left + (currentRect.width/2));
+        const deltaY = targetRect.top + (targetRect.height/2) - (currentRect.top + (currentRect.height/2));
+        
+        bigLogoWrap.style.transform += ` translate(${deltaX}px, ${deltaY}px)`;
+
+        // 3. Плавный переход к форме
+        setTimeout(() => {
+            introKey.style.opacity = '0';
+            setTimeout(() => {
+                introKey.style.display = 'none';
+                formContainer.style.display = 'block';
+                setTimeout(() => {
+                    formContainer.style.opacity = '1';
+                }, 50);
+            }, 500);
+        }, 800);
+    };
+</script>
+
+<style>
+    #logo-shockwave { transition: none; }
+    .japanese-title { font-family: 'Cormorant Garamond', serif; }
+    aside, header, .fixed.inset-0#hero { display: none !important; }
+    main { padding: 0 !important; margin: 0 !important; width: 100vw !important; height: 100vh !important; display: flex !important; align-items: center; justify-content: center; background: transparent !important; }
+</style>
 </div>
 
 <style>
