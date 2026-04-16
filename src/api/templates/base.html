@@ -38,10 +38,11 @@
     <style>
         :root {
             --cyber-black: #050508;
-            --electric-cyan: #00F5FF;
-            --sakura-glow: #E070FF;
+            --electric-cyan: #00f0ff;
+            --sakura-glow: #ff00ea;
+            --cyber-purple: #7000ff;
             --premium-white: #F8F9FA;
-            --glass-bg: rgba(255, 255, 255, 0.03);
+            --glass-bg: rgba(255, 255, 255, 0.02);
         }
 
         body { 
@@ -53,12 +54,22 @@
             overflow-x: hidden;
             line-height: 1.5;
         }
+
+        /* Sakura Particles */
+        .sakura-petal {
+            position: fixed;
+            background: linear-gradient(to bottom right, #ffb7c5, var(--sakura-glow));
+            border-radius: 10px 0 10px 10px;
+            pointer-events: none;
+            z-index: 5;
+            opacity: 0.4;
+        }
         
         /* Исправленная бегущая строка */
         .cyber-ticker {
             position: fixed; top: 0; left: 0; width: 100%; height: 32px;
             background: rgba(5, 5, 8, 0.95); backdrop-filter: blur(20px);
-            z-index: 1000; border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            z-index: 1000; border-bottom: 1px solid rgba(0, 240, 255, 0.1);
             overflow: hidden; display: flex; align-items: center;
         }
         .ticker-content {
@@ -73,19 +84,27 @@
             100% { transform: translateX(-100%); }
         }
 
-        /* Modern Premium Glass Cards */
+        /* Modern Premium Glass Cards (Samurai Edition) */
         .premium-card {
             background: var(--glass-bg);
             backdrop-filter: blur(30px);
             border: 1px solid rgba(255, 255, 255, 0.08);
             border-radius: 32px;
-            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.8);
             transition: all 0.5s cubic-bezier(0.23, 1, 0.32, 1);
+            position: relative;
+        }
+        .premium-card::before {
+            content: ""; position: absolute; inset: 0; border-radius: 32px;
+            padding: 1px; background: linear-gradient(135deg, rgba(0, 240, 255, 0.2), transparent, rgba(224, 112, 255, 0.2));
+            -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+            -webkit-mask-composite: xor; mask-composite: exclude;
+            pointer-events: none;
         }
         .premium-card:hover {
             background: rgba(255, 255, 255, 0.05);
             border-color: var(--electric-cyan);
-            box-shadow: 0 0 40px rgba(0, 245, 255, 0.1);
+            box-shadow: 0 0 40px rgba(0, 240, 255, 0.15);
             transform: translateY(-4px);
         }
 
@@ -96,7 +115,7 @@
         }
 
         .sidebar-active { 
-            background: linear-gradient(90deg, rgba(0, 245, 255, 0.1) 0%, transparent 100%);
+            background: linear-gradient(90deg, rgba(0, 240, 255, 0.1) 0%, transparent 100%);
             border-left: 4px solid var(--electric-cyan);
             color: var(--electric-cyan) !important;
         }
@@ -105,29 +124,92 @@
             font-family: 'Outfit', sans-serif; 
             letter-spacing: -0.02em;
             font-weight: 700 !important;
+            text-transform: uppercase;
+            font-style: italic;
         }
 
-        .glass-panel { background: rgba(10, 10, 15, 0.95); backdrop-filter: blur(40px); }
+        .glass-panel { background: rgba(5, 5, 8, 0.85); backdrop-filter: blur(40px); }
         .fade-in { animation: fadeIn 0.6s ease-out; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
 
         /* Custom Scrollbar */
         ::-webkit-scrollbar { width: 4px; }
         ::-webkit-scrollbar-track { background: transparent; }
-        ::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.1); border-radius: 10px; }
-        ::-webkit-scrollbar-thumb:hover { background: var(--electric-cyan); }
+        ::-webkit-scrollbar-thumb { background: linear-gradient(var(--electric-cyan), var(--sakura-glow)); border-radius: 10px; }
     </style>
 </head>
 <body class="min-h-screen pt-12">
-    <div class="fixed inset-0 z-[-1] bg-[#050508]">
+    <!-- ФОНОВЫЕ ЭФФЕКТЫ -->
+    <div class="fixed inset-0 z-[-1] bg-[#050508] overflow-hidden">
         <div class="absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,#1e1b4b,transparent)] opacity-40"></div>
+        <canvas id="starfield" class="absolute inset-0"></canvas>
     </div>
 
     <div class="cyber-ticker">
         <div class="ticker-content" id="ticker-feed">
-            NEXUS PLATFORM // MODERN OPERATIONAL INTERFACE // REAL-TIME SYSTEM SYNC // PREMIUM ACCESS GRANTED //
+            NEXUS PROTOCOL // CYBER-SAMURAI INTERFACE // REAL-TIME SYSTEM SYNC // PREMIUM ACCESS GRANTED //
         </div>
     </div>
+
+    <script>
+        // Starfield Effect
+        const canvas = document.getElementById('starfield');
+        const ctx = canvas.getContext('2d');
+        let stars = [];
+
+        function initStars() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            stars = [];
+            for (let i = 0; i < 150; i++) {
+                stars.push({
+                    x: Math.random() * canvas.width,
+                    y: Math.random() * canvas.height,
+                    size: Math.random() * 1.5,
+                    opacity: Math.random(),
+                    speed: Math.random() * 0.05
+                });
+            }
+        }
+
+        function drawStars() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            stars.forEach(star => {
+                ctx.fillStyle = `rgba(255, 255, 255, ${star.opacity})`;
+                ctx.beginPath();
+                ctx.arc(star.x, star.y, star.size, 0, Math.PI * 2);
+                ctx.fill();
+                star.opacity += star.speed;
+                if (star.opacity > 1 || star.opacity < 0) star.speed *= -1;
+            });
+            requestAnimationFrame(drawStars);
+        }
+
+        initStars();
+        drawStars();
+        window.addEventListener('resize', initStars);
+
+        // Sakura Rain Effect
+        function createPetal() {
+            const petal = document.createElement('div');
+            petal.className = 'sakura-petal';
+            const size = Math.random() * 8 + 4;
+            petal.style.width = size + 'px';
+            petal.style.height = size + 'px';
+            petal.style.left = Math.random() * 100 + 'vw';
+            petal.style.top = '-10px';
+            document.body.appendChild(petal);
+
+            const duration = Math.random() * 10 + 5;
+            const animation = petal.animate([
+                { transform: `translate(0, 0) rotate(0deg)`, opacity: 0.4 },
+                { transform: `translate(${Math.random() * 200 - 100}px, 100vh) rotate(${Math.random() * 360}deg)`, opacity: 0 }
+            ], { duration: duration * 1000, easing: 'linear' });
+
+            animation.onfinish = () => petal.remove();
+        }
+        setInterval(createPetal, 500);
+    </script>
 
     <div class="relative z-10 flex min-h-screen w-full">
         <!-- Sidebar -->

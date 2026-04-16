@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NEXUS // PREMIUM DARK MADE</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700;900&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: { 'sans': ['Outfit', 'sans-serif'] },
+                    colors: {
+                        cyber: {
+                            cyan: '#00f0ff',
+                            purple: '#7000ff',
+                            pink: '#ff00ea',
+                            dark: '#050508'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body {
+            background-color: #050508;
+            color: #f8f8f8;
+            overflow-x: hidden;
+        }
+
+        /* Glassmorphism Base */
+        .glass {
+            background: rgba(255, 255, 255, 0.02);
+            backdrop-filter: blur(25px);
+            -webkit-backdrop-filter: blur(25px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.8);
+        }
+
+        .glass-neon {
+            border: 1px solid rgba(0, 240, 255, 0.2);
+            box-shadow: inset 0 0 20px rgba(0, 240, 255, 0.05), 0 10px 40px rgba(0, 0, 0, 0.5);
+        }
+
+        /* Neon Text & Gradients */
+        .text-neon-cyan { text-shadow: 0 0 15px rgba(0, 240, 255, 0.6); }
+        .bg-gradient-cyber {
+            background: linear-gradient(135deg, #00f0ff 0%, #7000ff 50%, #ff00ea 100%);
+        }
+
+        /* Animations */
+        @keyframes float {
+            0%, 100% { transform: translateY(0) rotate(0); }
+            50% { transform: translateY(-20px) rotate(5deg); }
+        }
+        .animate-float { animation: float 6s ease-in-out infinite; }
+
+        @keyframes pulse-neon {
+            0%, 100% { box-shadow: 0 0 20px rgba(0, 240, 255, 0.2); }
+            50% { box-shadow: 0 0 40px rgba(0, 240, 255, 0.5); }
+        }
+        .btn-neon-pulse:hover { animation: pulse-neon 2s infinite; }
+
+        /* Sakura Particles */
+        .sakura-petal {
+            position: fixed;
+            background: linear-gradient(to bottom right, #ffb7c5, #ff00ea);
+            border-radius: 10px 0 10px 10px;
+            pointer-events: none;
+            z-index: 1;
+            opacity: 0.6;
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: #050508; }
+        ::-webkit-scrollbar-thumb { background: linear-gradient(#00f0ff, #ff00ea); border-radius: 10px; }
+
+        .katana-line {
+            height: 1px;
+            background: linear-gradient(90deg, transparent, rgba(0, 240, 255, 0.8), transparent);
+            box-shadow: 0 0 15px rgba(0, 240, 255, 0.5);
+        }
+    </style>
+</head>
+<body class="selection:bg-cyber-cyan selection:text-black">
+
+    <!-- ФОНОВЫЕ ЭФФЕКТЫ -->
+    <div class="fixed inset-0 z-0">
+        <div class="absolute inset-0 bg-[radial-gradient(circle_at_50%_30%,#1e1b4b,transparent)] opacity-40"></div>
+        <canvas id="starfield" class="absolute inset-0"></canvas>
+        
+        <!-- Декоративные ветки сакуры (SVG) -->
+        <svg class="absolute top-0 right-0 w-1/3 opacity-20 text-cyber-pink blur-sm" viewBox="0 0 200 200">
+            <path d="M200,0 Q150,50 100,150 T0,200" stroke="currentColor" fill="none" stroke-width="0.5"/>
+            <circle cx="150" cy="40" r="2" fill="currentColor"/>
+            <circle cx="100" cy="120" r="3" fill="currentColor"/>
+        </svg>
+    </div>
+
+    <!-- NAVBAR -->
+    <nav class="fixed top-0 left-0 w-full z-50 px-8 py-6">
+        <div class="max-w-7xl mx-auto flex items-center justify-between glass px-8 py-4 rounded-full border-white/5">
+            <div class="flex items-center gap-2">
+                <div class="w-10 h-10 bg-gradient-cyber rounded-xl flex items-center justify-center font-black text-xl italic">AI</div>
+                <span class="font-black tracking-tighter text-2xl">NEXUS</span>
+            </div>
+            
+            <div class="hidden md:flex items-center gap-10 text-[13px] font-bold uppercase tracking-widest text-white/60">
+                <a href="#" class="hover:text-cyber-cyan transition-colors">Norn</a>
+                <a href="#" class="hover:text-cyber-cyan transition-colors">Heanos</a>
+                <a href="#" class="hover:text-cyber-cyan transition-colors">Home</a>
+                <a href="#" class="hover:text-cyber-cyan transition-colors">Caniny</a>
+                <a href="#" class="hover:text-cyber-cyan transition-colors">Wolict</a>
+            </div>
+
+            <button class="bg-gradient-cyber px-8 py-2.5 rounded-full font-black text-[12px] uppercase tracking-widest hover:scale-105 active:scale-95 transition-all shadow-lg shadow-cyber-purple/20">
+                Seool
+            </button>
+        </div>
+    </nav>
+
+    <!-- HERO SECTION -->
+    <header class="relative z-10 pt-40 pb-20 px-8 overflow-hidden">
+        <div class="max-w-7xl mx-auto flex flex-col items-center text-center">
+            <div class="mb-4 text-cyber-cyan font-bold tracking-[0.5em] uppercase text-xs animate-pulse">System Active // v2.3</div>
+            <h1 class="text-7xl md:text-9xl font-black mb-8 leading-none italic uppercase tracking-tighter">
+                Premium <br>
+                <span class="text-transparent bg-clip-text bg-gradient-cyber">Dark Made</span>
+            </h1>
+            <p class="max-w-2xl text-white/40 text-lg mb-12 font-medium">
+                Experience the next generation of aesthetic management. A fusion of ancient samurai precision and neon-drenched future technologies.
+            </p>
+            
+            <div class="flex gap-6">
+                <button class="bg-white text-black px-10 py-5 rounded-2xl font-black uppercase tracking-widest hover:bg-cyber-cyan transition-all btn-neon-pulse">
+                    Acommant
+                </button>
+                <button class="glass border-white/10 px-10 py-5 rounded-2xl font-black uppercase tracking-widest hover:bg-white/5 transition-all">
+                    Details
+                </button>
+            </div>
+
+            <!-- Katana Image Overlay -->
+            <div class="mt-20 relative w-full max-w-5xl">
+                <div class="katana-line w-full opacity-50"></div>
+                <div class="absolute -top-12 left-1/2 -translate-x-1/2 w-full h-24 bg-cyber-cyan/10 blur-[100px] rounded-full"></div>
+                <!-- Placeholder for Katana Image -->
+                <div class="py-12 flex justify-center">
+                    <div class="w-full h-[1px] bg-gradient-to-r from-transparent via-cyber-cyan to-transparent"></div>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- GRID CARDS SECTION -->
+    <section class="relative z-10 px-8 py-20">
+        <div class="max-w-7xl mx-auto">
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                
+                <!-- Card 1: Desjors -->
+                <div class="glass-neon p-8 rounded-[40px] hover:-translate-y-2 transition-all duration-500 group">
+                    <div class="w-16 h-16 bg-white/5 rounded-2xl flex items-center justify-center mb-10 group-hover:bg-cyber-cyan/20 transition-colors">
+                        <svg class="w-8 h-8 text-cyber-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+                    </div>
+                    <h3 class="text-3xl font-black mb-4 uppercase italic">Desjors</h3>
+                    <p class="text-white/40 leading-relaxed mb-8">Integrated performance metrics with real-time katana-sharp precision.</p>
+                    <div class="h-1 w-20 bg-gradient-cyber rounded-full"></div>
+                </div>
+
+                <!-- Card 2: Plumer -->
+                <div class="glass p-8 rounded-[40px] hover:-translate-y-2 transition-all duration-500 group border-cyber-purple/20">
+                    <div class="w-16 h-16 bg-white/5 rounded-2xl flex items-center justify-center mb-10 group-hover:bg-cyber-purple/20 transition-colors">
+                        <svg class="w-8 h-8 text-cyber-purple" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>
+                    </div>
+                    <h3 class="text-3xl font-black mb-4 uppercase italic">Plumer</h3>
+                    <p class="text-white/40 leading-relaxed mb-8">Ethereal cloud architecture designed for high-end operational cores.</p>
+                    <div class="h-1 w-20 bg-white/10 rounded-full"></div>
+                </div>
+
+                <!-- Card 3: Genign Style (from reference) -->
+                <div class="glass-neon p-8 rounded-[40px] hover:-translate-y-2 transition-all duration-500 bg-gradient-to-br from-white/[0.05] to-transparent">
+                    <div class="flex justify-between items-start mb-10">
+                        <div class="text-4xl font-black italic">Genign</div>
+                        <div class="flex gap-1">
+                            <div class="w-2 h-2 rounded-full bg-cyber-cyan animate-ping"></div>
+                            <div class="w-2 h-2 rounded-full bg-cyber-pink"></div>
+                        </div>
+                    </div>
+                    <!-- Chart-like elements -->
+                    <div class="space-y-4">
+                        <div class="h-2 w-full bg-white/5 rounded-full overflow-hidden">
+                            <div class="h-full w-[70%] bg-cyber-cyan shadow-[0_0_10px_#00f0ff]"></div>
+                        </div>
+                        <div class="h-2 w-full bg-white/5 rounded-full overflow-hidden">
+                            <div class="h-full w-[40%] bg-cyber-purple shadow-[0_0_10px_#7000ff]"></div>
+                        </div>
+                        <div class="h-2 w-full bg-white/5 rounded-full overflow-hidden">
+                            <div class="h-full w-[90%] bg-cyber-pink shadow-[0_0_10px_#ff00ea]"></div>
+                        </div>
+                    </div>
+                    <div class="mt-12 text-[10px] uppercase tracking-widest font-black text-white/20">Operational Traffic // Dynamic</div>
+                </div>
+
+            </div>
+        </div>
+    </section>
+
+    <!-- SECOND SECTION: KATANAS & DATA -->
+    <section class="relative z-10 px-8 py-20 bg-gradient-to-b from-transparent via-white/[0.02] to-transparent">
+        <div class="max-w-7xl mx-auto">
+            <div class="flex flex-col lg:flex-row gap-12 items-center">
+                <div class="lg:w-1/2">
+                    <h2 class="text-5xl md:text-6xl font-black uppercase italic mb-8">Gove Motior // <span class="text-cyber-cyan">Centiort</span></h2>
+                    <p class="text-white/40 text-xl mb-12 font-medium leading-relaxed">
+                        The ultimate synergy of blade and bit. Our dashboard provides lethal efficiency in every transaction.
+                    </p>
+                    <div class="grid grid-cols-2 gap-6">
+                        <div class="glass p-6 rounded-3xl">
+                            <div class="text-4xl font-black text-white mb-2">99%</div>
+                            <div class="text-[10px] uppercase tracking-widest text-cyber-cyan font-bold">Accuracy</div>
+                        </div>
+                        <div class="glass p-6 rounded-3xl">
+                            <div class="text-4xl font-black text-white mb-2">0.2ms</div>
+                            <div class="text-[10px] uppercase tracking-widest text-cyber-pink font-bold">Response</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="lg:w-1/2 relative">
+                    <div class="absolute inset-0 bg-cyber-cyan blur-[150px] opacity-10"></div>
+                    <!-- Katana Graphic -->
+                    <div class="glass p-4 rounded-[40px] border-white/5 rotate-3 animate-float">
+                        <div class="bg-black/40 rounded-[32px] overflow-hidden p-8 flex flex-col gap-6">
+                            <div class="flex items-center gap-4">
+                                <div class="w-12 h-12 rounded-full bg-gradient-cyber"></div>
+                                <div>
+                                    <div class="text-sm font-black uppercase">Blade Protocol</div>
+                                    <div class="text-[10px] text-white/40">Status: SHARP</div>
+                                </div>
+                            </div>
+                            <div class="h-[300px] w-full bg-gradient-to-b from-cyber-cyan/20 to-transparent rounded-2xl relative">
+                                <div class="absolute left-1/2 -translate-x-1/2 top-10 bottom-10 w-[1px] bg-cyber-cyan shadow-[0_0_15px_#00f0ff]"></div>
+                                <div class="absolute inset-0 flex items-center justify-center p-8">
+                                    <div class="text-8xl font-black text-white/5 select-none">刃</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- BOTTOM CARDS -->
+    <section class="relative z-10 px-8 py-20 pb-40">
+        <div class="max-w-7xl mx-auto">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+                
+                <div class="glass p-10 rounded-[40px] text-center hover:bg-white/[0.04] transition-all cursor-pointer">
+                    <div class="text-cyber-pink text-4xl mb-6">✦</div>
+                    <h4 class="text-2xl font-black uppercase italic mb-4">CeaJoy</h4>
+                    <p class="text-white/30 text-sm">Harmonizing pleasure and performance.</p>
+                </div>
+
+                <div class="glass p-10 rounded-[40px] text-center hover:bg-white/[0.04] transition-all cursor-pointer border-cyber-cyan/20">
+                    <div class="text-cyber-cyan text-4xl mb-6">◈</div>
+                    <h4 class="text-2xl font-black uppercase italic mb-4">Lumphy</h4>
+                    <p class="text-white/30 text-sm">Deep luminescence for your assets.</p>
+                </div>
+
+                <div class="glass p-10 rounded-[40px] text-center hover:bg-white/[0.04] transition-all cursor-pointer">
+                    <div class="text-cyber-purple text-4xl mb-6">⚔</div>
+                    <h4 class="text-2xl font-black uppercase italic mb-4">Vausun</h4>
+                    <p class="text-white/30 text-sm">The vanguard of the digital sun.</p>
+                </div>
+
+            </div>
+        </div>
+    </section>
+
+    <!-- SCRIPTS -->
+    <script>
+        // Starfield Effect
+        const canvas = document.getElementById('starfield');
+        const ctx = canvas.getContext('2d');
+        let stars = [];
+
+        function initStars() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            stars = [];
+            for (let i = 0; i < 150; i++) {
+                stars.push({
+                    x: Math.random() * canvas.width,
+                    y: Math.random() * canvas.height,
+                    size: Math.random() * 1.5,
+                    opacity: Math.random(),
+                    speed: Math.random() * 0.05
+                });
+            }
+        }
+
+        function drawStars() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            stars.forEach(star => {
+                ctx.fillStyle = `rgba(255, 255, 255, ${star.opacity})`;
+                ctx.beginPath();
+                ctx.arc(star.x, star.y, star.size, 0, Math.PI * 2);
+                ctx.fill();
+                star.opacity += star.speed;
+                if (star.opacity > 1 || star.opacity < 0) star.speed *= -1;
+            });
+            requestAnimationFrame(drawStars);
+        }
+
+        initStars();
+        drawStars();
+        window.onresize = initStars;
+
+        // Sakura Rain Effect
+        function createPetal() {
+            const petal = document.createElement('div');
+            petal.className = 'sakura-petal';
+            const size = Math.random() * 8 + 4;
+            petal.style.width = size + 'px';
+            petal.style.height = size + 'px';
+            petal.style.left = Math.random() * 100 + 'vw';
+            petal.style.top = '-10px';
+            
+            document.body.appendChild(petal);
+
+            const duration = Math.random() * 10 + 5;
+            const animation = petal.animate([
+                { transform: `translate(0, 0) rotate(0deg)`, opacity: 0.6 },
+                { transform: `translate(${Math.random() * 200 - 100}px, 100vh) rotate(${Math.random() * 360}deg)`, opacity: 0 }
+            ], {
+                duration: duration * 1000,
+                easing: 'linear'
+            });
+
+            animation.onfinish = () => petal.remove();
+        }
+
+        setInterval(createPetal, 400);
+
+        // Hover Glow Effect for Glass Cards
+        document.querySelectorAll('.glass').forEach(card => {
+            card.addEventListener('mousemove', (e) => {
+                const rect = card.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const y = e.clientY - rect.top;
+                card.style.setProperty('--mouse-x', `${x}px`);
+                card.style.setProperty('--mouse-y', `${y}px`);
+                
+                // Subtle lift & tilt could be added here
+            });
+        });
+    </script>
+
+    <!-- Decorative Text -->
+    <div class="fixed bottom-10 right-10 z-50 opacity-20 text-[10px] font-black uppercase tracking-[0.5em] rotate-90 origin-right">
+        Designed in Tokyo // GDPX Nexus
+    </div>
+
+</body>
+</html>
