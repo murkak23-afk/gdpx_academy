@@ -51,8 +51,15 @@
     </script>
     
     <style>
-        body { font-family: 'Outfit', sans-serif; background: #050508; color: #f8f8f8; margin: 0; min-height: 100vh; overflow-x: hidden; letter-spacing: 0.02em; }
+        body { font-family: 'Outfit', sans-serif; background: #050508; color: #f8f8f8; margin: 0; min-height: 100vh; overflow-x: hidden; letter-spacing: 0.02em; font-variant-ligatures: none; }
         
+        /* Мобильная оптимизация: уменьшаем масштаб */
+        @media (max-width: 768px) {
+            body { font-size: 13px; }
+            h1 { font-size: 32px !important; }
+            .premium-card { padding: 24px !important; }
+        }
+
         /* Эффект падающих лепестков сакуры (более изящный) */
         .sakura-container { position: fixed; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 1; overflow: hidden; }
         .petal { 
@@ -78,8 +85,17 @@
             border-right: 1px solid rgba(255, 255, 255, 0.03);
         }
         
-        /* Typography */
-        h1, h2, h3, .japanese-title { font-family: 'Cormorant Garamond', serif; letter-spacing: 0.05em; }
+        /* Typography - Thickened Headers & Better Contrast */
+        h1, h2, h3, .japanese-title { 
+            font-family: 'Cormorant Garamond', serif; 
+            letter-spacing: 0.05em; 
+            font-weight: 700 !important; /* Утолщаем заголовки */
+        }
+        .text-nexus-silver { color: #e2e8f0 !important; } /* Светло-серый (slate-200) для отличной читаемости */
+        .text-slate-400 { color: #cbd5e1 !important; } /* slate-300 */
+        .opacity-40 { opacity: 0.75 !important; } /* Значительно повышаем видимость */
+        .opacity-60 { opacity: 0.85 !important; }
+        .text-white\/30, .text-white\/40 { color: rgba(255, 255, 255, 0.6) !important; }
         
         /* Premium Components */
         .premium-card {
@@ -283,14 +299,15 @@
 
         // Standard Form CSRF Injector
         document.addEventListener('submit', (e) => {
-            if (e.target.method?.toLowerCase() === 'post') {
+            const form = e.target;
+            if (form.method?.toLowerCase() === 'post') {
                 const token = document.cookie.split('; ').find(row => row.startsWith('csrftoken='))?.split('=')[1];
-                if (token && !e.target.querySelector('input[name="csrf_token"]')) {
+                if (token && !form.querySelector('input[name="csrf_token"]')) {
                     const input = document.createElement('input');
                     input.type = 'hidden';
                     input.name = 'csrf_token';
                     input.value = token;
-                    e.target.appendChild(input);
+                    form.appendChild(input);
                 }
             }
         });
