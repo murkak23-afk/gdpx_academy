@@ -6,6 +6,7 @@ from src.database.models.publication import Payout, PublicationArchive
 from src.database.models.seller_daily_quota import SellerDailyQuota
 from src.database.models.submission import ReviewAction, Submission
 from src.database.models.user import User
+from src.database.models.web_control import WebAccount, SupportTicket, ChatMessage, DeliveryConfig, SimbuyerPrice
 
 __all__ = [
     "Base",
@@ -18,4 +19,9 @@ __all__ = [
     "ReviewAction",
     "PublicationArchive",
     "Payout",
+    "WebAccount",
+    "SupportTicket",
+    "ChatMessage",
+    "DeliveryConfig",
+    "SimbuyerPrice",
 ]
