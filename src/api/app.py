@@ -42,6 +42,40 @@ def create_app(bot: Bot, dispatcher: Dispatcher) -> FastAPI:
     from fastapi.staticfiles import StaticFiles
     app.mount("/assets", StaticFiles(directory=str(BASE_DIR.parent / "presentation" / "assets")), name="assets")
 
+    @app.middleware("http")
+    async def csrf_protect(request: Request, call_next):
+        if request.method in ["POST", "PUT", "DELETE", "PATCH"]:
+            # Skip check for login (where token is set) and telegram webhooks
+            if request.url.path not in ["/auth/login", settings.webhook_path] and not request.url.path.startswith("/api/"):
+                cookie_csrf = request.cookies.get("csrftoken")
+                header_csrf = request.headers.get("X-CSRF-Token")
+                
+                # Check form data if header is missing (for standard form posts)
+                if not header_csrf and request.headers.get("Content-Type") == "application/x-www-form-urlencoded":
+                    form_data = await request.form()
+                    header_csrf = form_data.get("csrf_token")
+                
+                if not cookie_csrf or cookie_csrf != header_csrf:
+                    return JSONResponse(status_code=403, content={"detail": "CSRF Token missing or invalid"})
+        
+        response = await call_next(request)
+        
+        # Set a new CSRF token cookie if not present
+        if not request.cookies.get("csrftoken"):
+            import secrets
+            response.set_cookie("csrftoken", secrets.token_hex(32), httponly=False, samesite="lax")
+            
+        return response
+
+    @app.middleware("http")
+    async def add_security_headers(request: Request, call_next):
+        response = await call_next(request)
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-XSS-Protection"] = "1; mode=block"
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+        return response
+
     @app.exception_handler(HTTPException)
     async def auth_exception_handler(request: Request, exc: HTTPException):
         if exc.status_code == 303:
@@ -53,7 +87,41 @@ def create_app(bot: Bot, dispatcher: Dispatcher) -> FastAPI:
     app.include_router(nexus.router)
     app.include_router(tickets.router)
 
+    from fastapi import WebSocket, WebSocketDisconnect
+
+    class ConnectionManager:
+        def __init__(self):
+            self.active_connections: list[WebSocket] = []
+
+        async def connect(self, websocket: WebSocket):
+            await websocket.accept()
+            self.active_connections.append(websocket)
+
+        def disconnect(self, websocket: WebSocket):
+            self.active_connections.remove(websocket)
+
+        async def broadcast(self, message: dict):
+            for connection in self.active_connections:
+                await connection.send_json(message)
+
+    manager = ConnectionManager()
+    app.state.ws_manager = manager
+
+    @app.websocket("/nexus/ws")
+    async def websocket_endpoint(websocket: WebSocket):
+        await manager.connect(websocket)
+        try:
+            while True:
+                await websocket.receive_text() # Keep connection alive
+        except WebSocketDisconnect:
+            manager.disconnect(websocket)
+
     from src.services.delivery_service import background_delivery_task
+
+    @app.get("/yandex_a471640dd21843aa.html")
+    async def yandex_verification():
+        from fastapi.responses import FileResponse
+        return FileResponse(str(BASE_DIR / "yandex_a471640dd21843aa.html"))
 
     @app.get("/")
     async def root_redirect():

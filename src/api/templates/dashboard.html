@@ -96,6 +96,22 @@
 
     </div>
 
+    <!-- Монитор Активности (Improvement #2) -->
+    <div class="premium-card p-10 relative overflow-hidden">
+        <div class="flex justify-between items-center mb-8">
+            <div>
+                <div class="text-[10px] text-nexus-cyan font-bold tracking-[0.3em] uppercase mb-1 opacity-60">Operations Traffic</div>
+                <h3 class="text-[24px] font-bold text-white japanese-title">Активность системы (24ч)</h3>
+            </div>
+            <div class="px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-[10px] text-nexus-cyan font-bold uppercase tracking-widest">
+                Dynamic Flow
+            </div>
+        </div>
+        <div class="h-[200px] w-full">
+            <canvas id="activityChart"></canvas>
+        </div>
+    </div>
+
     <!-- Быстрые действия (Minimal Blocks) -->
     <div class="grid grid-cols-1 md:grid-cols-3 gap-8 pt-6">
         <a href="/nexus/tickets" class="premium-card p-12 group relative overflow-hidden">
@@ -134,5 +150,37 @@
     }
     setInterval(updateClock, 1000);
     updateClock();
+
+    // Activity Chart (Improvement #2)
+    const ctx = document.getElementById('activityChart').getContext('2d');
+    new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: Array.from({length: 24}, (_, i) => `${i}:00`),
+            datasets: [{
+                label: 'Заявки',
+                data: {{ activity_data|tojson }},
+                borderColor: '#00d9ff',
+                backgroundColor: 'rgba(0, 217, 255, 0.05)',
+                borderWidth: 2,
+                pointRadius: 0,
+                tension: 0.4,
+                fill: true
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { display: false } },
+            scales: {
+                x: { display: false },
+                y: { 
+                    beginAtZero: true,
+                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    ticks: { color: 'rgba(255, 255, 255, 0.2)', font: { size: 9 } }
+                }
+            }
+        }
+    });
 </script>
 {% endblock %}

@@ -116,11 +116,11 @@ class UserCache:
         return None
 
     @classmethod
-    async def set_status(cls, user_id: int, is_restricted: bool, role: str, ttl: int = 45):
+    async def set_status(cls, user_id: int, is_restricted: bool, is_active: bool, role: str, ttl: int = 45):
         """Сохраняет статус пользователя в кэше."""
         redis = await get_redis()
         if not redis: return
-        payload = {"is_restricted": is_restricted, "role": role}
+        payload = {"is_restricted": is_restricted, "is_active": is_active, "role": role}
         await redis.set(f"{cls.PREFIX}:{user_id}:status", pickle.dumps(payload), ex=ttl)
 
     @classmethod

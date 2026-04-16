@@ -112,10 +112,23 @@ async def get_dashboard(request: Request, user: User = Depends(get_current_user)
                 "today_amount": sum([s.purchase_price or 0 for s in user_today_subs if s.status == SubmissionStatus.ACCEPTED])
             }
 
+        # 24h Activity Data (Improvement #2)
+        activity_stmt = (
+            select(func.extract('hour', Submission.created_at).label('hour'), func.count(Submission.id))
+            .where(Submission.created_at >= (datetime.now(timezone.utc) - timedelta(hours=24)))
+            .group_by(func.extract('hour', Submission.created_at))
+            .order_by('hour')
+        )
+        activity_raw = (await session.execute(activity_stmt)).all()
+        activity_data = [0] * 24
+        for hr, count in activity_raw:
+            activity_data[int(hr)] = count
+
         return templates.TemplateResponse("dashboard.html", {
             "request": request, 
             "user": user,
             "stats": stats,
+            "activity_data": activity_data,
             "active_page": "dashboard"
         })
 
@@ -991,11 +1004,15 @@ async def process_esim_action(sub_id: int, action: str, user: User = Depends(get
             await session.commit()
             
             # УВЕДОМЛЕНИЕ СЕЛЛЕРУ (ТЗ: "уведомление поступет селлеру в личку")
-            if notification_text and sub.seller_id:
+            if notification_text and sub.user_id:
                 try:
-                    await bot.send_message(sub.seller_id, notification_text, parse_mode="Markdown")
+                    # Находим telegram_id селлера
+                    stmt_seller = select(User.telegram_id).where(User.id == sub.user_id)
+                    seller_tg_id = (await session.execute(stmt_seller)).scalar()
+                    if seller_tg_id:
+                        await bot.send_message(seller_tg_id, notification_text, parse_mode="Markdown")
                 except Exception as e:
-                    logger.error(f"Failed to notify seller {sub.seller_id}: {e}")
+                    logger.error(f"Failed to notify seller for sub {sub.id}: {e}")
 
             # ВИЗУАЛЬНЫЙ ЛОГ В ТИКЕТАХ (Улучшение 2)
             from src.database.models.submission import SupportTicket, ChatMessage

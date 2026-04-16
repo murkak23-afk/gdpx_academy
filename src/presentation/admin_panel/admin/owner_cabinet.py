@@ -64,7 +64,11 @@ class OwnerStates(StatesGroup):
 async def _render_user_card(user: User, callback_data: OwnerUserCD) -> tuple[str, InlineKeyboardMarkup]:
     """Унифицированный рендеринг карточки пользователя."""
     
-    status_text = "🚫 ЗАБЛОКИРОВАН" if user.is_restricted else "🟢 АКТИВЕН"
+    status_parts = []
+    if user.is_restricted: status_parts.append("🚫 RESTRICTED (Bot)")
+    if not user.is_active: status_parts.append("❌ DISABLED (Nexus)")
+    
+    status_text = "🟢 АКТИВЕН" if not status_parts else " / ".join(status_parts)
     reg_date = user.created_at.strftime("%d.%m.%Y")
     
     text = (

@@ -33,7 +33,8 @@ class BlockCheckMiddleware(BaseMiddleware):
         # 1. Проверяем кэш
         cached_status = await UserCache.get_status(user_tg.id)
         if cached_status is not None:
-            is_restricted = cached_status["is_restricted"]
+            is_restricted = cached_status.get("is_restricted", False)
+            is_active = cached_status.get("is_active", True)
             data["user_role"] = cached_status["role"]
         else:
             # 2. Кэша нет — идем в БД
@@ -41,20 +42,20 @@ class BlockCheckMiddleware(BaseMiddleware):
             if not session:
                 return await handler(event, data)
 
-            stmt = select(User.is_restricted, User.role).where(User.telegram_id == user_tg.id)
+            stmt = select(User.is_restricted, User.is_active, User.role).where(User.telegram_id == user_tg.id)
             result = await session.execute(stmt)
             row = result.fetchone()
             
             if not row:
-                # Юзера нет в БД (первый запуск), пропускаем, чтобы он мог нажать /start
                 return await handler(event, data)
 
-            is_restricted, role = row
+            is_restricted, is_active, role = row
             # 3. Сохраняем в кэш на 45 секунд
-            await UserCache.set_status(user_tg.id, is_restricted, role.value if hasattr(role, "value") else str(role))
+            await UserCache.set_status(user_tg.id, is_restricted, is_active, role.value if hasattr(role, "value") else str(role))
             data["user_role"] = role
 
-        if is_restricted:
+        # Блокировка если либо restricted (в боте), либо inactive (в Nexus)
+        if is_restricted or not is_active:
             # Владельцев нельзя блокировать через этот механизм
             from src.core.config import get_settings
             if user_tg.id in get_settings().owner_telegram_ids:

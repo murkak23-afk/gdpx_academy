@@ -28,6 +28,8 @@ class Submission(Base, TimestampMixin):
     __table_args__ = (
         Index("ix_submissions_status_created_at", "status", "created_at"),
         Index("ix_submissions_user_status_created", "user_id", "status", "created_at"),
+        Index("ix_submissions_archived_at", "archived_at"),
+        Index("ix_submissions_delivered_to_chat", "delivered_to_chat"),
     )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
