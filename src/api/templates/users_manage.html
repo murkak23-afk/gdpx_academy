@@ -31,6 +31,27 @@
         </div>
     </div>
 
+    <!-- Поиск -->
+    <div class="bg-white/5 border border-white/10 rounded-2xl p-4">
+        <form action="/nexus/users" method="get" class="flex gap-4">
+            <div class="relative flex-1">
+                <span class="absolute left-5 top-1/2 -translate-y-1/2 text-white/20">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+                </span>
+                <input type="text" name="q" value="{{ search_query }}" placeholder="Поиск по ID, @username или имени..." 
+                       class="w-full bg-white/5 border border-white/10 rounded-xl pl-12 pr-6 py-3 text-sm text-white focus:outline-none focus:border-nexus-cyan/50 transition-all">
+            </div>
+            <button type="submit" class="px-8 py-3 bg-white/5 border border-white/10 rounded-xl text-sm font-bold text-white hover:bg-white/10 transition-all uppercase tracking-widest">
+                Найти
+            </button>
+            {% if search_query %}
+                <a href="/nexus/users" class="px-8 py-3 border border-white/10 rounded-xl text-sm font-bold text-white/40 hover:text-white transition-all uppercase tracking-widest flex items-center">
+                    Сброс
+                </a>
+            {% endif %}
+        </form>
+    </div>
+
     <!-- Таблица пользователей -->
     <div class="overflow-x-auto fade-in">
         <table class="premium-table">

@@ -9,7 +9,7 @@ import csv
 
 from fastapi import APIRouter, Request, Depends, HTTPException, Form, BackgroundTasks
 from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
-from sqlalchemy import select, func, and_
+from sqlalchemy import select, func, and_, or_, String
 from sqlalchemy.orm import joinedload
 
 from src.database.session import SessionFactory
@@ -714,13 +714,27 @@ async def discuss_submission(sub_id: int, user: User = Depends(get_current_user)
         return RedirectResponse(url=f"/nexus/tickets/{ticket.id}", status_code=303)
 
 @router.get("/users", response_class=HTMLResponse)
-async def get_users_manage(request: Request, user: User = Depends(get_current_user)):
+async def get_users_manage(request: Request, q: Optional[str] = None, user: User = Depends(get_current_user)):
     """Страница управления пользователями (для OWNER и ADMIN)."""
 
     async with SessionFactory() as session:
         if user.role not in [UserRole.OWNER, UserRole.ADMIN]:            raise HTTPException(status_code=403, detail="Permission denied")
             
-        stmt = select(User).order_by(User.created_at.desc())
+        stmt = select(User)
+        if q:
+            q = q.strip()
+            if q.isdigit():
+                stmt = stmt.where(User.telegram_id == int(q))
+            elif q.startswith('@'):
+                stmt = stmt.where(User.username.ilike(f"%{q[1:]}%"))
+            else:
+                stmt = stmt.where(or_(
+                    User.username.ilike(f"%{q}%"),
+                    User.full_name.ilike(f"%{q}%"),
+                    User.telegram_id.cast(String).ilike(f"%{q}%")
+                ))
+
+        stmt = stmt.order_by(User.created_at.desc())
         users = (await session.execute(stmt)).scalars().all()
         
         return templates.TemplateResponse("users_manage.html", {
@@ -728,7 +742,8 @@ async def get_users_manage(request: Request, user: User = Depends(get_current_us
             "user": user,
             "all_users": users,
             "roles": [r.value for r in UserRole],
-            "active_page": "users"
+            "active_page": "users",
+            "search_query": q or ""
         })
 
 @router.post("/users/create")
