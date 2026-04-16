@@ -12,37 +12,22 @@
     
     <link rel="manifest" href="/assets/manifest.json">
     <meta name="theme-color" content="#050508">
-    <meta name="google-site-verification" content="GWY9WymxkfDcqrXZgeVAdGvhr-VnW1MV-GyPPCgXRSM" />
     <link rel="apple-touch-icon" href="/assets/logo.png">
 
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600&family=Cormorant+Garamond:wght@400;600&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 
     <script>
-        // Theme Logic
-        if (localStorage.theme === 'light' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: light)').matches)) {
-            document.documentElement.classList.remove('dark')
-        } else {
-            document.documentElement.classList.add('dark')
-        }
-
         tailwind.config = {
             darkMode: 'class',
             theme: {
                 extend: {
-                    fontFamily: {
-                        'serif': ['"Cormorant Garamond"', 'serif'],
-                        'sans': ['Outfit', 'sans-serif'],
-                    },
+                    fontFamily: { 'sans': ['Outfit', 'sans-serif'] },
                     colors: {
                         nexus: {
-                            cyan: '#00d9ff',
-                            sakura: '#ff00ea',
-                            bg: '#050508', // Глубокий чёрный (чернила)
-                            sidebar: 'rgba(5, 5, 8, 0.9)',
-                            text: '#f8f8f8', // Мягкий белый (шелк)
-                            silver: '#a0a0b0',
-                            success: '#00C853',
-                            error: '#FF3B30'
+                            cyan: '#00F5FF',
+                            sakura: '#E070FF',
+                            bg: '#050508',
+                            text: '#f8f8f8'
                         }
                     }
                 }
@@ -52,13 +37,11 @@
     
     <style>
         :root {
-            --cyber-black: #010103;
+            --cyber-black: #050508;
             --electric-cyan: #00F5FF;
             --sakura-glow: #E070FF;
             --premium-white: #F8F9FA;
-            --metallic-border: rgba(255, 255, 255, 0.08);
-            --glass-bg: rgba(10, 10, 15, 0.3);
-            --scanner-color: rgba(0, 245, 255, 0.4);
+            --glass-bg: rgba(255, 255, 255, 0.03);
         }
 
         body { 
@@ -67,233 +50,153 @@
             color: var(--premium-white); 
             margin: 0; 
             min-height: 100vh; 
-            overflow-x: hidden; 
-            letter-spacing: 0.03em;
-            cursor: none; /* Кастомный курсор для шлейфа */
+            overflow-x: hidden;
+            line-height: 1.5;
         }
         
-        /* 1. Obsidian Pulse (Дыхание глубины) */
-        .cinematic-bg {
-            position: fixed; inset: 0; z-index: -1;
-            background: radial-gradient(circle at var(--mouse-x, 50%) var(--mouse-y, 50%), rgba(0, 245, 255, 0.03) 0%, transparent 60%), var(--cyber-black);
-            animation: obsidianBreath 15s ease-in-out infinite;
+        /* Исправленная бегущая строка */
+        .cyber-ticker {
+            position: fixed; top: 0; left: 0; width: 100%; height: 32px;
+            background: rgba(5, 5, 8, 0.95); backdrop-filter: blur(20px);
+            z-index: 1000; border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            overflow: hidden; display: flex; align-items: center;
         }
-        @keyframes obsidianBreath {
-            0%, 100% { opacity: 0.8; transform: scale(1); }
-            50% { opacity: 1; transform: scale(1.05); }
+        .ticker-content {
+            white-space: nowrap; display: inline-block;
+            animation: ticker-slide 40s linear infinite;
+            font-size: 10px; font-weight: 700; text-transform: uppercase;
+            letter-spacing: 0.2em; color: var(--electric-cyan);
+            padding-right: 100%;
+        }
+        @keyframes ticker-slide {
+            0% { transform: translateX(0); }
+            100% { transform: translateX(-100%); }
         }
 
-        /* 2. Cyber-Scanner (Сканирование при наведении) */
+        /* Modern Premium Glass Cards */
         .premium-card {
             background: var(--glass-bg);
-            backdrop-filter: blur(40px) saturate(180%);
-            border: 0.5px solid var(--metallic-border);
-            position: relative; overflow: hidden;
-            transition: all 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+            backdrop-filter: blur(30px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 32px;
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+            transition: all 0.5s cubic-bezier(0.23, 1, 0.32, 1);
         }
-        .premium-card::after {
-            content: ""; position: absolute; inset: 0;
-            border: 1px solid var(--electric-cyan);
-            opacity: 0; transition: opacity 0.3s;
-            clip-path: polygon(0 0, 15% 0, 15% 2px, 2px 2px, 2px 15%, 0 15%, 
-                               0 85%, 2px 85%, 2px 98%, 15% 98%, 15% 100%, 0 100%,
-                               85% 100%, 85% 98%, 98% 98%, 98% 85%, 100% 85%, 100% 100%,
-                               100% 15%, 98% 15%, 98% 2px, 85% 2px, 85% 0, 100% 0);
-        }
-        .premium-card:hover::after {
-            opacity: 1;
-            animation: scannerGlow 1.5s ease-in-out infinite;
-        }
-        @keyframes scannerGlow {
-            0%, 100% { filter: drop-shadow(0 0 5px var(--electric-cyan)); }
-            50% { filter: drop-shadow(0 0 15px var(--electric-cyan)); }
+        .premium-card:hover {
+            background: rgba(255, 255, 255, 0.05);
+            border-color: var(--electric-cyan);
+            box-shadow: 0 0 40px rgba(0, 245, 255, 0.1);
+            transform: translateY(-4px);
         }
 
-        /* 3. Glow Pulse (Дыхание разделителей) */
-        .metallic-divider {
-            height: 0.5px;
-            background: linear-gradient(90deg, transparent, var(--metallic-border), transparent);
-            margin: 2rem 0; position: relative;
-        }
-        .metallic-divider::before {
-            content: ""; position: absolute; top: 0; left: -100%; width: 50%; height: 100%;
-            background: linear-gradient(90deg, transparent, var(--electric-cyan), transparent);
-            opacity: 0.2;
-            animation: glowPulse 12s linear infinite;
-        }
-        @keyframes glowPulse {
-            0% { left: -100%; }
-            20%, 100% { left: 200%; }
+        .neon-text-gradient {
+            background: linear-gradient(135deg, var(--electric-cyan), var(--sakura-glow));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
         }
 
-        /* 4. Floating 3D Elements */
-        .floating-chip {
-            position: fixed; width: 60px; height: 40px;
-            background: rgba(255, 255, 255, 0.02);
-            border: 0.5px solid var(--metallic-border);
-            border-radius: 4px; z-index: -1;
-            transform-style: preserve-3d;
-            pointer-events: none;
-        }
-        .chip-1 { top: 15%; left: 5%; animation: float3d 20s ease-in-out infinite; }
-        .chip-2 { bottom: 20%; right: 8%; animation: float3d 25s ease-in-out infinite reverse; }
-        @keyframes float3d {
-            0%, 100% { transform: rotateY(0deg) rotateX(0deg) translateZ(0); }
-            50% { transform: rotateY(40deg) rotateX(20deg) translateZ(50px); }
+        .sidebar-active { 
+            background: linear-gradient(90deg, rgba(0, 245, 255, 0.1) 0%, transparent 100%);
+            border-left: 4px solid var(--electric-cyan);
+            color: var(--electric-cyan) !important;
         }
 
-        /* Кастомный курсор */
-        #cursor-dot {
-            width: 4px; height: 4px; background: var(--electric-cyan);
-            border-radius: 50%; position: fixed; pointer-events: none; z-index: 9999;
-            box-shadow: 0 0 15px var(--electric-cyan);
+        .japanese-title { 
+            font-family: 'Outfit', sans-serif; 
+            letter-spacing: -0.02em;
+            font-weight: 700 !important;
         }
 
-        /* Фича #4: Zen Enso Loading */
-        .enso-loader {
-            width: 40px; height: 40px; position: relative;
-        }
-        .enso-circle {
-            fill: none; stroke: var(--electric-cyan); stroke-width: 1.5;
-            stroke-linecap: round; stroke-dasharray: 100;
-            animation: ensoDraw 2s cubic-bezier(0.4, 0, 0.2, 1) infinite;
-            filter: drop-shadow(0 0 5px var(--electric-cyan));
-        }
-        @keyframes ensoDraw {
-            0% { stroke-dashoffset: 100; transform: rotate(0deg); }
-            50% { stroke-dashoffset: 20; transform: rotate(180deg); }
-            100% { stroke-dashoffset: 100; transform: rotate(360deg); }
-        }
+        .glass-panel { background: rgba(10, 10, 15, 0.95); backdrop-filter: blur(40px); }
+        .fade-in { animation: fadeIn 0.6s ease-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
 
-        /* Фича #3: Holographic Depth Parallax */
-        .parallax-container {
-            perspective: 1000px;
-        }
-        .parallax-card {
-            transform-style: preserve-3d;
-            transition: transform 0.2s ease-out;
-        }
-        .parallax-content {
-            transform: translateZ(30px); /* Текст "парит" */
-            pointer-events: none;
-        }
-
-        .kanji-watermark {
-            position: fixed; right: 5%; bottom: 5%;
-            font-size: 35vh; font-family: 'serif';
-            font-weight: 700; color: rgba(255, 255, 255, 0.01);
-            pointer-events: none; z-index: -1;
-        }
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar { width: 4px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.1); border-radius: 10px; }
+        ::-webkit-scrollbar-thumb:hover { background: var(--electric-cyan); }
     </style>
 </head>
 <body class="min-h-screen pt-12">
-    <div id="cursor-dot"></div>
-    <div class="page-shutter"></div>
-    <div class="cinematic-bg"></div>
-    
-    <div class="floating-chip chip-1"></div>
-    <div class="floating-chip chip-2"></div>
-
-    <div class="kanji-watermark fade-in" id="dynamic-kanji"></div>
-    <canvas id="pulse-canvas" class="fixed inset-0 z-0 pointer-events-none"></canvas>
+    <div class="fixed inset-0 z-[-1] bg-[#050508]">
+        <div class="absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,#1e1b4b,transparent)] opacity-40"></div>
+    </div>
 
     <div class="cyber-ticker">
         <div class="ticker-content" id="ticker-feed">
-            NEXUS PRECISION INTERFACE // ULTIMATE PERFORMANCE // TRANSCENDENT MANAGEMENT SYSTEM // (C) 2024 GDPX // DESIGNED IN TOKYO
+            NEXUS PLATFORM // MODERN OPERATIONAL INTERFACE // REAL-TIME SYSTEM SYNC // PREMIUM ACCESS GRANTED //
         </div>
     </div>
 
     <div class="relative z-10 flex min-h-screen w-full">
-        
-        <!-- Sidebar: Виден только на ПК -->
+        <!-- Sidebar -->
         <aside class="hidden lg:flex w-72 glass-panel border-r border-white/10 flex-col sticky top-0 h-screen shrink-0">
             <div class="p-8">
                 <div class="flex items-center gap-3">
-                    <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-nexus-cyan to-nexus-sakura"></div>
+                    <img src="/assets/logo.png" class="w-10 h-auto" alt="Logo">
                     <h2 class="text-[14px] font-bold text-white tracking-widest uppercase">Nexus Panel</h2>
                 </div>
-                <div class="mt-4 flex gap-2">
-                    <button onclick="toggleTheme()" class="p-2 bg-white/5 border border-white/10 rounded-lg text-white/40 hover:text-white transition-all" title="Toggle Theme">
-                        <svg class="w-4 h-4 dark:hidden" fill="currentColor" viewBox="0 0 20 20"><path d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 6.464A1 1 0 106.465 5.05l-.708-.707a1 1 0 00-1.414 1.414l.707.707zm1.414 8.486l-.707.707a1 1 0 01-1.414-1.414l.707-.707a1 1 0 011.414 1.414zM4 11a1 1 0 100-2H3a1 1 0 000 2h1z"></path></svg>
-                        <svg class="w-4 h-4 hidden dark:block" fill="currentColor" viewBox="0 0 20 20"><path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z"></path></svg>
-                    </button>
-                    <div id="ws-status" class="flex items-center gap-2 px-3 bg-white/5 border border-white/10 rounded-lg text-[9px] font-bold text-white/20 uppercase tracking-widest">
+                <div class="mt-6 flex gap-2">
+                    <div id="ws-status" class="flex items-center gap-2 px-3 py-1.5 bg-white/5 border border-white/10 rounded-full text-[9px] font-bold text-white/40 uppercase tracking-widest">
                         <div class="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse ws-dot"></div>
-                        Live
+                        Live Sync
                     </div>
                 </div>
             </div>
             
             <nav class="flex-1 px-4 space-y-2">
-                <div class="pb-2 px-4">
-                    <button onclick="openSearch()" class="w-full flex items-center justify-between py-2.5 px-4 bg-white/5 border border-white/10 rounded-xl text-slate-400 hover:text-white hover:bg-white/10 transition-all group">
-                        <span class="text-xs font-medium">Поиск...</span>
-                        <span class="text-[10px] font-mono opacity-40 group-hover:opacity-100 transition-opacity">CTRL+K</span>
-                    </button>
-                </div>
-
                 {% if user and (user.role == 'admin' or user.role == 'owner') %}
-                <a href="/nexus" class="flex items-center py-3 px-4 rounded-xl transition-all {% if active_page == 'dashboard' %}sidebar-active{% else %}text-slate-400 hover:bg-white/5 hover:text-white{% endif %}">
+                <a href="/nexus" class="flex items-center py-3.5 px-5 rounded-2xl transition-all {% if active_page == 'dashboard' %}sidebar-active{% else %}text-slate-400 hover:bg-white/5 hover:text-white{% endif %}">
                     <span>Дашборд</span>
                 </a>
-                <a href="/nexus/moderation" class="flex items-center py-3 px-4 rounded-xl transition-all {% if active_page == 'moderation' %}sidebar-active{% else %}text-slate-400 hover:bg-white/5 hover:text-white{% endif %}">
+                <a href="/nexus/moderation" class="flex items-center py-3.5 px-5 rounded-2xl transition-all {% if active_page == 'moderation' %}sidebar-active{% else %}text-slate-400 hover:bg-white/5 hover:text-white{% endif %}">
                     <span>Модерация</span>
                 </a>
                 {% endif %}
-                <a href="/nexus/inventory" class="flex items-center py-3 px-4 rounded-xl transition-all {% if active_page == 'inventory' %}sidebar-active{% else %}text-slate-400 hover:bg-white/5 hover:text-white{% endif %}">
+                <a href="/nexus/inventory" class="flex items-center py-3.5 px-5 rounded-2xl transition-all {% if active_page == 'inventory' %}sidebar-active{% else %}text-slate-400 hover:bg-white/5 hover:text-white{% endif %}">
                     <span>Склад eSIM</span>
                 </a>
-                <a href="/nexus/my-esim" class="flex items-center py-3 px-4 rounded-xl transition-all {% if active_page == 'my-esim' %}sidebar-active{% else %}text-slate-400 hover:bg-white/5 hover:text-white{% endif %}">
+                <a href="/nexus/my-esim" class="flex items-center py-3.5 px-5 rounded-2xl transition-all {% if active_page == 'my-esim' %}sidebar-active{% else %}text-slate-400 hover:bg-white/5 hover:text-white{% endif %}">
                     <span>Мои активы</span>
                 </a>
-                <a href="/nexus/reports" class="flex items-center py-3 px-4 rounded-xl transition-all {% if active_page == 'reports' %}sidebar-active{% else %}text-slate-400 hover:bg-white/5 hover:text-white{% endif %}">
+                <a href="/nexus/reports" class="flex items-center py-3.5 px-5 rounded-2xl transition-all {% if active_page == 'reports' %}sidebar-active{% else %}text-slate-400 hover:bg-white/5 hover:text-white{% endif %}">
                     <span>Статистика</span>
                 </a>
-                <a href="/nexus/tickets" class="flex items-center py-3 px-4 rounded-xl transition-all {% if active_page == 'tickets' %}sidebar-active{% else %}text-slate-400 hover:bg-white/5 hover:text-white{% endif %}">
+                <a href="/nexus/tickets" class="flex items-center py-3.5 px-5 rounded-2xl transition-all {% if active_page == 'tickets' %}sidebar-active{% else %}text-slate-400 hover:bg-white/5 hover:text-white{% endif %}">
                     <span>Поддержка</span>
                 </a>
 
                 {% if user and user.role == 'owner' %}
-                <!-- OWNER CONSOLE -->
-                <div class="pt-6 pb-2 px-4 flex items-center gap-2">
-                    <span class="w-1.5 h-1.5 rounded-full bg-nexus-sakura shadow-[0_0_8px_#ff00ea]"></span>
-                    <span class="text-[10px] font-bold text-nexus-sakura uppercase tracking-[0.2em]">Owner Console</span>
-                </div>
-                <a href="/nexus/owner/buyers" class="flex items-center py-3 px-4 rounded-xl transition-all {% if active_page == 'owner_buyers' %}sidebar-active{% else %}text-slate-400 hover:bg-white/5 hover:text-white{% endif %}">
-                    <span class="mr-3 text-lg">👤</span><span>Покупатели</span>
+                <div class="pt-8 pb-2 px-5 text-[10px] font-bold text-nexus-sakura uppercase tracking-widest opacity-60">Owner Console</div>
+                <a href="/nexus/owner/buyers" class="flex items-center py-3.5 px-5 rounded-2xl transition-all {% if active_page == 'owner_buyers' %}sidebar-active{% else %}text-slate-400 hover:bg-white/5 hover:text-white{% endif %}">
+                    <span>👤 Покупатели</span>
                 </a>
-                <a href="/nexus/owner/sellers" class="flex items-center py-3 px-4 rounded-xl transition-all {% if active_page == 'owner_sellers' %}sidebar-active{% else %}text-slate-400 hover:bg-white/5 hover:text-white{% endif %}">
-                    <span class="mr-3 text-lg">🚜</span><span>Продавцы</span>
+                <a href="/nexus/owner/sellers" class="flex items-center py-3.5 px-5 rounded-2xl transition-all {% if active_page == 'owner_sellers' %}sidebar-active{% else %}text-slate-400 hover:bg-white/5 hover:text-white{% endif %}">
+                    <span>🚜 Продавцы</span>
                 </a>
-                <a href="/nexus/owner/admins" class="flex items-center py-3 px-4 rounded-xl transition-all {% if active_page == 'owner_admins' %}sidebar-active{% else %}text-slate-400 hover:bg-white/5 hover:text-white{% endif %}">
-                    <span class="mr-3 text-lg">🛡</span><span>Админы</span>
+                <a href="/nexus/owner/admins" class="flex items-center py-3.5 px-5 rounded-2xl transition-all {% if active_page == 'owner_admins' %}sidebar-active{% else %}text-slate-400 hover:bg-white/5 hover:text-white{% endif %}">
+                    <span>🛡 Админы</span>
                 </a>
-                <a href="/nexus/owner/audit-feed" class="flex items-center py-3 px-4 rounded-xl transition-all {% if active_page == 'audit' %}sidebar-active{% else %}text-slate-400 hover:bg-white/5 hover:text-white{% endif %}">
-                    <span class="mr-3 text-lg">📜</span><span>Двойной аудит</span>
-                </a>
-                {% endif %}
-                
-                {% if user and (user.role == 'owner' or user.role == 'admin') %}
-                <div class="pt-4 pb-2 px-4 text-[10px] font-bold text-white/20 uppercase tracking-[0.2em]">Management</div>
-                <a href="/nexus/categories" class="flex items-center py-3 px-4 rounded-xl transition-all {% if active_page == 'categories' %}sidebar-active{% else %}text-slate-400 hover:bg-white/5 hover:text-white{% endif %}">
-                    <span>Категории</span>
+                <a href="/nexus/owner/audit-feed" class="flex items-center py-3.5 px-5 rounded-2xl transition-all {% if active_page == 'audit' %}sidebar-active{% else %}text-slate-400 hover:bg-white/5 hover:text-white{% endif %}">
+                    <span>📜 Аудит</span>
                 </a>
                 {% endif %}
             </nav>
 
             {% if user %}
-            <div class="mt-auto border-t border-white/10 p-6 bg-black/40">
+            <div class="mt-auto border-t border-white/5 p-6">
                 <div class="flex items-center gap-3">
-                    <div class="w-10 h-10 rounded-full bg-gradient-to-br from-nexus-cyan to-nexus-sakura p-[1px] shrink-0">
-                        <div class="w-full h-full rounded-full bg-[#0a0a0f] flex items-center justify-center font-bold text-nexus-cyan text-xs">
-                            {{ user.username[0]|upper if user.username else 'U' }}
+                    <div class="w-10 h-10 rounded-2xl bg-gradient-to-br from-nexus-cyan to-nexus-sakura p-[1px]">
+                        <div class="w-full h-full rounded-2xl bg-nexus-bg flex items-center justify-center font-bold text-white text-xs">
+                            {{ user.username[0]|upper }}
                         </div>
                     </div>
-                    <div class="min-w-0 flex-1">
-                        <div class="text-[13px] font-bold text-white truncate">@{{ user.username or user.telegram_id }}</div>
-                        <div class="text-[10px] text-nexus-cyan uppercase tracking-widest font-bold opacity-60">{{ user.role }}</div>
+                    <div class="flex-1 min-w-0">
+                        <div class="text-[13px] font-bold text-white truncate">@{{ user.username }}</div>
+                        <div class="text-[10px] text-nexus-cyan uppercase font-bold opacity-60">{{ user.role }}</div>
                     </div>
-                    <a href="/auth/logout" class="text-white/20 hover:text-nexus-sakura transition-colors flex items-center justify-center p-2 rounded-lg hover:bg-white/5" title="Выход">
+                    <a href="/auth/logout" class="p-2 text-white/20 hover:text-nexus-sakura transition-colors">
                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
                     </a>
                 </div>
@@ -301,18 +204,14 @@
             {% endif %}
         </aside>
 
-        <!-- Main Content Area -->
         <main class="flex-1 w-full flex flex-col min-w-0">
             <header class="lg:hidden h-16 border-b border-white/10 flex items-center justify-between px-6 glass-panel shrink-0">
-                <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-nexus-cyan to-nexus-sakura"></div>
-                <div class="text-white font-bold uppercase tracking-widest text-xs">Nexus Mobile</div>
-                <a href="/auth/logout" class="text-white/40 hover:text-nexus-sakura transition-colors">
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
-                </a>
+                <img src="/assets/logo.png" class="w-8 h-auto" alt="Logo">
+                <div class="text-white font-bold uppercase tracking-widest text-[10px]">Nexus Mobile</div>
+                <a href="/auth/logout" class="text-white/40"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg></a>
             </header>
 
-            <!-- Scrollable Content -->
-            <div class="flex-1 overflow-y-auto p-6 sm:p-8 lg:p-12">
+            <div class="flex-1 overflow-y-auto p-6 sm:p-10 lg:p-16">
                 <div class="w-full max-w-[1400px] mx-auto fade-in">
                     {% block content %}{% endblock %}
                 </div>
@@ -320,270 +219,45 @@
         </main>
     </div>
 
-    <!-- Глобальный Поиск (Ctrl+K) -->
-    <div id="search-modal" class="fixed inset-0 z-[200] bg-black/80 backdrop-blur-md hidden flex items-start justify-center pt-[10vh] px-4" onclick="if(event.target === this) closeSearch()">
-        <div class="w-full max-w-2xl bg-[#0a0a0f] border border-white/10 rounded-[32px] shadow-[0_30px_100px_rgba(0,0,0,0.8)] overflow-hidden animate-in zoom-in-95 duration-200 text-left">
-            <div class="p-6 border-b border-white/5 flex items-center gap-4">
-                <svg class="w-6 h-6 text-white/20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
-                <input type="text" id="search-input" name="q" placeholder="Поиск по номеру или ID..." autocomplete="off"
-                       class="flex-1 bg-transparent border-none outline-none text-white text-lg placeholder:text-white/10"
-                       hx-get="/nexus/search" hx-trigger="keyup changed delay:300ms" hx-target="#search-results">
-                <div class="px-2 py-1 bg-white/5 border border-white/10 rounded text-[10px] text-white/40 font-mono">ESC</div>
-            </div>
-            <div id="search-results" class="max-h-[60vh] overflow-y-auto custom-scrollbar">
-                <div class="p-12 text-center text-white/10">
-                    <p class="text-sm tracking-widest uppercase italic">Начните вводить цифры номера...</p>
-                </div>
-            </div>
-        </div>
-    </div>
-
     <script>
-        // --- Фича #2: Soundscape Integration (Audio API) ---
-        const AudioCtx = window.AudioContext || window.webkitAudioContext;
-        const audioCtx = new AudioCtx();
-
-        function playCinematicSound(type) {
-            if (audioCtx.state === 'suspended') audioCtx.resume();
-            const oscillator = audioCtx.createOscillator();
-            const gainNode = audioCtx.createGain();
-            
-            oscillator.connect(gainNode);
-            gainNode.connect(audioCtx.destination);
-
-            if (type === 'shutter') {
-                oscillator.type = 'sine';
-                oscillator.frequency.setValueAtTime(40, audioCtx.currentTime);
-                oscillator.frequency.exponentialRampToValueAtTime(120, audioCtx.currentTime + 1);
-                gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime);
-                gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 1.5);
-                oscillator.start(); oscillator.stop(audioCtx.currentTime + 1.5);
-            } else if (type === 'action') {
-                oscillator.type = 'triangle';
-                oscillator.frequency.setValueAtTime(880, audioCtx.currentTime);
-                oscillator.frequency.exponentialRampToValueAtTime(440, audioCtx.currentTime + 0.1);
-                gainNode.gain.setValueAtTime(0.05, audioCtx.currentTime);
-                gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.1);
-                oscillator.start(); oscillator.stop(audioCtx.currentTime + 0.1);
-            }
-        }
-        window.onload = () => playCinematicSound('shutter');
-
-        // --- Фича #1, #5, #8: Particle System (Tail + Ethereal Cloud) ---
-        const canvas = document.getElementById('pulse-canvas');
-        const ctx = canvas.getContext('2d');
-        const cursorDot = document.getElementById('cursor-dot');
-        let particles = [];
-        let mouse = { x: 0, y: 0 };
-
-        function resize() {
-            canvas.width = window.innerWidth;
-            canvas.height = window.innerHeight;
-        }
-        window.onresize = resize;
-        resize();
-
-        window.addEventListener('mousemove', (e) => {
-            mouse.x = e.clientX;
-            mouse.y = e.clientY;
-            cursorDot.style.left = e.clientX - 2 + 'px';
-            cursorDot.style.top = e.clientY - 2 + 'px';
-            
-            // Фича #5: Шлейф (Particle Tail)
-            for (let i = 0; i < 2; i++) {
-                particles.push(new Particle(true));
-            }
-            
-            // Динамическое освещение (Фича #2 из "дыхания")
-            document.documentElement.style.setProperty('--mouse-x', `${(e.clientX / window.innerWidth) * 100}%`);
-            document.documentElement.style.setProperty('--mouse-y', `${(e.clientY / window.innerHeight) * 100}%`);
-        });
-
-        class Particle {
-            constructor(isTail = false) {
-                this.isTail = isTail;
-                this.init();
-            }
-            init() {
-                this.x = this.isTail ? mouse.x : Math.random() * canvas.width;
-                this.y = this.isTail ? mouse.y : Math.random() * canvas.height;
-                this.size = Math.random() * (this.isTail ? 2 : 1.5) + 0.5;
-                this.speedX = (Math.random() - 0.5) * (this.isTail ? 1 : 0.4);
-                this.speedY = (Math.random() - 0.5) * (this.isTail ? 1 : 0.4);
-                this.life = this.isTail ? 1 : Math.random();
-                this.opacity = this.life * 0.5;
-                this.color = Math.random() > 0.5 ? '#00F5FF' : '#E070FF';
-            }
-            update() {
-                this.x += this.speedX;
-                this.y += this.speedY;
-                if (this.isTail) {
-                    this.life -= 0.02;
-                } else {
-                    // Фича #8: Ethereal Cloud Breathing
-                    const breath = Math.sin(Date.now() * 0.001) * 0.1;
-                    this.size += breath * 0.05;
-                }
-                if (this.life <= 0) this.init();
-            }
-            draw() {
-                ctx.fillStyle = this.color;
-                ctx.globalAlpha = this.isTail ? this.life * 0.6 : this.opacity;
-                ctx.beginPath();
-                ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
-                ctx.fill();
-            }
-        }
-
-        // Наполняем облако данных
-        for (let i = 0; i < 80; i++) particles.push(new Particle());
-
-        function animate() {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            particles.forEach((p, index) => {
-                p.update();
-                p.draw();
-                if (p.isTail && p.life <= 0) particles.splice(index, 1);
-            });
-            requestAnimationFrame(animate);
-        }
-        animate();
-
-        // Кандзи
-        const kanjiMap = { 'dashboard': '創', 'inventory': '蔵', 'reports': '報', 'tickets': '話', 'categories': '類', 'owner_buyers': '購', 'owner_sellers': '衆', 'owner_admins': '守', 'audit': '審' };
-        const activePage = "{{ active_page }}";
-        if (kanjiMap[activePage]) document.getElementById('dynamic-kanji').innerText = kanjiMap[activePage];
-
-        // --- Фича #3: Holographic Depth Parallax ---
-        function initParallax() {
-            const cards = document.querySelectorAll('.premium-card');
-            cards.forEach(card => {
-                card.classList.add('parallax-card');
-                // Оборачиваем содержимое для эффекта парения, если еще не обернуто
-                if (!card.querySelector('.parallax-content')) {
-                    const content = card.innerHTML;
-                    card.innerHTML = `<div class="parallax-content w-full h-full">${content}</div>`;
-                }
-
-                card.addEventListener('mousemove', (e) => {
-                    const rect = card.getBoundingClientRect();
-                    const x = e.clientX - rect.left;
-                    const y = e.clientY - rect.top;
-                    const centerX = rect.width / 2;
-                    const centerY = rect.height / 2;
-                    const rotateX = (y - centerY) / 10;
-                    const rotateY = (centerX - x) / 10;
-                    
-                    card.style.transform = `perspective(1000px) rotateX(${rotateX}deg) rotateY(${rotateY}deg)`;
-                });
-
-                card.addEventListener('mouseleave', () => {
-                    card.style.transform = `perspective(1000px) rotateX(0deg) rotateY(0deg)`;
-                });
-            });
-        }
-        document.addEventListener('DOMContentLoaded', initParallax);
-        document.body.addEventListener('htmx:afterOnLoad', initParallax);
-
-        // --- Фича #4: Zen Enso Loading Setup ---
-        const ensoHTML = `
-            <div class="enso-loader mx-auto">
-                <svg viewBox="0 0 40 40">
-                    <circle class="enso-circle" cx="20" cy="20" r="18"></circle>
-                </svg>
-            </div>
-        `;
-
-        // HTMX CSRF & Sound & Loading
         document.body.addEventListener('htmx:configRequest', (event) => {
-            playCinematicSound('action');
-            // Если у элемента есть hx-indicator, HTMX сам его покажет, 
-            // но мы можем заменить его содержимое на Энсо
-            const indicator = document.querySelector(event.detail.elt.getAttribute('hx-indicator'));
-            if (indicator) indicator.innerHTML = ensoHTML;
-
             const token = document.cookie.split('; ').find(row => row.startsWith('csrftoken='))?.split('=')[1];
             if (token) event.detail.headers['X-CSRF-Token'] = token;
         });
 
-        // Standard Form CSRF Injector
         document.addEventListener('submit', (e) => {
             const form = e.target;
             if (form.method?.toLowerCase() === 'post') {
                 const token = document.cookie.split('; ').find(row => row.startsWith('csrftoken='))?.split('=')[1];
                 if (token && !form.querySelector('input[name="csrf_token"]')) {
                     const input = document.createElement('input');
-                    input.type = 'hidden';
-                    input.name = 'csrf_token';
-                    input.value = token;
+                    input.type = 'hidden'; input.name = 'csrf_token'; input.value = token;
                     form.appendChild(input);
                 }
             }
         });
 
-        function toggleTheme() {
-            if (document.documentElement.classList.contains('dark')) {
-                document.documentElement.classList.remove('dark');
-                localStorage.theme = 'light';
-            } else {
-                document.documentElement.classList.add('dark');
-                localStorage.theme = 'dark';
-            }
-        }
-
-        // Real-time WebSockets
         function connectWS() {
             const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
             const ws = new WebSocket(`${protocol}//${window.location.host}/nexus/ws`);
             const statusDot = document.querySelector('.ws-dot');
             const ticker = document.getElementById('ticker-feed');
             
-            ws.onopen = () => {
-                if (statusDot) statusDot.classList.replace('bg-red-500', 'bg-emerald-500');
-            };
-            
+            ws.onopen = () => statusDot?.classList.replace('bg-red-500', 'bg-emerald-500');
             ws.onclose = () => {
-                if (statusDot) statusDot.classList.replace('bg-emerald-500', 'bg-red-500');
+                statusDot?.classList.replace('bg-emerald-500', 'bg-red-500');
                 setTimeout(connectWS, 3000);
             };
-            
             ws.onmessage = (event) => {
                 const data = JSON.parse(event.data);
-                systemPulse(); // Визуальный эффект на фон
-
-                if (data.type === 'notification') {
-                    // Обновляем тикер (Фича #3)
-                    if (ticker) {
-                        const time = new Date().toLocaleTimeString();
-                        ticker.innerText = `[${time}] ${data.message.toUpperCase()} // ` + ticker.innerText;
-                    }
+                if (data.type === 'notification' && ticker) {
+                    const time = new Date().toLocaleTimeString();
+                    ticker.innerText = `[${time}] ${data.message.toUpperCase()} // ` + ticker.innerText;
                 }
-                
-                if (data.trigger === 'refresh_stats') {
-                    document.body.dispatchEvent(new Event('refreshStats'));
-                }
+                if (data.trigger === 'refresh_stats') document.body.dispatchEvent(new Event('refreshStats'));
             };
         }
         connectWS();
-
-        function openSearch() {
-            document.getElementById('search-modal').classList.remove('hidden');
-            document.getElementById('search-input').focus();
-        }
-        function closeSearch() {
-            document.getElementById('search-modal').classList.add('hidden');
-        }
-        // Хоткеи
-        window.addEventListener('keydown', function(e) {
-            if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
-                e.preventDefault();
-                openSearch();
-            }
-            if (e.key === 'Escape') {
-                closeSearch();
-            }
-        });
     </script>
-
 </body>
 </html>
