@@ -118,11 +118,6 @@ def create_app(bot: Bot, dispatcher: Dispatcher) -> FastAPI:
 
     from src.services.delivery_service import background_delivery_task
 
-    @app.get("/yandex_a471640dd21843aa.html")
-    async def yandex_verification():
-        from fastapi.responses import FileResponse
-        return FileResponse(str(BASE_DIR / "yandex_a471640dd21843aa.html"))
-
     @app.get("/")
     async def root_redirect():
         return RedirectResponse(url="/auth/login")
