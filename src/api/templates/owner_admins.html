@@ -34,7 +34,12 @@
             
             <div>
                 <h3 class="text-lg font-bold text-white group-hover:text-nexus-sakura transition-colors">{{ a.full_name }}</h3>
-                <p class="text-[11px] text-white/20 mt-1">TG: {{ a.telegram_id }}</p>
+                <div class="flex items-center gap-4 mt-2">
+                    <div class="text-[10px] text-white/20">TG: {{ a.telegram_id }}</div>
+                    <div class="text-[10px] text-emerald-500 font-bold uppercase tracking-widest bg-emerald-500/5 px-2 py-0.5 rounded">
+                        {{ admin_stats.get(a.id, 0) }} ACTIONS
+                    </div>
+                </div>
             </div>
 
             <div class="mt-8 flex gap-3">

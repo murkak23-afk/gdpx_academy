@@ -808,13 +808,88 @@ async def get_seller_card(seller_id: int, request: Request, user: User = Depends
         })
 @router.get("/owner/admins", response_class=HTMLResponse)
 async def get_owner_admins(request: Request, user: User = Depends(get_current_user)):
-    """Страница управления админами (OWNER only)."""
+    """Страница управления админами (OWNER only) с KPI."""
     async with SessionFactory() as session:
         if user.role != UserRole.OWNER: raise HTTPException(status_code=403)
-
+        
+        # Загружаем всех админов
         stmt = select(User).where(User.role == UserRole.ADMIN)
         admins = (await session.execute(stmt)).scalars().all()
-        return templates.TemplateResponse("owner_admins.html", {"request": request, "user": user, "admins": admins, "active_page": "owner_admins"})
+        
+        # Собираем KPI (кол-во действий)
+        admin_stats = {}
+        for a in admins:
+            count_stmt = select(func.count(AdminAuditLog.id)).where(AdminAuditLog.admin_id == a.id)
+            admin_stats[a.id] = await session.scalar(count_stmt) or 0
+            
+        return templates.TemplateResponse("owner_admins.html", {
+            "request": request, 
+            "user": user, 
+            "admins": admins, 
+            "admin_stats": admin_stats,
+            "active_page": "owner_admins"
+        })
+
+@router.get("/owner/audit-feed", response_class=HTMLResponse)
+async def get_owner_audit_feed(request: Request, user: User = Depends(get_current_user)):
+    """Живая лента действий админов (Двойной аудит)."""
+    async with SessionFactory() as session:
+        if user.role != UserRole.OWNER: raise HTTPException(status_code=403)
+        
+        # Последние 50 действий админов (исключая самого овнера)
+        stmt = (
+            select(AdminAuditLog)
+            .options(joinedload(AdminAuditLog.admin))
+            .where(AdminAuditLog.action.in_(["ACCEPT_SUB", "REJECT_SUB", "BLOCK_SUB"]))
+            .order_by(AdminAuditLog.created_at.desc())
+            .limit(50)
+        )
+        feed = (await session.execute(stmt)).scalars().all()
+        
+        return templates.TemplateResponse("audit_feed.html", {
+            "request": request,
+            "user": user,
+            "feed": feed,
+            "active_page": "audit"
+        })
+
+@router.post("/owner/audit/{log_id}/override")
+async def override_admin_decision(
+    log_id: int, 
+    new_status: str = Form(...), 
+    user: User = Depends(get_current_user),
+    bot: Bot = Depends(get_bot)
+):
+    """Пересмотр решения админа (Двойной аудит)."""
+    async with SessionFactory() as session:
+        if user.role != UserRole.OWNER: raise HTTPException(status_code=403)
+        
+        log_entry = await session.get(AdminAuditLog, log_id)
+        if not log_entry or log_entry.target_type != "submission":
+            raise HTTPException(status_code=404)
+            
+        sub = await session.get(Submission, log_entry.target_id)
+        if sub:
+            old_status = sub.status
+            sub.status = SubmissionStatus(new_status)
+            await session.commit()
+            
+            # Логируем действие овнера
+            await log_admin_action(
+                admin_id=user.id,
+                action="OVERRIDE_DECISION",
+                target_type="submission",
+                target_id=sub.id,
+                details=f"Овнер пересмотрел решение админа {log_entry.admin_id}: {old_status} -> {new_status}"
+            )
+            
+            # Уведомляем админа об ошибке (Обучение)
+            try:
+                msg = f"⚠️ *ВНИМАНИЕ (Двойной аудит)*\n\nОвнер пересмотрел ваше решение по заявке #{sub.id}.\nВаше решение: `{old_status}`\nНовое решение: `{new_status}`\n\nПожалуйста, учитывайте это в будущей работе."
+                await bot.send_message(log_entry.admin_id, msg, parse_mode="Markdown")
+            except: pass
+            
+        return RedirectResponse(url="/nexus/owner/audit-feed", status_code=303)
 
 @router.get("/users/{target_id}/cabinet", response_class=HTMLResponse)
 async def get_simbuyer_cabinet(target_id: int, request: Request, user: User = Depends(get_current_user)):

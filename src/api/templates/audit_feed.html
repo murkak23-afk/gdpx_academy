@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+
+{% block title %}LIVE AUDIT FEED // GDPX{% endblock %}
+
+{% block content %}
+<div class="space-y-12 fade-in">
+    
+    <!-- Header -->
+    <div class="flex flex-col md:flex-row justify-between items-start md:items-end gap-6">
+        <div>
+            <div class="text-[10px] text-nexus-sakura font-bold tracking-[0.4em] uppercase mb-3 opacity-80">Quality Control</div>
+            <h1 class="text-[42px] font-bold tracking-tight text-white leading-none japanese-title">Двойной аудит</h1>
+            <p class="text-nexus-silver mt-4 font-medium tracking-[0.15em] uppercase text-[11px] opacity-60">
+                Контроль решений администраторов в реальном времени.
+            </p>
+        </div>
+        <div class="px-8 py-4 bg-white/[0.02] border border-white/5 rounded-sm backdrop-blur-md">
+            <span class="text-nexus-cyan font-mono text-[16px] tracking-[0.2em]">LIVE FEED ACTIVE</span>
+        </div>
+    </div>
+
+    <!-- Audit Feed -->
+    <div class="premium-card p-0 overflow-hidden">
+        <div class="overflow-x-auto">
+            <table class="w-full text-left border-collapse">
+                <thead>
+                    <tr class="border-b border-white/5">
+                        <th class="px-8 py-6 text-[10px] font-bold text-white/30 uppercase tracking-[0.2em]">Администратор</th>
+                        <th class="px-8 py-6 text-[10px] font-bold text-white/30 uppercase tracking-[0.2em]">Действие</th>
+                        <th class="px-8 py-6 text-[10px] font-bold text-white/30 uppercase tracking-[0.2em]">Детали / Объект</th>
+                        <th class="px-8 py-6 text-[10px] font-bold text-white/30 uppercase tracking-[0.2em]">Время</th>
+                        <th class="px-8 py-6 text-[10px] font-bold text-white/30 uppercase tracking-[0.2em] text-right">Пересмотр</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-white/[0.02]">
+                    {% for log in feed %}
+                    <tr class="hover:bg-white/[0.01] transition-all group">
+                        <td class="px-8 py-6">
+                            <div class="flex items-center gap-3">
+                                <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-nexus-sakura to-purple-600 flex items-center justify-center text-[10px] font-bold text-white">
+                                    {{ log.admin.full_name[:1] }}
+                                </div>
+                                <div class="font-bold text-white text-[13px]">{{ log.admin.full_name }}</div>
+                            </div>
+                        </td>
+                        <td class="px-8 py-6">
+                            {% set action_class = "text-white/40" %}
+                            {% if "ACCEPT" in log.action %}{% set action_class = "text-emerald-500" %}
+                            {% elif "REJECT" in log.action %}{% set action_class = "text-red-500" %}
+                            {% elif "BLOCK" in log.action %}{% set action_class = "text-red-700" %}
+                            {% endif %}
+                            <span class="text-[10px] font-bold uppercase tracking-widest {{ action_class }}">{{ log.action }}</span>
+                        </td>
+                        <td class="px-8 py-6">
+                            <div class="text-[12px] text-white/60">Заявка #{{ log.target_id }}</div>
+                            <div class="text-[10px] text-white/20 italic mt-1">{{ log.details }}</div>
+                        </td>
+                        <td class="px-8 py-6 text-[11px] text-white/20 font-mono">
+                            {{ log.created_at.strftime('%H:%M:%S') }}
+                        </td>
+                        <td class="px-8 py-6 text-right">
+                            <form hx-post="/nexus/owner/audit/{{ log.id }}/override" class="flex justify-end gap-2">
+                                <select name="new_status" class="bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-[10px] text-white focus:outline-none focus:border-nexus-sakura transition-all">
+                                    <option value="accepted">ACCEPT</option>
+                                    <option value="rejected">REJECT</option>
+                                    <option value="blocked">BLOCK</option>
+                                </select>
+                                <button type="submit" class="px-4 py-1.5 bg-nexus-sakura text-white rounded-lg text-[9px] font-bold uppercase tracking-widest hover:shadow-[0_0_15px_#ff00ea] transition-all">
+                                    FIX
+                                </button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+</div>
+{% endblock %}
