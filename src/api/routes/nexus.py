@@ -19,9 +19,9 @@ from src.database.models.category import Category
 from src.database.models.enums import SubmissionStatus, UserRole
 from src.database.models.web_control import SimbuyerPrice, SupportTicket, ChatMessage, DeliveryConfig, WebAccount
 from src.database.models.admin_audit import AdminAuditLog
-from src.api.deps import templates, get_current_user, RoleChecker, get_db
+from src.api.deps import templates, get_current_user, RoleChecker, get_db, get_bot
 from src.core.utils.audit_logger import log_admin_action
-from src.core.bot import bot
+from aiogram import Bot
 from src.services.delivery_service import background_delivery_task
 from src.domain.submission.submission_service import SubmissionService
 
@@ -33,7 +33,7 @@ admin_only = RoleChecker([UserRole.OWNER, UserRole.ADMIN])
 owner_only = RoleChecker([UserRole.OWNER])
 
 @router.get("/media/{file_id}")
-async def get_media_proxy(file_id: str, user: User = Depends(get_current_user)):
+async def get_media_proxy(file_id: str, user: User = Depends(get_current_user), bot: Bot = Depends(get_bot)):
     """Прокси для отображения фото из Telegram по file_id."""
     try:
         file = await bot.get_file(file_id)
@@ -544,10 +544,9 @@ from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
 import io
 
 @router.get("/media/{file_id}")
-async def get_media_proxy(file_id: str, user_data: dict = Depends(get_current_user)):
+async def get_media_proxy(file_id: str, user: User = Depends(get_current_user), bot: Bot = Depends(get_bot)):
     """Прокси для отображения фото из Telegram по file_id."""
     try:
-        from src.core.bot import bot
         file = await bot.get_file(file_id)
         # Скачиваем файл в память
         dest = io.BytesIO()
