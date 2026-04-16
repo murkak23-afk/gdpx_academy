@@ -763,20 +763,49 @@ async def get_owner_buyers(request: Request, q: Optional[str] = None, user: User
             "search_query": q or ""
         })
 
-@router.get("/owner/sellers", response_class=HTMLResponse)
-async def get_owner_sellers(request: Request, q: Optional[str] = None, user: User = Depends(get_current_user)):
-    """Страница управления продавцами (OWNER only)."""
+@router.get("/owner/sellers/{seller_id}", response_class=HTMLResponse)
+async def get_seller_card(seller_id: int, request: Request, user: User = Depends(get_current_user)):
+    """Детальная карточка продавца с аналитикой."""
     async with SessionFactory() as session:
         if user.role != UserRole.OWNER: raise HTTPException(status_code=403)
 
-        stmt = select(User).where(User.role == UserRole.SELLER)
-        if q:
-            q = q.strip()
-            stmt = stmt.where(or_(User.username.ilike(f"%{q}%"), User.full_name.ilike(f"%{q}%")))
+        seller = await session.get(User, seller_id)
+        if not seller: raise HTTPException(status_code=404)
 
-        sellers = (await session.execute(stmt.order_by(User.created_at.desc()))).scalars().all()
-        return templates.TemplateResponse("owner_sellers.html", {"request": request, "user": user, "sellers": sellers, "active_page": "owner_sellers"})
+        # Статистика одобрений
+        total_stmt = select(func.count(Submission.id)).where(Submission.user_id == seller_id)
+        total_count = await session.scalar(total_stmt) or 0
 
+        accepted_stmt = select(func.count(Submission.id)).where(
+            Submission.user_id == seller_id, 
+            Submission.status == SubmissionStatus.ACCEPTED
+        )
+        accepted_count = await session.scalar(accepted_stmt) or 0
+
+        trust_score = round((accepted_count / total_count * 100), 1) if total_count > 0 else 0
+            
+        # История последних 20 симок
+        history_stmt = (
+            select(Submission)
+            .options(joinedload(Submission.category))
+            .where(Submission.user_id == seller_id)
+            .order_by(Submission.created_at.desc())
+            .limit(20)
+        )
+        history = (await session.execute(history_stmt)).scalars().all()
+
+        return templates.TemplateResponse("seller_card.html", {
+            "request": request,
+            "user": user,
+            "seller": seller,
+            "stats": {
+                "total": total_count,
+                "accepted": accepted_count,
+                "trust_score": trust_score
+            },
+            "history": history,
+            "active_page": "owner_sellers"
+        })
 @router.get("/owner/admins", response_class=HTMLResponse)
 async def get_owner_admins(request: Request, user: User = Depends(get_current_user)):
     """Страница управления админами (OWNER only)."""
@@ -791,7 +820,7 @@ async def get_owner_admins(request: Request, user: User = Depends(get_current_us
 async def get_simbuyer_cabinet(target_id: int, request: Request, user: User = Depends(get_current_user)):
     """Личный кабинет управления СИМбайером (настройка цен и доступов)."""
     async with SessionFactory() as session:
-        if user.role not in [UserRole.OWNER, UserRole.ADMIN]:
+        if user.role != UserRole.OWNER:
             raise HTTPException(status_code=403, detail="Permission denied")
         
         target = await session.get(User, target_id)
@@ -807,6 +836,15 @@ async def get_simbuyer_cabinet(target_id: int, request: Request, user: User = De
         prices_stmt = select(SimbuyerPrice).where(SimbuyerPrice.user_id == target.id)
         prices_list = (await session.execute(prices_stmt)).scalars().all()
         prices_map = {p.category_id: p.price for p in prices_list}
+
+        # Депозитный контроль (Улучшение #3): Объем за сутки
+        today_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+        payout_stmt = select(func.sum(Submission.purchase_price)).where(
+            Submission.delivered_to_chat == target.telegram_id,
+            Submission.status == SubmissionStatus.ACCEPTED,
+            Submission.updated_at >= today_start
+        )
+        daily_volume = await session.scalar(payout_stmt) or Decimal("0.00")
         
         return templates.TemplateResponse("simbuyer_cabinet.html", {
             "request": request,
@@ -815,19 +853,64 @@ async def get_simbuyer_cabinet(target_id: int, request: Request, user: User = De
             "web_acc": web_acc,
             "categories": categories,
             "prices_map": prices_map,
-            "active_page": "users"
+            "daily_volume": daily_volume,
+            "active_page": "owner_buyers"
         })
 
 @router.post("/users/{target_id}/cabinet/config")
 async def update_simbuyer_config(
     target_id: int,
     request: Request,
-    user: User = Depends(get_current_user)
+    user: User = Depends(get_current_user),
+    bot: Bot = Depends(get_bot)
 ):
     """Обновление ценовой политики и доступов СИМбайера."""
     async with SessionFactory() as session:
-        if user.role not in [UserRole.OWNER, UserRole.ADMIN]:
+        if user.role != UserRole.OWNER:
             raise HTTPException(status_code=403, detail="Permission denied")
+            
+        target = await session.get(User, target_id)
+        form_data = await request.form()
+        
+        # 1. Обновление цен по категориям
+        from sqlalchemy import delete
+        await session.execute(delete(SimbuyerPrice).where(SimbuyerPrice.user_id == target_id))
+        
+        for key, value in form_data.items():
+            if key.startswith("price_") and value:
+                cat_id = int(key.replace("price_", ""))
+                new_price = SimbuyerPrice(
+                    user_id=target_id,
+                    category_id=cat_id,
+                    price=Decimal(value)
+                )
+                session.add(new_price)
+        
+        # 2. Обновление учетных данных
+        login = form_data.get("login")
+        password = form_data.get("password")
+        
+        if login or password:
+            web_acc_stmt = select(WebAccount).where(WebAccount.user_id == target_id)
+            web_acc = (await session.execute(web_acc_stmt)).scalar_one_or_none()
+            
+            if not web_acc:
+                web_acc = WebAccount(user_id=target_id, login=login or f"user_{target_id}")
+                session.add(web_acc)
+            
+            if login: web_acc.login = login
+            if password: web_acc.password_hash = AuthService.hash_password(password)
+            
+        await session.commit()
+        
+        # УВЕДОМЛЕНИЕ ПОКУПАТЕЛЮ (Улучшение #3)
+        try:
+            notification = "🔔 *NEXUS: Обновление конфигурации*\n\nВладелец обновил вашу ценовую политику или учетные данные. Пожалуйста, проверьте изменения в личном кабинете."
+            await bot.send_message(target.telegram_id, notification, parse_mode="Markdown")
+        except Exception as e:
+            logger.error(f"Failed to notify simbuyer {target_id}: {e}")
+            
+        return RedirectResponse(url=f"/nexus/owner/buyers/{target_id}/cabinet", status_code=303)
             
         form_data = await request.form()
         
