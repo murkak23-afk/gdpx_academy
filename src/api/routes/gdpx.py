@@ -420,7 +420,7 @@ async def view_submission(sub_id: int, request: Request, user: User = Depends(ge
         if not sub:
             raise HTTPException(status_code=404, detail="eSIM не найдена")
 
-        if user.role == UserRole.SIMBUYER and sub.delivered_to_chat != user.telegram_id:
+        if user.role == UserRole.SIMBUYER and sub.buyer_id != user.id:
             raise HTTPException(status_code=403, detail="Доступ запрещен")
 
         return templates.TemplateResponse("submission_detail.html", {

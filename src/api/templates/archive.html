@@ -8,7 +8,7 @@
     <!-- Заголовок -->
     <div class="flex flex-col md:flex-row justify-between items-start md:items-end gap-8">
         <div>
-            <div class="text-[10px] text-gdpx-cyan font-bold tracking-[0.4em] uppercase mb-3 opacity-80">Operational Audit</div>
+            <div class="text-[10px] text-titanium font-bold tracking-[0.4em] uppercase mb-3 opacity-80">Operational Audit</div>
             <h1 class="text-[36px] font-bold text-white japanese-title leading-none">{% if is_today %}Текущая статистика{% else %}Архив активов{% endif %}</h1>
             <p class="text-white/40 mt-4 font-medium tracking-[0.1em] uppercase text-[11px] opacity-60">
                 {% if is_today %}Данные за текущие 24 часа (до очистки буфера){% else %}Просмотр истории отгрузок за выбранный период{% endif %}
@@ -18,8 +18,8 @@
             {% if not is_today %}
             <form method="get" class="flex gap-2">
                 <input type="date" name="date" value="{{ selected_date or '' }}" 
-                       class="bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-[11px] font-bold text-white uppercase tracking-widest focus:outline-none focus:border-gdpx-cyan/50 transition-all">
-                <button type="submit" class="px-6 py-2 bg-gdpx-cyan/10 border border-gdpx-cyan/20 text-gdpx-cyan rounded-xl text-[11px] font-bold uppercase tracking-widest hover:bg-gdpx-cyan hover:text-white transition-all">
+                       class="bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-[11px] font-bold text-white uppercase tracking-widest focus:outline-none focus:border-titanium/50 transition-all">
+                <button type="submit" class="px-6 py-2 bg-titanium/10 border border-titanium/20 text-titanium rounded-xl text-[11px] font-bold uppercase tracking-widest hover:bg-titanium hover:text-white transition-all">
                     Найти
                 </button>
             </form>
@@ -33,9 +33,9 @@
         </div>
     </div>
     {% if show_batch_actions %}
-    <div id="batch-controls" class="hidden premium-card p-6 border-gdpx-cyan/30 bg-gdpx-cyan/[0.03] flex items-center justify-between animate-in fade-in slide-in-from-top-4">
+    <div id="batch-controls" class="hidden premium-card p-6 border-titanium/30 bg-titanium/[0.03] flex items-center justify-between animate-in fade-in slide-in-from-top-4">
         <div class="flex items-center gap-6">
-            <div class="text-[10px] font-bold text-gdpx-cyan uppercase tracking-[0.2em]">Выбрано: <span id="selected-count" class="text-white">0</span></div>
+            <div class="text-[10px] font-bold text-titanium uppercase tracking-[0.2em]">Выбрано: <span id="selected-count" class="text-white">0</span></div>
             <div class="h-4 w-[1px] bg-white/10"></div>
             <div class="flex gap-2">
                 <button onclick="batchAction('accept')" class="px-4 py-2 bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 rounded-lg text-[10px] font-bold uppercase tracking-widest hover:bg-emerald-500 hover:text-white transition-all">Массовый зачёт</button>
@@ -68,21 +68,21 @@
             <div class="text-[10px] font-bold text-white/20 uppercase tracking-widest mb-4">Не Скан</div>
             <div class="text-[32px] font-light text-white leading-none japanese-title">{{ stats.not_scans }}</div>
         </div>
-        <div class="premium-card p-6 border-gdpx-cyan/30 bg-gdpx-cyan/[0.02]">
-            <div class="text-[10px] font-bold text-gdpx-cyan/40 uppercase tracking-widest mb-4">Выплаты (USDT)</div>
+        <div class="premium-card p-6 border-titanium/30 bg-titanium/[0.02]">
+            <div class="text-[10px] font-bold text-titanium/40 uppercase tracking-widest mb-4">Выплаты (USDT)</div>
             <div class="text-[32px] font-light text-white leading-none japanese-title">{{ stats.total_spend|round(2) }}</div>
         </div>
     </div>
 
     <!-- Таблица -->
-    <div class="premium-card overflow-hidden">
+    <div class="bg-white/[0.02] border border-white/5 rounded-[40px] overflow-hidden backdrop-blur-3xl shadow-2xl">
         <div class="overflow-x-auto">
-            <table class="w-full text-left border-collapse">
+            <table class="w-full text-left border-collapse premium-table">
                 <thead>
                     <tr class="border-b border-white/5">
                         {% if show_batch_actions %}
                         <th class="px-8 py-6 w-10">
-                            <input type="checkbox" id="master-checkbox" class="w-4 h-4 bg-white/5 border-white/10 rounded cursor-pointer accent-gdpx-cyan" onclick="toggleAll(this)">
+                            <input type="checkbox" id="master-checkbox" class="w-4 h-4 bg-white/5 border-white/10 rounded cursor-pointer accent-white" onclick="toggleAll(this)">
                         </th>
                         {% endif %}
                         <th class="px-8 py-6 text-[10px] font-bold text-white/30 uppercase tracking-[0.2em]">eSIM / ID</th>
@@ -99,11 +99,11 @@
                     <tr class="hover:bg-white/[0.01] transition-all group">
                         {% if show_batch_actions %}
                         <td class="px-8 py-6 w-10">
-                            <input type="checkbox" name="submission-ids" value="{{ item.id }}" class="sub-checkbox w-4 h-4 bg-white/5 border-white/10 rounded cursor-pointer accent-gdpx-cyan" onchange="updateSelection()">
+                            <input type="checkbox" name="submission-ids" value="{{ item.id }}" class="sub-checkbox w-4 h-4 bg-white/5 border-white/10 rounded cursor-pointer accent-white" onchange="updateSelection()">
                         </td>
                         {% endif %}
                         <td class="px-8 py-6">
-                            <a href="/gdpx/submission/{{ item.id }}" class="font-mono text-white hover:text-gdpx-cyan transition-colors">#{{ item.id }}</a>
+                            <a href="/gdpx/submission/{{ item.id }}" class="font-mono text-white hover:text-titanium transition-colors">#{{ item.id }}</a>
                             <div class="text-[10px] text-white/20 mt-1 uppercase tracking-tighter">{{ item.updated_at.strftime('%d.%m.%Y %H:%M') }}</div>
                         </td>
                         <td class="px-8 py-6">
@@ -113,7 +113,7 @@
                             <span class="text-[13px] text-white/80 uppercase tracking-wide">{{ item.category.title }}</span>
                         </td>
                         <td class="px-8 py-6 text-center">
-                            <div class="text-[12px] text-gdpx-cyan font-bold">@{{ item.buyer.username or item.buyer.telegram_id }}</div>
+                            <div class="text-[12px] text-titanium font-bold">@{{ item.buyer.username or item.buyer.telegram_id }}</div>
                         </td>
                         <td class="px-8 py-6 text-center">
                             {% if item.status.value == 'accepted' %}
@@ -123,7 +123,7 @@
                             {% elif item.status.value == 'not_a_scan' %}
                                 <span class="px-3 py-1 bg-white/5 text-white/40 border border-white/10 rounded-lg text-[9px] font-bold uppercase tracking-widest">НЕ СКАН</span>
                             {% else %}
-                                <span class="px-3 py-1 bg-gdpx-cyan/10 text-gdpx-cyan border border-gdpx-cyan/20 rounded-lg text-[9px] font-bold uppercase tracking-widest">{{ item.status.value|upper }}</span>
+                                <span class="px-3 py-1 bg-titanium/10 text-titanium border border-titanium/20 rounded-lg text-[9px] font-bold uppercase tracking-widest">{{ item.status.value|upper }}</span>
                             {% endif %}
                         </td>
                         <td class="px-8 py-6 text-center">
@@ -133,7 +133,7 @@
                             <form action="/gdpx/tickets/create" method="post" class="inline">
                                 <input type="hidden" name="submission_id" value="{{ item.id }}">
                                 <input type="hidden" name="subject" value="Вопрос по eSIM #{{ item.id }}">
-                                <button type="submit" class="p-2.5 bg-white/5 border border-white/10 rounded-xl text-white/20 hover:text-gdpx-cyan hover:border-gdpx-cyan hover:bg-gdpx-cyan/10 transition-all">
+                                <button type="submit" class="p-2.5 bg-white/5 border border-white/10 rounded-xl text-white/20 hover:text-titanium hover:border-titanium hover:bg-titanium/10 transition-all">
                                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/></svg>
                                 </button>
                             </form>
