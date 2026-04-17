@@ -355,7 +355,7 @@ async def get_archive(request: Request, date: str = None, user: User = Depends(g
             "shipments": shipments,
             "stats": stats,
             "selected_date": date,
-            "active_page": "archive"
+            "active_page": "archive",
             "show_batch_actions": user.role in [UserRole.OWNER, UserRole.ADMIN],
         })
 
@@ -395,7 +395,7 @@ async def get_current_stats(request: Request, user: User = Depends(get_current_u
             "shipments": shipments,
             "stats": stats,
             "is_today": True,
-            "active_page": "stats"
+            "active_page": "stats",
             "show_batch_actions": user.role in [UserRole.OWNER, UserRole.ADMIN],
         })
 
@@ -427,7 +427,7 @@ async def view_submission(sub_id: int, request: Request, user: User = Depends(ge
             "request": request,
             "user": user,
             "sub": sub,
-            "active_page": "archive"
+            "active_page": "archive",
         })
 
 @router.get("/categories", response_class=HTMLResponse)
