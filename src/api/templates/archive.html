@@ -3,138 +3,140 @@
 {% block title %}GDPX // ОТЧЕТЫ{% endblock %}
 
 {% block content %}
-<div class="space-y-10 fade-in">
+<div class="space-y-12 fade-in">
     
     <!-- Заголовок -->
     <div class="flex flex-col md:flex-row justify-between items-start md:items-end gap-8">
         <div>
-            <div class="text-[10px] text-titanium font-bold tracking-[0.4em] uppercase mb-3 opacity-80">Operational Audit</div>
-            <h1 class="text-[36px] font-bold text-white japanese-title leading-none">{% if is_today %}Текущая статистика{% else %}Архив активов{% endif %}</h1>
-            <p class="text-white/40 mt-4 font-medium tracking-[0.1em] uppercase text-[11px] opacity-60">
-                {% if is_today %}Данные за текущие 24 часа (до очистки буфера){% else %}Просмотр истории отгрузок за выбранный период{% endif %}
+            <div class="text-detail mb-4">Operational Audit / Hub Stats</div>
+            <h1 class="text-[56px] font-extralight text-white tracking-[-0.04em] leading-none steel-text">{% if is_today %}LIVE STATS{% else %}ARCHIVE{% endif %}</h1>
+            <p class="text-titanium mt-6 font-light tracking-[0.2em] uppercase text-[9px] opacity-40">
+                {% if is_today %}Real-time session data node{% else %}Historical asset distribution logs{% endif %}
             </p>
         </div>
-        <div class="flex gap-4 items-center">
+        <div class="flex gap-6 items-center">
             {% if not is_today %}
-            <form method="get" class="flex gap-2">
+            <form method="get" class="flex gap-3">
                 <input type="date" name="date" value="{{ selected_date or '' }}" 
-                       class="bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-[11px] font-bold text-white uppercase tracking-widest focus:outline-none focus:border-titanium/50 transition-all">
-                <button type="submit" class="px-6 py-2 bg-titanium/10 border border-titanium/20 text-titanium rounded-xl text-[11px] font-bold uppercase tracking-widest hover:bg-titanium hover:text-white transition-all">
-                    Найти
+                       class="bg-white/[0.01] border border-white/5 rounded px-6 py-3 text-[10px] font-light text-white uppercase tracking-widest focus:outline-none focus:border-white/20 transition-all">
+                <button type="submit" class="titan-button px-8 py-3 rounded text-[10px] uppercase tracking-widest">
+                    Search
                 </button>
             </form>
             {% endif %}
             {% if user.role == 'owner' and is_today %}
-            <button hx-post="/gdpx/owner/reports/clear" hx-confirm="ВНИМАНИЕ: Это перенесет все отработанные заявки в архив и обнулит текущую статистику. Продолжить?"
-                    class="px-8 py-3 bg-red-500/10 border border-red-500/20 text-red-500 rounded-xl text-[11px] font-bold uppercase tracking-widest hover:bg-red-500 hover:text-white transition-all">
-                Очистить Буфер
+            <button hx-post="/gdpx/owner/reports/clear" hx-confirm="CRITICAL: This action will move current session data to archive. Proceed?"
+                    class="titan-button px-10 py-4 rounded text-red-400 border-red-500/20 hover:border-red-500/40 text-[10px] uppercase tracking-widest">
+                Clear Buffer
             </button>
             {% endif %}
         </div>
     </div>
+
+    <!-- Batch Controls (Sapphire) -->
     {% if show_batch_actions %}
-    <div id="batch-controls" class="hidden premium-card p-6 border-titanium/30 bg-titanium/[0.03] flex items-center justify-between animate-in fade-in slide-in-from-top-4">
-        <div class="flex items-center gap-6">
-            <div class="text-[10px] font-bold text-titanium uppercase tracking-[0.2em]">Выбрано: <span id="selected-count" class="text-white">0</span></div>
-            <div class="h-4 w-[1px] bg-white/10"></div>
-            <div class="flex gap-2">
-                <button onclick="batchAction('accept')" class="px-4 py-2 bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 rounded-lg text-[10px] font-bold uppercase tracking-widest hover:bg-emerald-500 hover:text-white transition-all">Массовый зачёт</button>
-                <button onclick="batchAction('block')" class="px-4 py-2 bg-red-500/10 border border-red-500/20 text-red-500 rounded-lg text-[10px] font-bold uppercase tracking-widest hover:bg-red-500 hover:text-white transition-all">Массовый брак</button>
-                <button onclick="batchExport()" class="px-4 py-2 bg-white/5 border border-white/10 text-white/60 rounded-lg text-[10px] font-bold uppercase tracking-widest hover:bg-white/10 hover:text-white transition-all">Экспорт CSV</button>
+    <div id="batch-controls" class="hidden premium-card p-8 border-white/10 flex items-center justify-between animate-in fade-in slide-in-from-top-4">
+        <div class="flex items-center gap-10">
+            <div class="text-detail">Selected Assets: <span id="selected-count" class="text-white font-medium">0</span></div>
+            <div class="h-4 w-[1px] bg-white/5"></div>
+            <div class="flex gap-4">
+                <button onclick="batchAction('accept')" class="titan-button px-6 py-3 rounded text-emerald-400 text-[9px] uppercase tracking-widest">Accept Batch</button>
+                <button onclick="batchAction('block')" class="titan-button px-6 py-3 rounded text-red-400 text-[9px] uppercase tracking-widest">Reject Batch</button>
+                <button onclick="batchExport()" class="titan-button px-6 py-3 rounded text-titanium text-[9px] uppercase tracking-widest">Export CSV</button>
             </div>
         </div>
-        <button onclick="clearSelection()" class="text-[10px] text-white/20 font-bold uppercase tracking-widest hover:text-white transition-all">Отмена</button>
+        <button onclick="clearSelection()" class="text-detail text-[9px] hover:text-white transition-all">Cancel</button>
     </div>
     {% endif %}
 
     <!-- KPI карточки (Buffer Summary) -->
-    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
-        <div class="premium-card p-6 border-white/5">
-            <div class="text-[10px] font-bold text-white/20 uppercase tracking-widest mb-4">Всего выдано</div>
-            <div class="text-[32px] font-light text-white leading-none japanese-title">{{ stats.total_taken }}</div>
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-8">
+        <div class="premium-card p-8 group">
+            <div class="text-detail mb-6 opacity-30">Total Issued</div>
+            <div class="text-[40px] number-display text-white leading-none group-hover:steel-text transition-all">{{ stats.total_taken }}</div>
         </div>
-        <div class="premium-card p-6 border-emerald-500/20 bg-emerald-500/[0.02]">
-            <div class="text-[10px] font-bold text-emerald-500/40 uppercase tracking-widest mb-4">Принято (Зачёт)</div>
-            <div class="flex items-baseline gap-3">
-                <div class="text-[32px] font-light text-white leading-none japanese-title">{{ stats.accepted }}</div>
-                <div class="text-[10px] text-emerald-500 font-bold">{{ stats.success_rate }}%</div>
+        <div class="premium-card p-8 group border-emerald-500/10">
+            <div class="text-detail mb-6 text-emerald-500/40">Accepted Assets</div>
+            <div class="flex items-baseline gap-4">
+                <div class="text-[40px] number-display text-white leading-none">{{ stats.accepted }}</div>
+                <div class="text-[10px] text-emerald-500 font-medium">{{ stats.success_rate }}%</div>
             </div>
         </div>
-        <div class="premium-card p-6 border-red-500/20 bg-red-500/[0.02]">
-            <div class="text-[10px] font-bold text-red-500/40 uppercase tracking-widest mb-4">Брак / Блоки</div>
-            <div class="text-[32px] font-light text-white leading-none japanese-title">{{ stats.blocks }}</div>
+        <div class="premium-card p-8 group border-red-500/10">
+            <div class="text-detail mb-6 text-red-500/40">Rejections</div>
+            <div class="text-[40px] number-display text-white leading-none">{{ stats.blocks }}</div>
         </div>
-        <div class="premium-card p-6 border-white/10">
-            <div class="text-[10px] font-bold text-white/20 uppercase tracking-widest mb-4">Не Скан</div>
-            <div class="text-[32px] font-light text-white leading-none japanese-title">{{ stats.not_scans }}</div>
+        <div class="premium-card p-8 group opacity-60">
+            <div class="text-detail mb-6">No Scan Data</div>
+            <div class="text-[40px] number-display text-white leading-none">{{ stats.not_scans }}</div>
         </div>
-        <div class="premium-card p-6 border-titanium/30 bg-titanium/[0.02]">
-            <div class="text-[10px] font-bold text-titanium/40 uppercase tracking-widest mb-4">Выплаты (USDT)</div>
-            <div class="text-[32px] font-light text-white leading-none japanese-title">{{ stats.total_spend|round(2) }}</div>
+        <div class="premium-card p-8 group">
+            <div class="text-detail mb-6 text-titanium">Total Spend / USDT</div>
+            <div class="text-[40px] number-display text-white leading-none">{{ stats.total_spend|round(2) }}</div>
         </div>
     </div>
 
-    <!-- Таблица -->
-    <div class="bg-white/[0.02] border border-white/5 rounded-[40px] overflow-hidden backdrop-blur-3xl shadow-2xl">
+    <!-- Таблица (Sapphire Architecture) -->
+    <div class="premium-card overflow-hidden">
         <div class="overflow-x-auto">
             <table class="w-full text-left border-collapse premium-table">
                 <thead>
-                    <tr class="border-b border-white/5">
+                    <tr>
                         {% if show_batch_actions %}
-                        <th class="px-8 py-6 w-10">
-                            <input type="checkbox" id="master-checkbox" class="w-4 h-4 bg-white/5 border-white/10 rounded cursor-pointer accent-white" onclick="toggleAll(this)">
+                        <th class="w-10">
+                            <input type="checkbox" id="master-checkbox" class="w-3 h-3 bg-white/5 border-white/10 rounded cursor-pointer accent-white" onclick="toggleAll(this)">
                         </th>
                         {% endif %}
-                        <th class="px-8 py-6 text-[10px] font-bold text-white/30 uppercase tracking-[0.2em]">eSIM / ID</th>
-                        <th class="px-8 py-6 text-[10px] font-bold text-white/30 uppercase tracking-[0.2em]">Номер</th>
-                        <th class="px-8 py-6 text-[10px] font-bold text-white/30 uppercase tracking-[0.2em]">Категория</th>
-                        <th class="px-8 py-6 text-[10px] font-bold text-white/30 uppercase tracking-[0.2em] text-center">Покупатель</th>
-                        <th class="px-8 py-6 text-[10px] font-bold text-white/30 uppercase tracking-[0.2em] text-center">Статус</th>
-                        <th class="px-8 py-6 text-[10px] font-bold text-white/30 uppercase tracking-[0.2em] text-center">Цена</th>
-                        <th class="px-8 py-6 text-[10px] font-bold text-white/30 uppercase tracking-[0.2em] text-right">Действие</th>
+                        <th>eSIM / Node ID</th>
+                        <th>Mobile Identity</th>
+                        <th>Category</th>
+                        <th class="text-center">Buyer</th>
+                        <th class="text-center">Status</th>
+                        <th class="text-center">Rate</th>
+                        <th class="text-right">Action</th>
                     </tr>
                 </thead>
-                <tbody class="divide-y divide-white/[0.02] text-sm font-medium">
+                <tbody class="divide-y divide-white/[0.01] text-[13px] font-light">
                     {% for item in shipments %}
-                    <tr class="hover:bg-white/[0.01] transition-all group">
+                    <tr class="transition-all">
                         {% if show_batch_actions %}
-                        <td class="px-8 py-6 w-10">
-                            <input type="checkbox" name="submission-ids" value="{{ item.id }}" class="sub-checkbox w-4 h-4 bg-white/5 border-white/10 rounded cursor-pointer accent-white" onchange="updateSelection()">
+                        <td>
+                            <input type="checkbox" name="submission-ids" value="{{ item.id }}" class="sub-checkbox w-3 h-3 bg-white/5 border-white/10 rounded cursor-pointer accent-white" onchange="updateSelection()">
                         </td>
                         {% endif %}
-                        <td class="px-8 py-6">
-                            <a href="/gdpx/submission/{{ item.id }}" class="font-mono text-white hover:text-titanium transition-colors">#{{ item.id }}</a>
-                            <div class="text-[10px] text-white/20 mt-1 uppercase tracking-tighter">{{ item.updated_at.strftime('%d.%m.%Y %H:%M') }}</div>
+                        <td>
+                            <a href="/gdpx/submission/{{ item.id }}" class="font-mono text-white hover:steel-text transition-all">#{{ item.id }}</a>
+                            <div class="text-[9px] text-white/10 mt-2 uppercase tracking-tighter">{{ item.updated_at.strftime('%d.%m.%Y %H:%M') }}</div>
                         </td>
-                        <td class="px-8 py-6">
-                            <div class="text-[13px] text-white/90 font-mono">{{ item.phone_normalized or '—' }}</div>
+                        <td>
+                            <div class="font-mono text-white/60 tracking-wider">{{ item.phone_normalized or '—' }}</div>
                         </td>
-                        <td class="px-8 py-6">
-                            <span class="text-[13px] text-white/80 uppercase tracking-wide">{{ item.category.title }}</span>
+                        <td>
+                            <span class="text-white/40 uppercase tracking-widest text-[11px]">{{ item.category.title }}</span>
                         </td>
-                        <td class="px-8 py-6 text-center">
-                            <div class="text-[12px] text-titanium font-bold">@{{ item.buyer.username or item.buyer.telegram_id }}</div>
+                        <td class="text-center">
+                            <div class="text-[12px] text-titanium/80">@{{ item.buyer.username or item.buyer.telegram_id }}</div>
                         </td>
-                        <td class="px-8 py-6 text-center">
+                        <td class="text-center">
                             {% if item.status.value == 'accepted' %}
-                                <span class="px-3 py-1 bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 rounded-lg text-[9px] font-bold uppercase tracking-widest shadow-[0_0_10px_rgba(16,185,129,0.1)]">ЗАЧЁТ</span>
+                                <span class="text-emerald-500 text-[10px] tracking-[0.2em] font-medium uppercase">Secured</span>
                             {% elif item.status.value == 'blocked' %}
-                                <span class="px-3 py-1 bg-red-500/10 text-red-500 border border-red-500/20 rounded-lg text-[9px] font-bold uppercase tracking-widest">БРАК</span>
+                                <span class="text-red-500 text-[10px] tracking-[0.2em] font-medium uppercase">Failed</span>
                             {% elif item.status.value == 'not_a_scan' %}
-                                <span class="px-3 py-1 bg-white/5 text-white/40 border border-white/10 rounded-lg text-[9px] font-bold uppercase tracking-widest">НЕ СКАН</span>
+                                <span class="text-white/20 text-[10px] tracking-[0.2em] font-medium uppercase">No Data</span>
                             {% else %}
-                                <span class="px-3 py-1 bg-titanium/10 text-titanium border border-titanium/20 rounded-lg text-[9px] font-bold uppercase tracking-widest">{{ item.status.value|upper }}</span>
+                                <span class="text-titanium text-[10px] tracking-[0.2em] font-medium uppercase">{{ item.status.value }}</span>
                             {% endif %}
                         </td>
-                        <td class="px-8 py-6 text-center">
-                            <div class="text-[13px] text-white/90 font-mono">{{ item.purchase_price or 0 }} <span class="text-[10px] opacity-20">USDT</span></div>
+                        <td class="text-center">
+                            <div class="font-mono text-white/80">{{ item.purchase_price or 0 }} <span class="text-[9px] opacity-10">USDT</span></div>
                         </td>
-                        <td class="px-8 py-6 text-right">
+                        <td class="text-right">
                             <form action="/gdpx/tickets/create" method="post" class="inline">
                                 <input type="hidden" name="submission_id" value="{{ item.id }}">
-                                <input type="hidden" name="subject" value="Вопрос по eSIM #{{ item.id }}">
-                                <button type="submit" class="p-2.5 bg-white/5 border border-white/10 rounded-xl text-white/20 hover:text-titanium hover:border-titanium hover:bg-titanium/10 transition-all">
-                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/></svg>
+                                <input type="hidden" name="subject" value="Protocol Query eSIM #{{ item.id }}">
+                                <button type="submit" class="w-10 h-10 rounded border border-white/5 inline-flex items-center justify-center text-white/20 hover:text-white hover:bg-white/5 transition-all">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/></svg>
                                 </button>
                             </form>
                         </td>

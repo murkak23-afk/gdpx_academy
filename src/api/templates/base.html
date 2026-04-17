@@ -41,14 +41,13 @@
     
     <style>
         :root {
-            --shibui-black: #08080a;
+            --shibui-black: #0a0a0c;
             --shibui-graphite: #121216;
+            --japanese-red: #ff3b30; /* Киноварь */
             --titanium: #a1a1aa;
             --ice-white: #f8fafc;
-            --platinum: rgba(226, 232, 240, 0.1);
-            --glass-sapphire: rgba(20, 20, 25, 0.75);
-            --glass-border: rgba(255, 255, 255, 0.04);
-            --deep-shadow: 0 50px 100px -20px rgba(0, 0, 0, 0.8);
+            --glass-sapphire: rgba(15, 15, 20, 0.7);
+            --steel-grad: linear-gradient(to bottom, #ffffff 30%, #a0a0a5 100%);
         }
 
         body { 
@@ -59,140 +58,208 @@
             min-height: 100vh; 
             overflow-x: hidden;
             line-height: 1.6;
-            letter-spacing: -0.01em;
         }
 
-        /* КРЕМНИЕВАЯ ГЛУБИНА (Silicon Depth) */
-        .silicon-bg {
+        /* BACKGROUND: SILICON SILK & ARCHITECTURAL ZEN */
+        .background-grid {
             position: fixed; inset: 0;
-            background: radial-gradient(circle at 50% -20%, #16161d 0%, #08080a 100%);
-            z-index: -1;
-        }
-
-        .processor-lines {
-            position: fixed; inset: 0;
+            background-color: #0a0a0c;
             background-image: 
-                linear-gradient(rgba(255, 255, 255, 0.015) 1px, transparent 1px),
-                linear-gradient(90deg, rgba(255, 255, 255, 0.015) 1px, transparent 1px);
-            background-size: 80px 80px;
-            pointer-events: none; z-index: -1;
-            mask-image: radial-gradient(circle at center, black, transparent 80%);
-            opacity: 0.5;
+                linear-gradient(rgba(255, 255, 255, 0.02) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
+            background-size: 100px 100px;
+            z-index: -2;
         }
 
-        /* ТОНИРОВАННЫЙ САПФИР (Sapphire Glass) */
+        /* CURSOR TRACE */
+        .bg-trace {
+            position: fixed; inset: 0;
+            background: radial-gradient(circle at var(--x, 50%) var(--y, 50%), rgba(255,255,255,0.05) 0%, transparent 25%);
+            pointer-events: none; z-index: -1;
+            transition: background 0.1s ease-out;
+        }
+
+        /* CIRCUIT LINES (Abstract Waves) */
+        .circuit-layer {
+            position: fixed; inset: 0; pointer-events: none; z-index: -1; opacity: 0.15;
+        }
+        .circuit-line {
+            position: absolute; width: 1px;
+            background: linear-gradient(to bottom, transparent, #c0c0c0, transparent);
+            transform: rotate(45deg);
+        }
+
+        /* SUMI-E LAYER (Abstract Waves) */
+        .sumie-layer {
+            position: fixed; bottom: 0; right: 0;
+            width: 60%; height: 40%;
+            background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='800' height='400' viewBox='0 0 800 400'%3E%3Cpath d='M0 400 C 150 350, 300 450, 450 400 S 750 350, 800 400 L 800 400 L 0 400 Z' fill='%23ffffff' fill-opacity='0.03'/%3E%3Cpath d='M0 400 C 100 370, 250 420, 400 380 S 700 360, 800 400 L 800 400 L 0 400 Z' fill='%23ffffff' fill-opacity='0.02'/%3E%3C/svg%3E");
+            background-repeat: no-repeat; background-size: cover;
+            opacity: 0.2; pointer-events: none; z-index: -1;
+            mask-image: linear-gradient(to top, black, transparent);
+        }
+
+        /* WATERMARK TEXT */
+        .watermark-text {
+            position: fixed; top: 10%; left: 5%;
+            font-size: 15vw; font-weight: 900; color: transparent;
+            -webkit-text-stroke: 1px rgba(255,255,255,0.02);
+            user-select: none; z-index: -3; letter-spacing: 0.1em;
+            font-family: 'Inter', sans-serif;
+        }
+
+        /* SAPPHIRE GLASS CARDS */
         .premium-card {
             background: var(--glass-sapphire);
-            backdrop-filter: blur(40px) saturate(120%);
-            border-radius: 24px;
-            transition: all 0.6s cubic-bezier(0.22, 1, 0.36, 1);
+            backdrop-filter: blur(25px) saturate(150%);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-top: 1px solid rgba(255, 255, 255, 0.15); /* Razor Edge */
+            border-radius: 4px; /* Shibui Minimalism */
+            box-shadow: 0 30px 60px rgba(0, 0, 0, 0.5);
+            transition: all 0.5s cubic-bezier(0.22, 1, 0.36, 1);
             position: relative;
-            overflow: hidden;
-            box-shadow: var(--deep-shadow);
         }
-
-        /* Градиентная обводка (Титановый верх) */
-        .premium-card::before {
-            content: ""; position: absolute; inset: 0; border-radius: 24px;
-            padding: 1px; 
-            background: linear-gradient(to bottom, rgba(161, 161, 170, 0.2), transparent 40%);
-            -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-            -webkit-mask-composite: xor; mask-composite: exclude;
-            pointer-events: none;
-        }
-
         .premium-card:hover {
-            background: rgba(25, 25, 30, 0.85);
-            transform: translateY(-4px);
-            box-shadow: 0 60px 120px -20px rgba(0, 0, 0, 0.9);
+            background: rgba(20, 20, 25, 0.85);
+            transform: translateY(-2px);
+            border-top-color: rgba(255, 255, 255, 0.3);
         }
 
-        /* Блик при наведении */
-        .premium-card::after {
-            content: ""; position: absolute; top: -50%; left: -50%; width: 200%; height: 200%;
-            background: radial-gradient(circle at center, rgba(255,255,255,0.03) 0%, transparent 70%);
-            opacity: 0; transition: opacity 0.6s ease; pointer-events: none;
+        /* TITANIUM BUTTONS */
+        .titan-button {
+            position: relative; overflow: hidden;
+            background: #1a1a1c; border: 1px solid #333;
+            transition: 0.4s; color: white;
+            letter-spacing: 0.1em; font-weight: 300;
         }
-        .premium-card:hover::after { opacity: 1; }
+        .titan-button::after {
+            content: ''; position: absolute; top: -50%; left: -50%;
+            width: 200%; height: 200%;
+            background: linear-gradient(45deg, transparent, rgba(255,255,255,0.08), transparent);
+            transform: rotate(45deg) translateX(-100%); transition: 0.8s;
+        }
+        .titan-button:hover::after { transform: rotate(45deg) translateX(100%); }
+        .titan-button:hover { border-color: rgba(255, 255, 255, 0.4); }
 
-        /* Линии-связи (Kintsugi Aesthetic) */
-        .kintsugi-line {
-            position: absolute; height: 1px;
-            background: linear-gradient(90deg, transparent, var(--platinum), transparent);
-            width: 100%; opacity: 0.3;
+        /* RISING SUN INDICATOR */
+        .status-node {
+            width: 8px; height: 8px;
+            background-color: var(--japanese-red);
+            border-radius: 50%;
+            box-shadow: 0 0 15px var(--japanese-red);
+            animation: breathing 4s ease-in-out infinite;
+        }
+        @keyframes breathing {
+            0%, 100% { opacity: 0.4; transform: scale(0.9); }
+            50% { opacity: 1; transform: scale(1.15); }
         }
 
-        .gas-point {
-            width: 4px; h-4px; background: white; border-radius: 50%;
-            box-shadow: 0 0 15px white;
-            animation: gas-pulse 4s infinite ease-in-out;
-        }
-        @keyframes gas-pulse {
-            0%, 100% { opacity: 0.2; transform: scale(1); }
-            50% { opacity: 0.6; transform: scale(1.2); }
-        }
-
-        /* Типографика (Swiss Precision) */
-        .text-detail {
-            font-size: 10px; font-weight: 600; text-transform: uppercase;
-            letter-spacing: 0.15em; color: var(--titanium);
+        /* DESIGNED IN TOKYO TYPOGRAPHY */
+        .premium-text {
+            font-family: 'Inter', sans-serif;
+            font-weight: 200;
+            letter-spacing: 0.15em;
+            text-transform: uppercase;
+            color: rgba(255, 255, 255, 0.85);
         }
         
-        .number-display {
-            font-weight: 100; letter-spacing: -0.02em;
+        .steel-text {
+            background: var(--steel-grad);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            font-weight: 300;
+        }
+
+        .text-detail {
+            font-size: 10px; font-weight: 500; text-transform: uppercase;
+            letter-spacing: 0.2em; color: var(--titanium);
+            opacity: 0.6;
         }
 
         .sidebar-active { 
             background: rgba(255, 255, 255, 0.03);
             color: white !important;
-            border-left: 2px solid white;
+            border-right: 2px solid var(--japanese-red);
         }
 
         .glass-panel {
-            background: rgba(8, 8, 10, 0.8);
+            background: rgba(10, 10, 12, 0.95);
             backdrop-filter: blur(40px);
         }
 
+        /* TABLES & LISTS */
         .premium-table {
             width: 100%; border-collapse: collapse;
         }
         .premium-table tr {
             border-bottom: 1px solid rgba(255, 255, 255, 0.02);
-            transition: background 0.3s ease;
+            transition: all 0.3s ease;
         }
         .premium-table tr:hover { background: rgba(255, 255, 255, 0.01); }
-        .premium-table th, .premium-table td { padding: 20px 24px; }
-
-        .fade-in { animation: fadeIn 0.8s cubic-bezier(0.22, 1, 0.36, 1); }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-
-        .japanese-title { 
-            font-weight: 700; letter-spacing: -0.02em;
+        .premium-table th { 
+            padding: 24px; text-align: left; 
+            font-size: 9px; text-transform: uppercase; 
+            letter-spacing: 0.2em; color: var(--titanium);
         }
+        .premium-table td { padding: 24px; }
+
+        .fade-in { animation: fadeIn 1s cubic-bezier(0.22, 1, 0.36, 1); }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+        .japanese-title { font-weight: 700; letter-spacing: -0.02em; }
 
         /* Custom Scrollbar */
-        ::-webkit-scrollbar { width: 2px; }
+        ::-webkit-scrollbar { width: 1px; }
         ::-webkit-scrollbar-track { background: transparent; }
-        ::-webkit-scrollbar-thumb { background: var(--titanium); opacity: 0.2; }
+        ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); }
     </style>
+    
+    <!-- INK BLEED FILTER -->
+    <svg style="position: absolute; width: 0; height: 0;" aria-hidden="true" focusable="false">
+        <filter id="ink-bleed">
+            <feGaussianBlur in="SourceGraphic" stdDeviation="1.5" result="blur" />
+            <feColorMatrix in="blur" mode="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 18 -7" />
+        </filter>
+    </svg>
 </head>
 <body class="min-h-screen pt-12">
-    <!-- SHIBUI BACKGROUND -->
-    <div class="silicon-bg"></div>
-    <div class="processor-lines"></div>
+    <!-- JAPANCORE FOUNDATION -->
+    <div class="background-grid"></div>
+    <div class="bg-trace"></div>
+    <div class="sumie-layer"></div>
+    <div class="watermark-text">GDPX</div>
+    <div class="circuit-layer" id="circuit-layer"></div>
 
-    <!-- Ticker (Minimalist) -->
-    <div class="fixed top-0 left-0 w-full h-8 bg-black/40 backdrop-blur-md border-b border-white/5 z-[1000] flex align-center">
-        <div class="ticker-content flex items-center px-6 text-[9px] font-medium tracking-[0.2em] text-white/30 uppercase" id="ticker-feed">
-            GDPX INTERNAL NETWORK // SYSTEM STATUS: OPTIMAL // ENCRYPTED NODE 04 // 
+    <!-- Ticker (Ultra Minimal) -->
+    <div class="fixed top-0 left-0 w-full h-10 bg-black/60 backdrop-blur-xl border-b border-white/5 z-[1000] flex items-center px-10">
+        <div class="ticker-content flex items-center gap-6 text-[9px] font-medium tracking-[0.3em] text-white/30 uppercase" id="ticker-feed">
+            <div class="status-node"></div>
+            <span>System Node: Secured // GDPX Protocol v3.8 // Tokyo Hub</span>
         </div>
     </div>
 
     <script>
-        // Letter Spacing for details
-        document.addEventListener('DOMContentLoaded', () => {
-            document.querySelectorAll('.text-detail').forEach(el => el.style.letterSpacing = '0.15em');
+        // Cursor Trace Logic
+        window.addEventListener('mousemove', e => {
+            document.documentElement.style.setProperty('--x', e.clientX + 'px');
+            document.documentElement.style.setProperty('--y', e.clientY + 'px');
         });
+
+        // Circuit Lines Generator
+        function generateCircuits() {
+            const layer = document.getElementById('circuit-layer');
+            if (!layer) return;
+            for(let i=0; i<15; i++) {
+                const line = document.createElement('div');
+                line.className = 'circuit-line';
+                line.style.height = (Math.random() * 400 + 100) + 'px';
+                line.style.left = (Math.random() * 100) + 'vw';
+                line.style.top = (Math.random() * 100) + 'vh';
+                line.style.opacity = Math.random() * 0.3;
+                layer.appendChild(line);
+            }
+        }
+        generateCircuits();
     </script>
 
     <div class="relative z-10 flex min-h-screen w-full">

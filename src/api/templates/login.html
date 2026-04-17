@@ -3,72 +3,68 @@
 {% block title %}GDPX // AUTHORIZATION{% endblock %}
 
 {% block content %}
-<div class="fixed inset-0 bg-[#050508] flex flex-col justify-center items-center p-4 z-[100] overflow-hidden">
-    
-    <!-- Атмосферный фон (Градиенты) -->
-    <div class="absolute inset-0 z-0 pointer-events-none select-none">
-        <div class="absolute inset-0 bg-[radial-gradient(circle_at_50%_40%,#1e1b4b,transparent)] opacity-60"></div>
-        <div class="absolute top-0 left-0 w-full h-full bg-[url('https://www.transparenttextures.com/patterns/stardust.png')] opacity-20"></div>
+<!-- PRELOADER ASSEMBLY CHIP -->
+<div id="preloader" class="fixed inset-0 z-[200] bg-[#0a0a0c] flex items-center justify-center transition-opacity duration-1000">
+    <div class="w-32 h-32 relative">
+        <svg class="w-full h-full" viewBox="0 0 100 100">
+            <path class="line-trace" d="M0,0 L40,40 M100,0 L60,40 M0,100 L40,60 M100,100 L60,60" fill="none" />
+            <rect class="chip-core" x="40" y="40" width="20" height="20" fill="none" />
+        </svg>
     </div>
+</div>
 
-    <!-- Основной контейнер (Modern Premium) -->
-    <div class="relative z-10 w-full max-w-[440px] fade-in">
+<div class="fixed inset-0 flex flex-col justify-center items-center p-4 z-[100] overflow-hidden">
+    <!-- Основной контейнер (Sapphire Glass Architecture) -->
+    <div class="relative z-10 w-full max-w-[460px] fade-in">
         
-        <div class="premium-card p-10 sm:p-14 text-center group">
+        <div class="premium-card p-12 sm:p-16 text-center group">
             
-            <div class="mb-12 relative">
-                <!-- Декоративное свечение за логотипом -->
-                <div class="absolute inset-0 bg-gdpx-cyan/20 blur-[60px] rounded-full scale-0 group-hover:scale-100 transition-transform duration-1000"></div>
-                
-                <!-- Эволюция Логотипа -->
-                <div class="relative w-56 h-auto mx-auto logo-manifestation-container group/logo">
-                    <!-- Черный силуэт (Базовый) -->
-                    <img src="/assets/logoteep.png" class="w-full h-auto transition-all duration-1000 group-hover/logo:opacity-30 group-hover/logo:blur-[2px]" alt="GDPX">
-                    <!-- Детализированная версия (Проявляющаяся) -->
-                    <img src="/assets/logoteep1.png" class="absolute inset-0 w-full h-auto opacity-0 scale-95 blur-md transition-all duration-1000 group-hover/logo:opacity-100 group-hover/logo:scale-100 group-hover/logo:blur-0 drop-shadow-[0_0_25px_rgba(0,245,255,0.4)]" alt="GDPX Detailed">
+            <div class="mb-14 relative">
+                <!-- Эволюция Логотипа (Tokyo Precision) -->
+                <div class="relative w-48 h-auto mx-auto group/logo">
+                    <img src="/assets/logoteep.png" class="w-full h-auto opacity-20 grayscale transition-all duration-1000 group-hover/logo:opacity-10 group-hover/logo:blur-[4px]" alt="GDPX">
+                    <img src="/assets/logoteep1.png" class="absolute inset-0 w-full h-auto opacity-0 scale-95 blur-md transition-all duration-1000 group-hover/logo:opacity-100 group-hover/logo:scale-100 group-hover/logo:blur-0 drop-shadow-[0_0_20px_rgba(255,255,255,0.1)]" alt="GDPX Detailed">
                 </div>
 
-                <h2 class="text-[32px] font-black text-white mt-10 tracking-tighter japanese-title neon-text-gradient">Вход в систему</h2>
-                <div class="flex items-center justify-center gap-2 mt-2">
-                    <span class="w-8 h-[1px] bg-white/10"></span>
-                    <p class="text-white/30 text-[9px] uppercase tracking-[0.4em]">Protocol Activated</p>
-                    <span class="w-8 h-[1px] bg-white/10"></span>
+                <h2 class="text-[36px] font-extralight text-white mt-12 tracking-[-0.04em] japanese-title steel-text">GDPX ACCESS</h2>
+                <div class="flex items-center justify-center gap-4 mt-4">
+                    <span class="w-12 h-[1px] bg-white/5"></span>
+                    <p class="text-white/20 text-[9px] uppercase tracking-[0.5em] font-medium">Protocol Layer 04</p>
+                    <span class="w-12 h-[1px] bg-white/5"></span>
                 </div>
             </div>
 
             <!-- ФОРМА -->
-            <form action="/auth/login" method="POST"  class="flex flex-col gap-6">
+            <form action="/auth/login" method="POST"  class="flex flex-col gap-8">
                 
-                <div class="space-y-3 text-left">
-                    <label class="text-[9px] font-black text-white/20 uppercase tracking-[0.3em] ml-6">Access Identity</label>
+                <div class="space-y-4 text-left">
+                    <label class="text-[9px] font-bold text-white/10 uppercase tracking-[0.4em] ml-2">Access Identity</label>
                     <div class="relative group/input">
                         <input type="text" name="login" required autocomplete="off"
-                               class="w-full bg-white/[0.02] border border-white/5 rounded-2xl px-8 py-5 outline-none focus:border-gdpx-cyan/50 focus:bg-white/[0.04] text-white placeholder:text-white/5 transition-all" 
+                               class="w-full bg-white/[0.01] border border-white/5 rounded-lg px-8 py-5 outline-none focus:border-white/20 focus:bg-white/[0.03] text-white placeholder:text-white/5 transition-all font-light tracking-widest uppercase" 
                                placeholder="USERNAME / ID">
-                        <div class="absolute inset-0 border border-gdpx-cyan/0 rounded-2xl group-hover/input:border-white/10 pointer-events-none transition-all"></div>
                     </div>
                 </div>
 
-                <div class="space-y-3 text-left">
-                    <label class="text-[9px] font-black text-white/20 uppercase tracking-[0.3em] ml-6">Security Cipher</label>
+                <div class="space-y-4 text-left">
+                    <label class="text-[9px] font-bold text-white/10 uppercase tracking-[0.4em] ml-2">Security Cipher</label>
                     <div class="relative group/input">
                         <input type="password" name="password" required 
-                               class="w-full bg-white/[0.02] border border-white/5 rounded-2xl px-8 py-5 outline-none focus:border-gdpx-sakura/50 focus:bg-white/[0.04] text-white placeholder:text-white/5 transition-all" 
+                               class="w-full bg-white/[0.01] border border-white/5 rounded-lg px-8 py-5 outline-none focus:border-white/20 focus:bg-white/[0.03] text-white placeholder:text-white/5 transition-all" 
                                placeholder="••••••••">
-                        <div class="absolute inset-0 border border-gdpx-sakura/0 rounded-2xl group-hover/input:border-white/10 pointer-events-none transition-all"></div>
                     </div>
                 </div>
 
                 <div id="error-container" class="min-h-[20px]"></div>
                 
                 <button type="submit" 
-                        class="w-full h-[64px] rounded-2xl font-black text-white text-[13px] tracking-[0.3em] uppercase bg-white/5 border border-white/10 hover:bg-gdpx-cyan hover:text-black hover:border-gdpx-cyan shadow-2xl transition-all active:scale-[0.97] mt-4">
+                        class="titan-button w-full h-[70px] rounded-lg font-light text-white text-[12px] tracking-[0.4em] uppercase shadow-2xl transition-all active:scale-[0.98] mt-4">
                     Авторизоваться
                 </button>
             </form>
 
-            <div class="mt-10 opacity-20">
-                <p class="text-[9px] font-mono tracking-widest text-white uppercase">NXS.OS v3.0 // HIGH-END OPERATIONAL CORE</p>
+            <div class="mt-12 opacity-10">
+                <p class="text-[8px] font-mono tracking-[0.4em] text-white uppercase">Operational Core // Tokyo Design // GDPX v3.8</p>
             </div>
         </div>
     </div>
@@ -76,7 +72,22 @@
 
 <style>
     /* Скрываем интерфейс дашборда на странице логина */
-    aside, header, .cyber-ticker { display: none !important; }
+    aside, header, .fixed.top-0 { display: none !important; }
     main { padding: 0 !important; margin: 0 !important; width: 100vw !important; height: 100vh !important; display: flex !important; align-items: center; justify-content: center; background: transparent !important; }
+    
+    .line-trace { stroke: #c0c0c0; stroke-width: 0.5; stroke-dasharray: 100; animation: trace 1.5s ease-out forwards; }
+    .chip-core { fill: none; stroke: var(--japanese-red); opacity: 0; animation: appear 0.5s 1s forwards; stroke-width: 0.5; }
+    @keyframes trace { from { stroke-dashoffset: 100; } to { stroke-dashoffset: 0; } }
+    @keyframes appear { from { opacity: 0; transform: scale(0.8); } to { opacity: 1; transform: scale(1); } }
 </style>
+
+<script>
+    window.addEventListener('load', () => {
+        setTimeout(() => {
+            const preloader = document.getElementById('preloader');
+            preloader.style.opacity = '0';
+            setTimeout(() => preloader.style.display = 'none', 1000);
+        }, 1500);
+    });
+</script>
 {% endblock %}

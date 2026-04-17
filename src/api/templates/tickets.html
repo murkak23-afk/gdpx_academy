@@ -4,32 +4,32 @@
 {% block title %}GDPX // SUPPORT CENTER{% endblock %}
 
 {% block content %}
-<div class="space-y-10 fade-in">
+<div class="space-y-12 fade-in duration-1000">
     <!-- Header -->
-    <div class="flex justify-between items-end">
+    <div class="flex flex-col md:flex-row justify-between items-start md:items-end gap-8">
         <div>
-            <div class="text-[10px] text-titanium font-bold tracking-[0.4em] uppercase mb-3 opacity-80">Support Center</div>
-            <h1 class="text-[36px] font-bold text-white japanese-title leading-none">Чат / Тикеты</h1>
-            <p class="text-white/40 mt-4 font-medium tracking-[0.1em] uppercase text-[11px] opacity-60">Оперативная поддержка и обсуждение активов</p>
+            <div class="text-detail mb-4">Support Center / Hub Comms</div>
+            <h1 class="text-[56px] font-extralight text-white tracking-[-0.04em] leading-none steel-text uppercase">Comms Node</h1>
+            <p class="text-titanium mt-6 font-light tracking-[0.2em] uppercase text-[9px] opacity-40 max-w-md">Real-time protocol support and asset discourse streams.</p>
         </div>
     </div>
 
     <!-- Ticket Grid -->
     {% if tickets %}
-    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-12">
         {% for ticket in tickets %}
             {{ cards.ticket_card(ticket) }}
         {% endfor %}
     </div>
     {% else %}
-    <div class="flex flex-col items-center justify-center py-32 text-center premium-card">
-        <div class="w-20 h-20 bg-white/5 rounded-full flex items-center justify-center mb-6 border border-white/10 shadow-[0_0_30px_rgba(0,0,0,0.5)]">
-            <svg class="w-10 h-10 text-white/20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
+    <div class="flex flex-col items-center justify-center py-40 text-center premium-card">
+        <div class="w-20 h-20 rounded border border-white/5 flex items-center justify-center mb-10 opacity-10">
+            <svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
             </svg>
         </div>
-        <h3 class="text-xl font-bold text-white uppercase tracking-widest japanese-title">Тикетов пока нет</h3>
-        <p class="text-white/20 max-w-sm mx-auto mt-4 text-sm font-medium">Когда появятся активные обсуждения, они отобразятся здесь.</p>
+        <h3 class="text-[14px] font-light text-white uppercase tracking-[0.4em] opacity-40">No active streams detected</h3>
+        <p class="text-titanium max-w-sm mx-auto mt-6 text-[10px] font-light tracking-widest uppercase opacity-20">All communication channels are currently idle.</p>
     </div>
     {% endif %}
 </div>

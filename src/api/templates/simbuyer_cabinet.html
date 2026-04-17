@@ -3,64 +3,63 @@
 {% block title %}SIMBUYER CABINET // GDPX{% endblock %}
 
 {% block content %}
-<div class="space-y-12 fade-in">
+<div class="space-y-16 fade-in duration-1000">
     
     <!-- Заголовок -->
-    <div class="flex flex-col md:flex-row justify-between items-start md:items-end gap-6">
+    <div class="flex flex-col md:flex-row justify-between items-start md:items-end gap-8">
         <div>
-            <div class="text-[10px] text-gdpx-sakura font-bold tracking-[0.4em] uppercase mb-3 opacity-80">Account Control</div>
-            <h1 class="text-[42px] font-bold tracking-tight text-white leading-none japanese-title">Кабинет: {{ target.username or target.id }}</h1>
-            <p class="text-gdpx-silver mt-4 font-medium tracking-[0.15em] uppercase text-[11px] opacity-60">
-                Настройка индивидуальных условий и доступа для СИМбайера.
+            <div class="text-detail mb-4">Personnel / Account Configuration</div>
+            <h1 class="text-[56px] font-extralight text-white tracking-[-0.04em] leading-none steel-text uppercase">Cabinet: {{ target.username or target.id }}</h1>
+            <p class="text-titanium mt-6 font-light tracking-[0.2em] uppercase text-[9px] opacity-40 max-w-md leading-relaxed">
+                Customizing individual protocols and pricing tiers for node operator.
             </p>
         </div>
-        <a href="/gdpx/users" class="px-6 py-3 bg-white/5 border border-white/10 rounded-xl text-[10px] font-bold text-white/40 uppercase tracking-widest hover:text-white hover:bg-white/10 transition-all">
-            ← Назад к списку
+        <a href="/gdpx/users" class="w-14 h-14 rounded border border-white/5 flex items-center justify-center text-white/20 hover:text-white hover:bg-white/5 transition-all">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M10 19l-7-7m0 0l7-7m-7 7h18"/></svg>
         </a>
     </div>
 
-    <form action="/gdpx/users/{{ target.id }}/cabinet/config" method="post" class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+    <form action="/gdpx/users/{{ target.id }}/cabinet/config" method="post" class="grid grid-cols-1 lg:grid-cols-3 gap-12">
         
         <!-- Секция 1: Доступ к Web GDPX -->
-        <div class="lg:col-span-1 space-y-8">
-            <!-- ДЕПОЗИТНЫЙ КОНТРОЛЬ (Улучшение #3) -->
-            <div class="premium-card p-10 relative overflow-hidden bg-emerald-500/5 border-emerald-500/20">
-                <div class="absolute -right-4 -bottom-4 text-[100px] font-bold text-emerald-500/[0.03] japanese-title">預</div>
-                <div class="text-emerald-500 font-bold text-[10px] tracking-[0.3em] uppercase mb-8 opacity-60">Deposit Control</div>
+        <div class="lg:col-span-1 space-y-10">
+            <!-- ДЕПОЗИТНЫЙ КОНТРОЛЬ -->
+            <div class="premium-card p-10 relative overflow-hidden group">
+                <div class="absolute -right-4 -bottom-4 text-[120px] font-bold text-white/[0.01] japanese-title">預</div>
+                <div class="text-detail mb-10 opacity-30">Deposit Control</div>
                 <div>
-                    <div class="text-[42px] font-light text-white japanese-title leading-none">{{ daily_volume }}</div>
-                    <div class="text-[12px] text-emerald-500/60 font-bold tracking-widest uppercase mt-2">USDT / Today</div>
+                    <div class="text-[64px] number-display text-white leading-none group-hover:steel-text transition-all">{{ daily_volume }}</div>
+                    <div class="text-detail text-[8px] mt-4 opacity-40">USDT / Current Session</div>
                 </div>
-                <p class="mt-6 text-[11px] text-gdpx-silver opacity-40 leading-relaxed italic">
-                    Сумма всех выданных и принятых активов за текущие сутки.
+                <p class="mt-8 text-[10px] text-titanium opacity-20 font-light leading-relaxed italic">
+                    Aggregate value of all issued and secured assets in Tokyo Hub.
                 </p>
             </div>
 
             <div class="premium-card p-10">
-                <div class="text-gdpx-cyan font-bold text-[10px] tracking-[0.3em] uppercase mb-8 opacity-60">Web Access</div>
-                <h3 class="text-[20px] font-bold text-white mb-8 japanese-title">Учетные данные</h3>
+                <div class="text-detail mb-10 opacity-30">Security Credentials</div>
                 
-                <div class="space-y-6">
+                <div class="space-y-8">
                     <div>
-                        <label class="text-[10px] font-bold text-white/30 uppercase tracking-[0.2em] mb-2 block">Логин</label>
+                        <label class="text-detail text-[8px] mb-3 block opacity-20">Access Identity</label>
                         <input type="text" name="login" value="{{ web_acc.login if web_acc else '' }}" 
-                               placeholder="Придумайте логин"
-                               class="w-full bg-white/5 border border-white/10 rounded-xl px-5 py-3.5 text-white focus:outline-none focus:border-gdpx-cyan/50 transition-all">
+                               placeholder="Set Login Identity"
+                               class="w-full bg-white/[0.01] border border-white/5 rounded px-6 py-4 text-white font-light focus:outline-none focus:border-white/20 transition-all text-sm tracking-widest uppercase">
                     </div>
                     <div>
-                        <label class="text-[10px] font-bold text-white/30 uppercase tracking-[0.2em] mb-2 block">Новый пароль</label>
+                        <label class="text-detail text-[8px] mb-3 block opacity-20">Encryption Cipher</label>
                         <input type="password" name="password" placeholder="••••••••"
-                               class="w-full bg-white/5 border border-white/10 rounded-xl px-5 py-3.5 text-white focus:outline-none focus:border-gdpx-cyan/50 transition-all">
-                        <p class="text-[9px] text-white/20 mt-2 italic">Оставьте пустым, если не хотите менять</p>
+                               class="w-full bg-white/[0.01] border border-white/5 rounded px-6 py-4 text-white font-light focus:outline-none focus:border-white/20 transition-all text-sm">
+                        <p class="text-[8px] text-white/10 mt-3 italic">Leave null to maintain current cipher</p>
                     </div>
                 </div>
             </div>
 
-            <div class="premium-card p-10 bg-gdpx-sakura/5 border-gdpx-sakura/20">
-                <div class="text-gdpx-sakura font-bold text-[10px] tracking-[0.3em] uppercase mb-4">Danger Zone</div>
-                <p class="text-[11px] text-gdpx-silver opacity-60 mb-6">Изменения вступают в силу мгновенно. СИМбайер получит доступ к панели с этими данными.</p>
-                <button type="submit" class="w-full py-4 bg-gdpx-sakura text-white rounded-xl font-bold text-[12px] tracking-widest uppercase hover:shadow-[0_0_20px_rgba(255,0,234,0.4)] transition-all">
-                    Сохранить настройки
+            <div class="premium-card p-10 border-red-500/10">
+                <div class="text-detail text-red-500/40 mb-6 uppercase">Termination / Update</div>
+                <p class="text-[10px] text-titanium font-light opacity-30 mb-8 leading-relaxed">Immediate protocol synchronization. Changes apply to all node connections instantly.</p>
+                <button type="submit" class="titan-button w-full py-5 rounded text-white text-[11px] tracking-[0.3em] uppercase">
+                    Save Protocol
                 </button>
             </div>
         </div>
@@ -68,35 +67,35 @@
         <!-- Секция 2: Ценовая политика -->
         <div class="lg:col-span-2">
             <div class="premium-card p-10">
-                <div class="flex justify-between items-center mb-8">
+                <div class="flex justify-between items-center mb-12">
                     <div>
-                        <div class="text-gdpx-cyan font-bold text-[10px] tracking-[0.3em] uppercase mb-1 opacity-60">Pricing Policy</div>
-                        <h3 class="text-[24px] font-bold text-white japanese-title">Цены по категориям</h3>
+                        <div class="text-detail mb-2 opacity-30">Tier Configuration</div>
+                        <h3 class="text-[20px] font-light text-white uppercase tracking-[0.1em] steel-text">Pricing Matrix</h3>
                     </div>
-                    <div class="text-[10px] text-white/20 font-mono">CURRENCY: USDT</div>
+                    <div class="text-detail text-[8px] opacity-10">Node Base: USDT</div>
                 </div>
 
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                     {% for cat in categories %}
-                    <div class="p-6 bg-white/[0.02] border border-white/5 rounded-2xl flex items-center justify-between group hover:border-white/10 transition-all">
+                    <div class="p-8 bg-white/[0.01] border border-white/5 rounded flex items-center justify-between group hover:bg-white/[0.02] transition-all">
                         <div>
-                            <div class="text-[14px] font-bold text-white mb-1 uppercase tracking-wide">{{ cat.title }}</div>
-                            <div class="text-[9px] text-white/20 uppercase tracking-widest font-medium">Operator / Type</div>
+                            <div class="text-[14px] font-light text-white mb-2 uppercase tracking-widest group-hover:steel-text transition-all">{{ cat.title }}</div>
+                            <div class="text-detail text-[8px] opacity-20 uppercase">Operator Identity</div>
                         </div>
                         <div class="relative">
                             <input type="number" step="0.01" name="price_{{ cat.id }}" 
                                    value="{{ prices_map.get(cat.id, '') }}" 
                                    placeholder="0.00"
-                                   class="w-24 bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-right text-gdpx-cyan font-bold focus:outline-none focus:border-gdpx-cyan transition-all">
+                                   class="w-28 bg-transparent border-b border-white/5 px-2 py-1 text-right text-white font-mono text-lg focus:outline-none focus:border-white/30 transition-all">
                         </div>
                     </div>
                     {% endfor %}
                 </div>
 
-                <div class="mt-8 p-6 bg-white/[0.01] border border-dashed border-white/10 rounded-2xl">
-                    <p class="text-[11px] text-gdpx-silver opacity-40 leading-relaxed italic">
-                        * Если цена не указана, СИМбайер не сможет подтверждать заявки этой категории через GDPX. 
-                        Цены указываются за 1 единицу актива.
+                <div class="mt-10 p-8 border border-dashed border-white/5 rounded opacity-20">
+                    <p class="text-[10px] text-titanium font-light leading-relaxed italic">
+                        * Incomplete price tiers will restrict the operator from securing assets in those specific categories via Tokyo Control Panel. 
+                        Rates are calculated per single asset unit.
                     </p>
                 </div>
             </div>

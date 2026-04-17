@@ -3,107 +3,91 @@
 {% block title %}Управление пользователями{% endblock %}
 
 {% block content %}
-<div class="space-y-8 animate-in fade-in duration-500">
+<div class="space-y-12 fade-in duration-1000">
     
     <!-- Заголовок -->
-    <div class="flex justify-between items-end">
+    <div class="flex flex-col md:flex-row justify-between items-start md:items-end gap-8">
         <div>
-            <h1 class="text-[32px] font-semibold text-white tracking-tight drop-shadow-[0_0_10px_rgba(0,217,255,0.3)]">
-                Управление Покупателями
-            </h1>
-            <p class="text-gdpx-cyan mt-2 font-medium tracking-wider">
-                Настройка индивидуальных условий и личных кабинетов СИМбайеров
-            </p>
+            <div class="text-detail mb-4">Personnel / Access Control</div>
+            <h1 class="text-[56px] font-extralight text-white tracking-[-0.04em] leading-none steel-text uppercase">Identity Hub</h1>
+            <p class="text-titanium mt-6 font-light tracking-[0.2em] uppercase text-[9px] opacity-40 max-w-md">Managing node operators and individual protocol permissions across the network.</p>
         </div>
-        <div class="flex gap-3">
-            <button onclick="openCreateUserModal()" class="px-5 py-2.5 bg-gradient-to-r from-gdpx-cyan to-gdpx-sakura rounded-xl text-sm font-bold text-white shadow-lg shadow-blue-500/20 active:scale-95 transition-all">
-                + НОВЫЙ ПОКУПАТЕЛЬ
+        <div class="flex gap-4">
+            <button onclick="openCreateUserModal()" class="titan-button px-10 py-4 rounded text-[10px] uppercase tracking-widest shadow-2xl">
+                Deploy New Identity
             </button>
         </div>
     </div>
 
     <!-- Поиск -->
-    <div class="bg-white/5 border border-white/10 rounded-2xl p-4">
-        <form action="/gdpx/owner/buyers" method="get" class="flex gap-4">
-            <div class="relative flex-1">
-                <span class="absolute left-5 top-1/2 -translate-y-1/2 text-white/20">
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
-                </span>
-                <input type="text" name="q" value="{{ search_query }}" placeholder="Поиск по ID, @username или имени..." 
-                       class="w-full bg-white/5 border border-white/10 rounded-xl pl-12 pr-6 py-3 text-sm text-white focus:outline-none focus:border-gdpx-cyan/50 transition-all">
-            </div>
-            <button type="submit" class="px-8 py-3 bg-white/5 border border-white/10 rounded-xl text-sm font-bold text-white hover:bg-white/10 transition-all uppercase tracking-widest">
-                Найти
+    <div class="bg-white/[0.01] border border-white/5 rounded p-6">
+        <form action="/gdpx/owner/buyers" method="get" class="flex gap-6">
+            <input type="text" name="q" value="{{ search_query }}" placeholder="Search by ID, @identity or moniker..." 
+                   class="flex-1 bg-transparent border-b border-white/5 px-6 py-4 text-white font-light focus:outline-none focus:border-white/20 transition-all text-sm tracking-widest uppercase">
+            <button type="submit" class="titan-button px-10 py-4 rounded text-[10px] uppercase tracking-widest">
+                Search
             </button>
             {% if search_query %}
-                <a href="/gdpx/users" class="px-8 py-3 border border-white/10 rounded-xl text-sm font-bold text-white/40 hover:text-white transition-all uppercase tracking-widest flex items-center">
-                    Сброс
+                <a href="/gdpx/users" class="titan-button px-10 py-4 rounded text-[10px] uppercase tracking-widest opacity-20 hover:opacity-100">
+                    Reset
                 </a>
             {% endif %}
         </form>
     </div>
 
     <!-- Таблица пользователей -->
-    <div class="overflow-x-auto fade-in">
-        <table class="premium-table">
-            <thead class="text-[11px] font-semibold text-white/40 uppercase tracking-[0.2em]">
-                <tr>
-                    <th class="text-left">Пользователь</th>
-                    <th class="text-center">Telegram ID</th>
-                    <th class="text-center">Роль</th>
-                    <th class="text-center">Регистрация</th>
-                    <th class="text-right">Действия</th>
-                </tr>
-            </thead>
-            <tbody class="text-sm">
+    <div class="premium-card overflow-hidden">
+        <div class="overflow-x-auto">
+            <table class="w-full text-left border-collapse premium-table">
+                <thead>
+                    <tr>
+                        <th>Identity Node</th>
+                        <th class="text-center">Protocol ID</th>
+                        <th class="text-center">Access Tier</th>
+                        <th class="text-center">Logged At</th>
+                        <th class="text-right">Command</th>
+                    </tr>
+                </thead>
+                <tbody class="text-[13px] font-light">
                     {% for u in all_users %}
-                    <tr class="hover:bg-white/5 transition-colors duration-300 group">
-                        <td class="px-8 py-5">
-                            <div class="flex items-center gap-4">
-                                <div class="w-10 h-10 rounded-full bg-gradient-to-br from-gdpx-cyan/20 to-gdpx-sakura/20 border border-white/10 flex items-center justify-center">
-                                    <span class="text-white font-bold text-[14px]">{{ u.full_name[0]|upper }}</span>
+                    <tr class="transition-all group">
+                        <td>
+                            <div class="flex items-center gap-6">
+                                <div class="w-10 h-10 rounded border border-white/5 flex items-center justify-center text-white/20 font-light text-[10px]">
+                                    {{ u.full_name[0]|upper }}
                                 </div>
                                 <div>
-                                    <div class="text-[15px] font-bold text-white tracking-wide">{{ u.full_name }}</div>
-                                    <div class="text-[11px] text-gdpx-cyan/60 mt-0.5 tracking-wider">@{{ u.username or 'No Username' }}</div>
+                                    <div class="text-white group-hover:steel-text transition-all tracking-wide font-light">{{ u.full_name }}</div>
+                                    <div class="text-[9px] text-white/10 mt-2 tracking-widest uppercase">@{{ u.username or 'NULL' }}</div>
                                 </div>
                             </div>
                         </td>
-                        <td class="px-8 py-5 text-center">
-                            <span class="font-mono text-white/40 text-[12px]">{{ u.telegram_id }}</span>
-                        </td>
-                        <td class="px-8 py-5 text-center">
-                            {% set role_class = "border-white/10 text-white/40" %}
-                            {% if u.role == 'owner' %}{% set role_class = "border-amber-500/30 bg-amber-500/10 text-amber-500 shadow-[0_0_10px_rgba(245,158,11,0.1)]" %}
-                            {% elif u.role == 'admin' %}{% set role_class = "border-purple-500/30 bg-purple-500/10 text-purple-400" %}
-                            {% elif u.role == 'seller' %}{% set role_class = "border-gdpx-cyan/30 bg-gdpx-cyan/10 text-gdpx-cyan" %}
-                            {% endif %}
-                            <span class="px-3 py-1 text-[10px] border rounded-lg uppercase tracking-widest font-bold {{ role_class }}">
+                        <td class="text-center font-mono text-white/20 text-[11px]">{{ u.telegram_id }}</td>
+                        <td class="text-center">
+                            <span class="text-[10px] tracking-[0.2em] font-medium uppercase text-white/40">
                                 {{ u.role }}
                             </span>
                         </td>
-                        <td class="px-8 py-5 text-center">
-                            <span class="text-white/30 text-[12px]">{{ u.created_at.strftime('%d.%m.%Y') }}</span>
-                        </td>
-                        <td class="px-8 py-5 text-right">
-                            <div class="flex justify-end gap-2">
-                                <a href="/gdpx/users/{{ u.id }}/cabinet" class="px-4 py-2 bg-gdpx-cyan/10 border border-gdpx-cyan/20 rounded-lg text-[11px] font-bold text-gdpx-cyan uppercase tracking-widest hover:bg-gdpx-cyan/20 transition-all">
-                                    Кабинет
+                        <td class="text-center text-white/10 text-[11px] font-mono">{{ u.created_at.strftime('%d.%m.%Y') }}</td>
+                        <td class="text-right">
+                            <div class="flex justify-end gap-3 opacity-0 group-hover:opacity-100 transition-all">
+                                <a href="/gdpx/users/{{ u.id }}/cabinet" class="titan-button px-6 py-2 rounded text-[9px] uppercase tracking-widest text-white/40 hover:text-white">
+                                    Cabinet
                                 </a>
-                                <button hx-post="/gdpx/users/{{ u.id }}/toggle-active" hx-confirm="Вы уверены, что хотите изменить статус доступа этого пользователя?"
+                                <button hx-post="/gdpx/users/{{ u.id }}/toggle-active" hx-confirm="Toggle protocol access for this node?"
                                         {% if u.id == user.user_id %}disabled class="opacity-0 pointer-events-none"{% endif %}
-                                        class="px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-[11px] font-bold {{ 'text-emerald-500' if not u.is_active else 'text-red-500' }} uppercase tracking-widest hover:border-white/30 transition-all">
-                                    {{ 'Разблок.' if not u.is_active else 'Блок' }}
+                                        class="titan-button px-6 py-2 rounded text-[9px] {{ 'text-emerald-500' if not u.is_active else 'text-red-500' }} uppercase tracking-widest">
+                                    {{ 'Restore' if not u.is_active else 'Terminate' }}
                                 </button>
                                 <button onclick="openRoleModal('{{ u.id }}', '{{ u.full_name }}', '{{ u.role }}')" 
                                         {% if u.id == user.user_id %}disabled class="opacity-0 pointer-events-none"{% endif %}
-                                        class="px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-[11px] font-bold text-white/40 uppercase tracking-widest hover:border-white/30 hover:text-white transition-all">
-                                    Роль
+                                        class="titan-button px-6 py-2 rounded text-[9px] uppercase tracking-widest text-white/20">
+                                    Tier
                                 </button>
-                                <button hx-post="/gdpx/users/{{ u.id }}/delete" hx-confirm="ВНИМАНИЕ: Это полностью удалит покупателя и его личный кабинет. Продолжить?"
+                                <button hx-post="/gdpx/users/{{ u.id }}/delete" hx-confirm="CRITICAL: This will permanently purge the identity from the network. Proceed?"
                                         {% if u.id == user.user_id %}disabled class="opacity-0 pointer-events-none"{% endif %}
-                                        class="px-4 py-2 bg-red-500/10 border border-red-500/20 rounded-lg text-[11px] font-bold text-red-500 uppercase tracking-widest hover:bg-red-500/20 transition-all">
-                                    Удалить
+                                        class="titan-button px-6 py-2 rounded text-[9px] text-red-500 uppercase tracking-widest">
+                                    Purge
                                 </button>
                             </div>
                         </td>
@@ -117,24 +101,28 @@
 
 <!-- Модалка изменения роли -->
 <div id="role-modal" class="fixed inset-0 bg-black/80 backdrop-blur-md z-[100] hidden flex items-center justify-center p-4">
-    <div class="bg-[#0a0a0f] border border-white/10 w-full max-w-md rounded-[32px] p-8 shadow-[0_20px_60px_rgba(0,0,0,0.8)] animate-in zoom-in-95 duration-300">
-        <h3 class="text-xl font-bold text-white mb-2" id="modal-user-name">Изменить роль</h3>
-        <p class="text-white/40 text-sm mb-8">Выберите новый уровень доступа для пользователя</p>
+    <div class="premium-card w-full max-w-md p-10 space-y-10 animate-in zoom-in-95 duration-500">
+        <div>
+            <h3 class="text-xl font-light text-white uppercase tracking-widest steel-text" id="modal-user-name">Adjust Protocol Tier</h3>
+            <p class="text-titanium text-[10px] uppercase tracking-widest mt-4 opacity-30">Define new network authorization level</p>
+        </div>
         
-        <form id="role-form" method="post" class="space-y-6">
+        <form id="role-form" method="post" class="space-y-8">
             <div>
-                <label class="text-[10px] font-bold text-white/30 uppercase tracking-[0.2em] mb-3 block">Уровень доступа</label>
-                <select name="new_role" id="modal-role-select" 
-                        class="w-full bg-white/5 border border-white/10 rounded-2xl px-6 py-4 text-white font-bold focus:outline-none focus:border-gdpx-cyan/50 transition-all appearance-none cursor-pointer">
-                    {% for r in roles %}
-                        <option value="{{ r }}" class="bg-[#0a0a0f]">{{ r|upper }}</option>
-                    {% endfor %}
-                </select>
+                <label class="text-detail text-[8px] mb-4 block opacity-20">Access Authorization</label>
+                <div class="relative">
+                    <select name="new_role" id="modal-role-select" 
+                            class="w-full bg-white/[0.01] border border-white/5 rounded px-6 py-4 text-white font-light focus:outline-none focus:border-white/20 transition-all appearance-none cursor-pointer text-sm tracking-widest uppercase">
+                        {% for r in roles %}
+                            <option value="{{ r }}" class="bg-[#0a0a0f]">{{ r|upper }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
             </div>
             
-            <div class="flex gap-4 pt-4">
-                <button type="button" onclick="closeRoleModal()" class="flex-1 py-4 rounded-2xl border border-white/10 text-white/40 font-bold uppercase tracking-widest text-[12px] hover:bg-white/5 transition-all">Отмена</button>
-                <button type="submit" class="flex-1 py-4 rounded-2xl bg-gradient-to-r from-gdpx-cyan to-gdpx-sakura text-white font-bold uppercase tracking-widest text-[12px] shadow-lg shadow-blue-500/20 active:scale-95 transition-all">Применить</button>
+            <div class="flex gap-4">
+                <button type="button" onclick="closeRoleModal()" class="flex-1 py-4 rounded border border-white/5 text-white/20 font-light uppercase tracking-widest text-[10px] hover:text-white transition-all">Cancel</button>
+                <button type="submit" class="titan-button flex-1 py-4 rounded text-white font-light uppercase tracking-widest text-[10px]">Execute</button>
             </div>
         </form>
     </div>
@@ -142,42 +130,46 @@
 
 <!-- Модалка создания пользователя -->
 <div id="create-user-modal" class="fixed inset-0 bg-black/80 backdrop-blur-md z-[100] hidden flex items-center justify-center p-4">
-    <div class="bg-[#0a0a0f] border border-white/10 w-full max-w-md rounded-[32px] p-8 shadow-[0_20px_60px_rgba(0,0,0,0.8)] animate-in zoom-in-95 duration-300">
-        <h3 class="text-xl font-bold text-white mb-2">Новый сотрудник</h3>
-        <p class="text-white/40 text-sm mb-8">Создание учетной записи и привязка Telegram ID</p>
+    <div class="premium-card w-full max-w-md p-10 space-y-10 animate-in zoom-in-95 duration-500">
+        <div>
+            <h3 class="text-xl font-light text-white uppercase tracking-widest steel-text">Deploy Identity</h3>
+            <p class="text-titanium text-[10px] uppercase tracking-widest mt-4 opacity-30">Generating new network node credentials</p>
+        </div>
         
-        <form action="/gdpx/users/create" method="post" class="space-y-5">
+        <form action="/gdpx/users/create" method="post" class="space-y-8">
             <div>
-                <label class="text-[10px] font-bold text-white/30 uppercase tracking-[0.2em] mb-2 block">Telegram ID</label>
+                <label class="text-detail text-[8px] mb-4 block opacity-20">Telegram Protocol ID</label>
                 <input type="number" name="telegram_id" required placeholder="8118820086"
-                       class="w-full bg-white/5 border border-white/10 rounded-xl px-5 py-3 text-white focus:outline-none focus:border-gdpx-cyan/50 transition-all font-mono">
+                       class="w-full bg-white/[0.01] border border-white/5 rounded px-6 py-4 text-white font-mono focus:outline-none focus:border-white/20 transition-all text-sm">
             </div>
             
-            <div class="grid grid-cols-2 gap-4">
+            <div class="grid grid-cols-2 gap-6">
                 <div>
-                    <label class="text-[10px] font-bold text-white/30 uppercase tracking-[0.2em] mb-2 block">Логин (WebApp)</label>
-                    <input type="text" name="login" required placeholder="worker1"
-                           class="w-full bg-white/5 border border-white/10 rounded-xl px-5 py-3 text-white focus:outline-none focus:border-gdpx-cyan/50 transition-all text-sm">
+                    <label class="text-detail text-[8px] mb-4 block opacity-20">Login Alias</label>
+                    <input type="text" name="login" required placeholder="node_alpha"
+                           class="w-full bg-white/[0.01] border border-white/5 rounded px-6 py-4 text-white font-light focus:outline-none focus:border-white/20 transition-all text-sm uppercase">
                 </div>
                 <div>
-                    <label class="text-[10px] font-bold text-white/30 uppercase tracking-[0.2em] mb-2 block">Роль</label>
-                    <select name="role" class="w-full bg-white/5 border border-white/10 rounded-xl px-5 py-3 text-white focus:outline-none focus:border-gdpx-cyan/50 appearance-none text-sm">
-                        {% for r in roles %}
-                            <option value="{{ r }}" class="bg-[#0a0a0f]">{{ r|upper }}</option>
-                        {% endfor %}
-                    </select>
+                    <label class="text-detail text-[8px] mb-4 block opacity-20">Access Tier</label>
+                    <div class="relative">
+                        <select name="role" class="w-full bg-white/[0.01] border border-white/5 rounded px-6 py-4 text-white font-light focus:outline-none focus:border-white/20 appearance-none text-sm uppercase">
+                            {% for r in roles %}
+                                <option value="{{ r }}" class="bg-[#0a0a0f]">{{ r|upper }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
                 </div>
             </div>
 
             <div>
-                <label class="text-[10px] font-bold text-white/30 uppercase tracking-[0.2em] mb-2 block">Пароль</label>
+                <label class="text-detail text-[8px] mb-4 block opacity-20">Initial Cipher</label>
                 <input type="password" name="password" required placeholder="••••••••"
-                       class="w-full bg-white/5 border border-white/10 rounded-xl px-5 py-3 text-white focus:outline-none focus:border-gdpx-cyan/50 transition-all">
+                       class="w-full bg-white/[0.01] border border-white/5 rounded px-6 py-4 text-white font-light focus:outline-none focus:border-white/20 transition-all text-sm">
             </div>
             
-            <div class="flex gap-4 pt-4">
-                <button type="button" onclick="closeCreateUserModal()" class="flex-1 py-4 rounded-2xl border border-white/10 text-white/40 font-bold uppercase tracking-widest text-[11px] hover:bg-white/5 transition-all">Отмена</button>
-                <button type="submit" class="flex-1 py-4 rounded-2xl bg-gradient-to-r from-gdpx-cyan to-gdpx-sakura text-white font-bold uppercase tracking-widest text-[11px] shadow-lg shadow-blue-500/20 active:scale-95 transition-all">Создать</button>
+            <div class="flex gap-4">
+                <button type="button" onclick="closeCreateUserModal()" class="flex-1 py-4 rounded border border-white/5 text-white/20 font-light uppercase tracking-widest text-[10px] hover:text-white transition-all">Cancel</button>
+                <button type="submit" class="titan-button flex-1 py-4 rounded text-white font-light uppercase tracking-widest text-[10px]">Deploy</button>
             </div>
         </form>
     </div>
@@ -202,7 +194,6 @@
         document.getElementById('role-modal').classList.add('hidden');
     }
     
-    // Закрытие по клику вне модалки
     document.getElementById('role-modal').addEventListener('click', function(e) {
         if (e.target === this) closeRoleModal();
     });

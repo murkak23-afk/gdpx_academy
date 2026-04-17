@@ -1,81 +1,71 @@
 {% macro inventory_card(category, stock_count, custom_prices) %}
-<div class="premium-card p-8 flex flex-col justify-between h-[360px] group overflow-hidden transition-all duration-500 hover:-translate-y-2">
+<div class="premium-card p-10 flex flex-col justify-between h-[380px] group transition-all duration-700">
     
-    <!-- Фоновое изображение категории -->
-    {% if category.photo_file_id %}
-    <div class="absolute inset-0 z-0 opacity-[0.03] group-hover:opacity-[0.08] transition-opacity duration-700">
-        <img src="/gdpx/media/{{ category.photo_file_id }}" class="w-full h-full object-cover grayscale" alt="">
-        <div class="absolute inset-0 bg-gradient-to-t from-gdpx-bg via-transparent to-transparent"></div>
-    </div>
-    {% endif %}
-
     <!-- Header -->
     <div class="flex justify-between items-start relative z-10">
         <div class="flex flex-col">
-            <span class="text-[10px] font-black text-gdpx-cyan tracking-[0.3em] uppercase opacity-50 mb-1">eSIM ASSET</span>
-            <h3 class="text-xl font-bold text-white tracking-tight uppercase">{{ category.title }}</h3>
+            <span class="text-detail mb-2">Tokyo Asset / eSIM</span>
+            <h3 class="text-[20px] font-light text-white tracking-[0.1em] uppercase steel-text">{{ category.title }}</h3>
         </div>
-        <div class="w-12 h-12 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center group-hover:border-gdpx-cyan/50 transition-colors">
-            <svg class="w-6 h-6 text-white/20 group-hover:text-gdpx-cyan transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+        <div class="w-12 h-12 rounded border border-white/5 flex items-center justify-center transition-all group-hover:border-white/20">
+            <svg class="w-5 h-5 text-white/10 group-hover:text-white/40 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
             </svg>
         </div>
     </div>
 
     <!-- Body -->
     <div class="flex-1 flex flex-col justify-center relative z-10">
-        <div class="flex items-baseline gap-2">
-            <span class="text-[56px] font-light text-white leading-none japanese-title">{{ stock_count }}</span>
-            <span class="text-[10px] text-white/20 font-bold uppercase tracking-widest">pcs</span>
+        <div class="flex items-baseline gap-4">
+            <span class="text-[72px] number-display text-white leading-none">{{ stock_count }}</span>
+            <span class="text-detail text-[9px] opacity-20 uppercase tracking-widest">pcs</span>
         </div>
-        <div class="h-1 w-12 bg-gdpx-cyan/30 rounded-full mt-4 group-hover:w-20 transition-all duration-500"></div>
+        <div class="h-[1px] w-12 bg-white/5 mt-8 transition-all duration-1000 group-hover:w-full"></div>
     </div>
 
     <!-- Footer -->
-    <div class="mt-auto pt-6 relative z-10">
-        <div class="flex items-center justify-between mb-6">
+    <div class="mt-auto pt-8 relative z-10">
+        <div class="flex items-center justify-between mb-8">
             <div class="flex flex-col">
-                <span class="text-[9px] text-white/20 font-bold uppercase tracking-widest">Personal Rate</span>
-                <div class="text-[18px] font-bold text-gdpx-cyan">
+                <span class="text-detail text-[8px] mb-2 opacity-30">Personal Rate</span>
+                <div class="text-[18px] font-light text-white tracking-widest">
                     {% if custom_prices and custom_prices.get(category.id) %}
-                        {{ custom_prices[category.id] }} <span class="text-[10px] text-white/30 ml-1">USDT</span>
+                        {{ custom_prices[category.id] }} <span class="text-[9px] text-white/20 ml-1">USDT</span>
                     {% else %}
-                        <span class="text-white/10">--</span>
+                        <span class="text-white/5">--</span>
                     {% endif %}
                 </div>
             </div>
             <div class="text-right">
-                <span class="text-[9px] text-white/20 font-bold uppercase tracking-widest">Status</span>
-                <div class="flex items-center gap-1.5 justify-end">
-                    <span class="w-1.5 h-1.5 rounded-full {% if stock_count > 0 %}bg-emerald-500{% else %}bg-red-500{% endif %}"></span>
-                    <span class="text-[10px] font-bold text-white/60 uppercase">{% if stock_count > 0 %}In Stock{% else %}Empty{% endif %}</span>
+                <div class="flex items-center gap-3 justify-end">
+                    <div class="{% if stock_count > 0 %}status-node w-1.5 h-1.5{% else %}w-1.5 h-1.5 bg-white/10 rounded-full{% endif %}"></div>
+                    <span class="text-detail text-[8px] uppercase tracking-[0.2em] {% if stock_count == 0 %}opacity-20{% endif %}">{% if stock_count > 0 %}In Stock{% else %}Empty{% endif %}</span>
                 </div>
             </div>
         </div>
 
         <button onclick="openModal('{{ category.id }}', '{{ category.title }}', '{{ stock_count }}')" 
                 {% if stock_count == 0 %}disabled{% endif %}
-                class="w-full h-[52px] rounded-2xl font-bold text-[11px] tracking-[0.2em] uppercase transition-all duration-300
-                       {% if stock_count > 0 %}
-                       bg-white/5 border border-white/10 text-white/60 hover:bg-gdpx-cyan hover:text-black hover:border-gdpx-cyan hover:shadow-[0_0_20px_rgba(0,245,255,0.3)]
-                       {% else %}
-                       bg-white/[0.02] border border-white/5 text-white/10 cursor-not-allowed
-                       {% endif %}">
-            Взять на скан
+                class="titan-button w-full h-[54px] rounded font-light text-[10px] tracking-[0.4em] uppercase transition-all duration-700
+                       {% if stock_count == 0 %}opacity-20 cursor-not-allowed{% endif %}">
+            Take Asset
         </button>
     </div>
 </div>
 {% endmacro %}
 
 {% macro ticket_card(ticket) %}
-<a href="/gdpx/tickets/{{ ticket.id }}" class="block p-6 bg-white/5 backdrop-blur-xl border border-white/10 rounded-[20px] hover:border-gdpx-cyan transition-all duration-300 shadow-[0_8px_30px_rgba(0,0,0,0.5)] hover:shadow-[0_10px_30px_rgba(0,217,255,0.15)] hover:-translate-y-1">
-    <div class="flex justify-between items-center mb-4">
-        <div class="px-3 py-1 bg-gdpx-sakura/20 border border-gdpx-sakura/30 rounded-lg">
-            <span class="text-[10px] font-bold text-gdpx-sakura tracking-widest uppercase shadow-[0_0_10px_rgba(255,0,234,0.3)]">#{{ ticket.id }}</span>
+<a href="/gdpx/tickets/{{ ticket.id }}" class="premium-card p-10 group transition-all duration-700 flex flex-col justify-between h-[200px]">
+    <div class="flex justify-between items-start">
+        <div class="text-detail text-[9px] opacity-30">Protocol #{{ ticket.id }}</div>
+        <div class="flex items-center gap-3">
+            <div class="status-node w-1.5 h-1.5 {% if ticket.status != 'open' %}grayscale opacity-20 shadow-none{% endif %}"></div>
+            <span class="text-detail text-[8px] uppercase tracking-[0.2em]">{{ ticket.status }}</span>
         </div>
-        <span class="text-[10px] bg-white/5 border border-white/10 px-3 py-1 rounded-lg text-white/60 tracking-widest uppercase">{{ ticket.status }}</span>
     </div>
-    <div class="font-medium text-[16px] text-white tracking-wide mb-2 line-clamp-1">{{ ticket.subject }}</div>
-    <div class="text-[12px] text-white/40 tracking-wider">Ref: <a href="/gdpx/submission/{{ ticket.submission_id }}" class="text-gdpx-cyan hover:underline decoration-gdpx-cyan/30 underline-offset-4">#{{ ticket.submission_id }}</a></div>
+    <div>
+        <div class="font-light text-[18px] text-white tracking-wide mb-3 line-clamp-1 steel-text uppercase">{{ ticket.subject }}</div>
+        <div class="text-detail text-[9px] opacity-10 uppercase tracking-widest">Reference Node: <span class="text-white/20">#{{ ticket.submission_id }}</span></div>
+    </div>
 </a>
 {% endmacro %}

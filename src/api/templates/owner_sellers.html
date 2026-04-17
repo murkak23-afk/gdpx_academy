@@ -3,30 +3,30 @@
 {% block title %}Управление Продавцами // GDPX{% endblock %}
 
 {% block content %}
-<div class="space-y-8 fade-in">
+<div class="space-y-12 fade-in duration-1000">
     
     <!-- Заголовок -->
-    <div class="flex justify-between items-end">
+    <div class="flex flex-col md:flex-row justify-between items-start md:items-end gap-8">
         <div>
-            <div class="text-[10px] text-gdpx-sakura font-bold tracking-[0.4em] uppercase mb-3 opacity-80">Supply Side</div>
-            <h1 class="text-[32px] font-bold text-white japanese-title leading-none">Управление Продавцами</h1>
-            <p class="text-gdpx-silver mt-4 font-medium tracking-[0.15em] uppercase text-[11px] opacity-60">
-                Мониторинг базы селлеров бота и управление их репутацией.
+            <div class="text-detail mb-4">Supply Side / Source Control</div>
+            <h1 class="text-[56px] font-extralight text-white tracking-[-0.04em] leading-none steel-text uppercase">Sellers Node</h1>
+            <p class="text-titanium mt-6 font-light tracking-[0.2em] uppercase text-[9px] opacity-40 max-w-md leading-relaxed">
+                Monitoring bot supply nodes and maintaining reputation protocols across the network.
             </p>
         </div>
-        <div class="px-6 py-4 bg-white/[0.02] border border-white/5 rounded-xl">
-            <span class="text-white/20 text-[10px] font-bold uppercase tracking-widest">Total Sellers:</span>
-            <span class="text-gdpx-cyan font-mono text-[16px] ml-2">{{ sellers|length }}</span>
+        <div class="px-8 py-4 bg-white/[0.01] border border-white/5 rounded">
+            <span class="text-white/20 text-[9px] font-light uppercase tracking-[0.2em]">Total Nodes:</span>
+            <span class="text-white font-mono text-[16px] ml-4">{{ sellers|length }}</span>
         </div>
     </div>
 
     <!-- Поиск -->
-    <div class="bg-white/5 border border-white/10 rounded-2xl p-4">
-        <form action="/gdpx/owner/sellers" method="get" class="flex gap-4">
-            <input type="text" name="q" placeholder="Поиск продавца по @username или имени..." 
-                   class="flex-1 bg-white/5 border border-white/10 rounded-xl px-6 py-3 text-white focus:outline-none focus:border-gdpx-cyan transition-all">
-            <button type="submit" class="px-8 py-3 bg-white/5 border border-white/10 rounded-xl text-white font-bold hover:bg-white/10 transition-all uppercase text-[11px] tracking-widest">
-                Найти
+    <div class="bg-white/[0.01] border border-white/5 rounded p-6">
+        <form action="/gdpx/owner/sellers" method="get" class="flex gap-6">
+            <input type="text" name="q" placeholder="Search node by @identity or moniker..." 
+                   class="flex-1 bg-transparent border-b border-white/5 px-6 py-4 text-white font-light focus:outline-none focus:border-white/20 transition-all text-sm tracking-widest uppercase">
+            <button type="submit" class="titan-button px-10 py-4 rounded text-[10px] uppercase tracking-widest">
+                Execute Search
             </button>
         </form>
     </div>
@@ -34,47 +34,47 @@
     <!-- Список продавцов -->
     <div class="premium-card overflow-hidden">
         <div class="overflow-x-auto">
-            <table class="w-full text-left border-collapse">
+            <table class="w-full text-left border-collapse premium-table">
                 <thead>
-                    <tr class="border-b border-white/5">
-                        <th class="px-8 py-6 text-[10px] font-bold text-white/30 uppercase tracking-[0.2em]">Продавец</th>
-                        <th class="px-8 py-6 text-[10px] font-bold text-white/30 uppercase tracking-[0.2em] text-center">ID / TG</th>
-                        <th class="px-8 py-6 text-[10px] font-bold text-white/30 uppercase tracking-[0.2em] text-center">Статус</th>
-                        <th class="px-8 py-6 text-[10px] font-bold text-white/30 uppercase tracking-[0.2em] text-center">Регистрация</th>
-                        <th class="px-8 py-6 text-[10px] font-bold text-white/30 uppercase tracking-[0.2em] text-right">Действия</th>
+                    <tr>
+                        <th>Source Node</th>
+                        <th class="text-center">Protocol Identity</th>
+                        <th class="text-center">Status</th>
+                        <th class="text-center">Logged At</th>
+                        <th class="text-right">Command</th>
                     </tr>
                 </thead>
-                <tbody class="divide-y divide-white/[0.02]">
+                <tbody class="text-[13px] font-light">
                     {% for s in sellers %}
-                    <tr class="hover:bg-white/[0.02] transition-colors group">
-                        <td class="px-8 py-5">
-                            <div class="flex items-center gap-4">
-                                <div class="w-10 h-10 rounded-full bg-gradient-to-br from-white/10 to-white/5 flex items-center justify-center text-white font-bold text-xs">
+                    <tr class="transition-all group">
+                        <td>
+                            <div class="flex items-center gap-6">
+                                <div class="w-10 h-10 rounded border border-white/5 flex items-center justify-center text-white/20 font-light text-[10px]">
                                     {{ s.full_name[:1] }}
                                 </div>
                                 <div>
-                                    <div class="font-bold text-white group-hover:text-gdpx-cyan transition-colors">{{ s.full_name }}</div>
-                                    <div class="text-[10px] text-white/20">@{{ s.username or 'none' }}</div>
+                                    <div class="text-white group-hover:steel-text transition-all tracking-wide font-light">{{ s.full_name }}</div>
+                                    <div class="text-[9px] text-white/10 mt-2 tracking-widest uppercase">@{{ s.username or 'NULL' }}</div>
                                 </div>
                             </div>
                         </td>
-                        <td class="px-8 py-5 text-center font-mono text-white/40 text-[12px]">{{ s.telegram_id }}</td>
-                        <td class="px-8 py-5 text-center">
+                        <td class="text-center font-mono text-white/20 text-[11px]">{{ s.telegram_id }}</td>
+                        <td class="text-center">
                             {% if s.is_active %}
-                                <span class="px-3 py-1 bg-emerald-500/10 border border-emerald-500/20 rounded-lg text-emerald-500 text-[9px] font-bold uppercase tracking-widest">Active</span>
+                                <span class="text-emerald-500 text-[10px] tracking-[0.2em] font-medium uppercase">Active Node</span>
                             {% else %}
-                                <span class="px-3 py-1 bg-red-500/10 border border-red-500/20 rounded-lg text-red-500 text-[9px] font-bold uppercase tracking-widest">Banned</span>
+                                <span class="text-red-500 text-[10px] tracking-[0.2em] font-medium uppercase">Terminated</span>
                             {% endif %}
                         </td>
-                        <td class="px-8 py-5 text-center text-white/20 text-[11px]">{{ s.created_at.strftime('%d.%m.%Y') }}</td>
-                        <td class="px-8 py-5 text-right">
-                            <div class="flex justify-end gap-2">
-                                <a href="/gdpx/owner/sellers/{{ s.id }}" class="px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-[10px] font-bold text-white/40 uppercase tracking-widest hover:text-white hover:border-white/30 transition-all">
-                                    Карточка
+                        <td class="text-center text-white/10 text-[11px] font-mono">{{ s.created_at.strftime('%d.%m.%Y') }}</td>
+                        <td class="text-right">
+                            <div class="flex justify-end gap-3 opacity-0 group-hover:opacity-100 transition-all">
+                                <a href="/gdpx/owner/sellers/{{ s.id }}" class="titan-button px-6 py-2 rounded text-[9px] uppercase tracking-widest text-white/40 hover:text-white">
+                                    Protocol
                                 </a>
                                 <button hx-post="/gdpx/users/{{ s.id }}/toggle-active" 
-                                        class="px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-[10px] font-bold {{ 'text-red-500' if s.is_active else 'text-emerald-500' }} uppercase tracking-widest hover:border-white/30 transition-all">
-                                    {{ 'Бан' if s.is_active else 'Разблок.' }}
+                                        class="titan-button px-6 py-2 rounded text-[9px] {{ 'text-red-500' if s.is_active else 'text-emerald-500' }} uppercase tracking-widest">
+                                    {{ 'Terminate' if s.is_active else 'Restore' }}
                                 </button>
                             </div>
                         </td>

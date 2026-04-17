@@ -4,36 +4,34 @@
 {% block title %}GDPX // СКЛАД{% endblock %}
 
 {% block content %}
-<div class="space-y-10">
+<div class="space-y-12">
     <div class="flex justify-between items-end">
         <div>
-            <h1 class="text-[36px] font-bold text-white tracking-tight drop-shadow-[0_0_15px_rgba(0,217,255,0.2)]">Склад активов</h1>
-            <p class="text-titanium mt-2 font-medium tracking-widest uppercase text-[10px] opacity-60">Доступно для выдачи на сканирование</p>
+            <div class="text-detail mb-4">Supply Chain / Asset Node</div>
+            <h1 class="text-[56px] font-extralight text-white tracking-[-0.04em] leading-none steel-text">INVENTORY</h1>
+            <p class="text-titanium mt-6 font-light tracking-[0.2em] uppercase text-[9px] opacity-40">Available assets for scanning protocols</p>
         </div>
     </div>
 
-    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8 mt-10" id="inventory-grid">
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-10 mt-12" id="inventory-grid">
         {% for cat in categories %}
             {{ inventory_card(cat, stock[cat.id], custom_prices) }}
         {% endfor %}
     </div>
 </div>
 
-<!-- Premium Dark Modal -->
-<div id="modal" class="hidden fixed inset-0 z-[150] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md transition-all duration-300">
-    <div class="bg-[#0a0a0f] border border-white/10 p-10 rounded-[40px] shadow-[0_30px_100px_rgba(0,0,0,0.8)] w-full max-w-md relative overflow-hidden animate-in zoom-in-95" onclick="event.stopPropagation()">
+<!-- Premium Sapphire Modal -->
+<div id="modal" class="hidden fixed inset-0 z-[150] flex items-center justify-center p-4 bg-black/60 backdrop-blur-xl transition-all duration-500">
+    <div class="premium-card p-12 w-full max-w-lg relative overflow-hidden animate-in fade-in zoom-in-95" onclick="event.stopPropagation()">
         
-        <!-- Декор модалки -->
-        <div class="absolute -top-20 -right-20 w-40 h-40 bg-titanium/10 rounded-full blur-[60px]"></div>
-
         <!-- Заголовок -->
-        <div class="flex justify-between items-center mb-10 relative z-10">
+        <div class="flex justify-between items-center mb-12 relative z-10">
             <div>
-                <h3 class="text-2xl font-bold text-white tracking-tight" id="modal-title">Запрос актива</h3>
-                <p class="text-[10px] text-white/30 uppercase tracking-[0.2em] mt-1">Выберите количество</p>
+                <h3 class="text-2xl font-light text-white tracking-tight uppercase steel-text" id="modal-title">Asset Request</h3>
+                <p class="text-[9px] text-white/20 uppercase tracking-[0.3em] mt-2">Specify protocol quantity</p>
             </div>
-            <button onclick="closeModal()" class="w-10 h-10 rounded-full bg-white/5 border border-white/10 flex items-center justify-center text-white/40 hover:text-white hover:bg-white/10 transition-all">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+            <button onclick="closeModal()" class="w-12 h-12 rounded border border-white/5 flex items-center justify-center text-white/20 hover:text-white hover:bg-white/5 transition-all">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M6 18L18 6M6 6l12 12"/></svg>
             </button>
         </div>
 
@@ -47,34 +45,34 @@
             
             <input type="hidden" name="category_id" id="modal-category-id">
             
-            <div class="mb-10">
-                <div class="flex items-center justify-between bg-white/5 border border-white/10 rounded-3xl p-3 shadow-inner">
-                    <button type="button" onclick="changeCount(-1)" class="w-14 h-14 rounded-2xl flex items-center justify-center text-white/40 hover:bg-white/5 hover:text-titanium active:scale-90 transition-all">
-                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 12H4"/></svg>
+            <div class="mb-12">
+                <div class="flex items-center justify-between bg-white/[0.02] border border-white/5 rounded p-4">
+                    <button type="button" onclick="changeCount(-1)" class="w-16 h-16 rounded flex items-center justify-center text-white/20 hover:bg-white/5 hover:text-white active:scale-90 transition-all">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M20 12H4"/></svg>
                     </button>
                     
                     <div class="text-center">
                         <input type="number" name="count" id="modal-count" value="1" 
-                               class="w-24 text-center text-4xl font-bold bg-transparent border-none outline-none text-white selection:bg-titanium/30" readonly>
-                        <div class="text-[9px] text-white/20 uppercase tracking-widest font-bold mt-1">Pieces</div>
+                               class="w-24 text-center text-5xl font-extralight bg-transparent border-none outline-none text-white selection:bg-white/10" readonly>
+                        <div class="text-[8px] text-white/10 uppercase tracking-[0.4em] mt-3">Units</div>
                     </div>
                     
-                    <button type="button" onclick="changeCount(1)" class="w-14 h-14 rounded-2xl flex items-center justify-center text-white/40 hover:bg-white/5 hover:text-titanium active:scale-90 transition-all">
-                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+                    <button type="button" onclick="changeCount(1)" class="w-16 h-16 rounded flex items-center justify-center text-white/20 hover:bg-white/5 hover:text-white active:scale-90 transition-all">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 4v16m8-8H4"/></svg>
                     </button>
                 </div>
-                <div class="flex justify-center items-center gap-2 mt-6">
-                    <span class="w-1 h-1 rounded-full bg-titanium animate-pulse"></span>
-                    <p class="text-[11px] text-white/40 tracking-widest uppercase">В наличии: <span id="modal-max-stock" class="text-white font-bold">0</span></p>
+                <div class="flex justify-center items-center gap-3 mt-8">
+                    <div class="status-node w-1 h-1"></div>
+                    <p class="text-[10px] text-white/30 tracking-[0.2em] uppercase">In Node: <span id="modal-max-stock" class="text-white font-medium">0</span></p>
                 </div>
             </div>
 
             <!-- Зона ответа сервера -->
-            <div id="modal-response" class="mb-8"></div>
+            <div id="modal-response" class="mb-10"></div>
 
-            <div class="grid grid-cols-2 gap-4">
-                <button type="button" onclick="closeModal()" class="py-4 rounded-2xl border border-white/10 text-white/40 font-bold uppercase tracking-widest text-[11px] hover:bg-white/5 transition-all">Отмена</button>
-                <button type="submit" id="submit-btn" class="py-4 rounded-2xl bg-gradient-to-r from-gdpx-cyan to-gdpx-sakura text-white font-bold uppercase tracking-widest text-[11px] shadow-lg shadow-blue-500/20 hover:shadow-blue-500/40 active:scale-95 transition-all">Подтвердить</button>
+            <div class="grid grid-cols-2 gap-6">
+                <button type="button" onclick="closeModal()" class="h-16 rounded border border-white/5 text-white/20 font-light uppercase tracking-[0.2em] text-[10px] hover:bg-white/5 transition-all">Cancel</button>
+                <button type="submit" id="submit-btn" class="titan-button h-16 rounded text-white font-light uppercase tracking-[0.2em] text-[10px] shadow-2xl">Confirm Take</button>
             </div>
         </form>
     </div>
