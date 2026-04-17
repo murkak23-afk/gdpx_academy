@@ -46,7 +46,9 @@
             --sakura-glow: #ff00ea;
             --cyber-purple: #7000ff;
             --premium-white: #F8F9FA;
-            --glass-bg: rgba(255, 255, 255, 0.015);
+            --glass-bg: rgba(10, 10, 15, 0.65); /* Глубокое тонирование */
+            --glass-border: rgba(255, 255, 255, 0.08);
+            --deep-shadow: 0 40px 100px -20px rgba(0, 0, 0, 0.9), 0 20px 50px -25px rgba(0, 0, 0, 0.8);
         }
 
         body { 
@@ -57,15 +59,16 @@
             min-height: 100vh; 
             overflow-x: hidden;
             line-height: 1.5;
+            perspective: 1000px; /* Глубина для 3D эффектов */
         }
 
         /* ТЕХНИЧЕСКАЯ СЕТКА */
         .cyber-grid {
             position: fixed; inset: 0;
             background-image: 
-                linear-gradient(rgba(0, 240, 255, 0.03) 1px, transparent 1px),
-                linear-gradient(90deg, rgba(0, 240, 255, 0.03) 1px, transparent 1px);
-            background-size: 50px 50px;
+                linear-gradient(rgba(0, 240, 255, 0.02) 1.5px, transparent 1.5px),
+                linear-gradient(90deg, rgba(0, 240, 255, 0.02) 1.5px, transparent 1.5px);
+            background-size: 100px 100px; /* Более масштабная сетка для перспективы */
             pointer-events: none; z-index: -1;
         }
 
@@ -76,14 +79,14 @@
             border-radius: 10px 0 10px 10px;
             pointer-events: none;
             z-index: 5;
-            opacity: 0.3;
+            opacity: 0.2;
         }
         
         /* Исправленная бегущая строка */
         .cyber-ticker {
             position: fixed; top: 0; left: 0; width: 100%; height: 32px;
-            background: rgba(5, 5, 8, 0.95); backdrop-filter: blur(20px);
-            z-index: 1000; border-bottom: 1px solid rgba(0, 240, 255, 0.1);
+            background: rgba(5, 5, 8, 0.98); backdrop-filter: blur(50px);
+            z-index: 1000; border-bottom: 1px solid rgba(0, 240, 255, 0.15);
             overflow: hidden; display: flex; align-items: center;
         }
         .ticker-content {
@@ -98,28 +101,30 @@
             100% { transform: translateX(-100%); }
         }
 
-        /* Modern Premium Glass Cards (Samurai Edition) */
+        /* Modern Premium Glass Cards (Deep Tinted Glass) */
         .premium-card {
             background: var(--glass-bg);
-            backdrop-filter: blur(40px);
-            border: 1px solid rgba(255, 255, 255, 0.05);
-            border-radius: 32px;
-            box-shadow: 0 30px 100px rgba(0, 0, 0, 0.9);
-            transition: all 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+            backdrop-filter: blur(64px) saturate(180%);
+            border: 1px solid var(--glass-border);
+            border-radius: 40px; /* Более скругленные для премиальности */
+            box-shadow: var(--deep-shadow);
+            transition: all 0.8s cubic-bezier(0.16, 1, 0.3, 1);
             position: relative;
+            transform-style: preserve-3d;
         }
         .premium-card::before {
-            content: ""; position: absolute; inset: 0; border-radius: 32px;
-            padding: 1px; background: linear-gradient(135deg, rgba(0, 240, 255, 0.15), transparent, rgba(224, 112, 255, 0.15));
+            content: ""; position: absolute; inset: 0; border-radius: 40px;
+            padding: 2px; 
+            background: linear-gradient(135deg, rgba(255, 255, 255, 0.12), transparent, rgba(224, 112, 255, 0.1));
             -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
             -webkit-mask-composite: xor; mask-composite: exclude;
-            pointer-events: none; opacity: 0.5;
+            pointer-events: none; opacity: 0.4;
         }
         .premium-card:hover {
-            background: rgba(255, 255, 255, 0.04);
+            background: rgba(15, 15, 20, 0.75);
             border-color: rgba(0, 240, 255, 0.4);
-            box-shadow: 0 0 50px rgba(0, 240, 255, 0.1);
-            transform: translateY(-6px) scale(1.01);
+            box-shadow: 0 70px 140px -20px rgba(0, 0, 0, 0.95), 0 0 40px rgba(0, 240, 255, 0.15);
+            transform: translateY(-12px) rotateX(2deg) rotateY(-1deg) scale(1.02);
         }
 
         /* LOGO EVOLUTION EFFECT */
@@ -151,14 +156,16 @@
             background: linear-gradient(135deg, var(--electric-cyan), var(--sakura-glow));
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
+            filter: drop-shadow(0 0 10px rgba(0, 240, 255, 0.3));
         }
 
         .sidebar-active { 
-            background: rgba(0, 240, 255, 0.05);
-            border: 1px solid rgba(0, 240, 255, 0.3);
+            background: rgba(0, 240, 255, 0.08);
+            border: 1px solid rgba(0, 240, 255, 0.4);
             color: var(--electric-cyan) !important;
-            box-shadow: 0 0 20px rgba(0, 240, 255, 0.1);
+            box-shadow: 0 0 30px rgba(0, 240, 255, 0.15);
             position: relative;
+            backdrop-filter: blur(20px);
         }
         .sidebar-active::after {
             content: ""; position: absolute; left: -2px; top: 25%; height: 50%; width: 4px;
@@ -219,9 +226,20 @@
     <div class="fixed inset-0 z-[-1] bg-[#050508] overflow-hidden">
         <div class="absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,#1e1b4b,transparent)] opacity-40"></div>
         
-        <!-- Эстетичный фоновый логотип (Atmospheric Ghost Logo) -->
-        <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] opacity-[0.03] pointer-events-none select-none filter blur-[80px] animate-pulse-slow">
-            <img src="/assets/logoteep.png" class="w-full h-full object-contain" alt="">
+        <!-- Atmospheric Ghost Logo Evolution (Ambient Layers) -->
+        <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[900px] h-[900px] pointer-events-none select-none">
+            <!-- Базовый слой (Темный силуэт) -->
+            <img src="/assets/logoteep.png" 
+                 class="absolute inset-0 w-full h-full object-contain opacity-[0.03] filter blur-[40px] animate-pulse-slow" alt="">
+            
+            <!-- Слой детализации (Проявляющийся) -->
+            <img src="/assets/logoteep1.png" 
+                 class="absolute inset-0 w-full h-full object-contain opacity-0 filter blur-[80px] animate-manifest-slow" alt="">
+        </div>
+
+        <!-- Японский Неоновый Сканер (Эстетика) -->
+        <div class="absolute inset-0 pointer-events-none opacity-20">
+            <div class="absolute top-0 left-0 w-full h-[1px] bg-gradient-to-r from-transparent via-gdpx-cyan to-transparent animate-scanner-y"></div>
         </div>
 
         <div class="cyber-grid"></div>
@@ -300,7 +318,11 @@
         <aside class="hidden lg:flex w-72 glass-panel border-r border-white/10 flex-col sticky top-0 h-screen shrink-0">
             <div class="p-8">
                 <div class="flex items-center gap-3">
-                    <img src="/assets/logoteep.png" class="logo-evolution w-10 h-auto" alt="Logo">
+                    <!-- Эволюция Логотипа (Sidebar) -->
+                    <div class="relative w-10 h-10 group/logo">
+                        <img src="/assets/logoteep.png" class="w-full h-full object-contain transition-all duration-700 group-hover/logo:opacity-20" alt="Logo">
+                        <img src="/assets/logoteep1.png" class="absolute inset-0 w-full h-full object-contain opacity-0 scale-90 blur-sm transition-all duration-700 group-hover/logo:opacity-100 group-hover/logo:scale-110 group-hover/logo:blur-0 drop-shadow-[0_0_15px_var(--electric-cyan)]" alt="Logo Detailed">
+                    </div>
                     <h2 class="text-[14px] font-black text-white tracking-[0.2em] uppercase japanese-title">GDPX Panel</h2>
                 </div>
                 <div class="mt-6 flex gap-2">
@@ -376,7 +398,10 @@
 
         <main class="flex-1 w-full flex flex-col min-w-0">
             <header class="lg:hidden h-16 border-b border-white/10 flex items-center justify-between px-6 glass-panel shrink-0">
-                <img src="/assets/logoteep.png" class="logo-evolution w-8 h-auto" alt="Logo">
+                <div class="relative w-8 h-8 group/logo">
+                    <img src="/assets/logoteep.png" class="w-full h-full object-contain transition-all duration-700 group-hover/logo:opacity-20" alt="Logo">
+                    <img src="/assets/logoteep1.png" class="absolute inset-0 w-full h-full object-contain opacity-0 scale-90 blur-sm transition-all duration-700 group-hover/logo:opacity-100 group-hover/logo:scale-110 group-hover/logo:blur-0 drop-shadow-[0_0_10px_var(--electric-cyan)]" alt="Logo Detailed">
+                </div>
                 <div class="text-white font-bold uppercase tracking-widest text-[10px]">GDPX Mobile</div>
                 <a href="/auth/logout" class="text-white/40"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg></a>
             </header>

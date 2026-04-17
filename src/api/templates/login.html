@@ -20,7 +20,14 @@
                 <!-- Декоративное свечение за логотипом -->
                 <div class="absolute inset-0 bg-gdpx-cyan/20 blur-[60px] rounded-full scale-0 group-hover:scale-100 transition-transform duration-1000"></div>
                 
-                <img src="/assets/logoteep.png" class="logo-evolution-hero w-56 h-auto mx-auto relative z-10" alt="GDPX">
+                <!-- Эволюция Логотипа -->
+                <div class="relative w-56 h-auto mx-auto logo-manifestation-container group/logo">
+                    <!-- Черный силуэт (Базовый) -->
+                    <img src="/assets/logoteep.png" class="w-full h-auto transition-all duration-1000 group-hover/logo:opacity-30 group-hover/logo:blur-[2px]" alt="GDPX">
+                    <!-- Детализированная версия (Проявляющаяся) -->
+                    <img src="/assets/logoteep1.png" class="absolute inset-0 w-full h-auto opacity-0 scale-95 blur-md transition-all duration-1000 group-hover/logo:opacity-100 group-hover/logo:scale-100 group-hover/logo:blur-0 drop-shadow-[0_0_25px_rgba(0,245,255,0.4)]" alt="GDPX Detailed">
+                </div>
+
                 <h2 class="text-[32px] font-black text-white mt-10 tracking-tighter japanese-title neon-text-gradient">Вход в систему</h2>
                 <div class="flex items-center justify-center gap-2 mt-2">
                     <span class="w-8 h-[1px] bg-white/10"></span>
