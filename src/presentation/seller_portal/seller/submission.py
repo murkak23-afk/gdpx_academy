@@ -185,7 +185,7 @@ async def _refresh_control_panel(user_id: int, bot: Bot, state: FSMContext, chat
 
 
 @router.callback_query(F.data == "upload_finish", StateFilter(SubmissionState.waiting_for_media))
-async def finalize_upload(callback: CallbackQuery, state: FSMContext, session: AsyncSession, bot: Bot, ui: MessageManager) -> None:
+async def finalize_upload(callback: CallbackQuery, state: FSMContext, session: AsyncSession, bot: Bot, ui: MessageManager, **data_extra) -> None:
     """Финальное сохранение пачки в БД."""
     user_id = callback.from_user.id
     await _flush_buffer_to_state(user_id, state)
@@ -205,6 +205,13 @@ async def finalize_upload(callback: CallbackQuery, state: FSMContext, session: A
     try:
         created = await SubmissionService(session=session).create_bulk_submissions(user_id=user.id, category_id=cat_id, fixed_payout_rate=rate, media_items=pool)
         await session.commit()
+        ws_manager = data_extra.get("ws_manager") or bot.get("ws_manager")
+        if ws_manager:
+            await ws_manager.broadcast({
+                "type": "notification",
+                "message": f"🏮 НОВАЯ ПОСТАВКА: {len(created)} шт. {title}",
+                "style": "success"
+            })
         await state.clear()
         await ui.display(event=callback, text=f"✅ <b>Принято {len(created)} симок.</b>", reply_markup=await get_seller_main_kb())
         asyncio.create_task(_notify_admins_about_upload(bot, user.telegram_id, len(created), title))

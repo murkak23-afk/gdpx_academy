@@ -280,10 +280,14 @@ async def on_manual_item(callback: CallbackQuery, callback_data: SellerInfoCD, u
 
 # --- SUPPORT CENTER ---
 
+from src.states.support_state import SupportState
+from src.database.models.web_control import SupportTicket, ChatMessage
+from sqlalchemy import select, and_
+
 @router.message(Command("help"))
 @router.callback_query(SellerMenuCD.filter(F.action == "support"))
 async def on_support_center(event: Message | CallbackQuery, state: FSMContext, ui: MessageManager):
-    """Штаб оперативной связи (Поддержка)."""
+    """Штаб оперативной связи (Поддержка) с возможностью отправить сообщение."""
     try:
         await state.clear()
         filename = "support.png"
@@ -293,22 +297,89 @@ async def on_support_center(event: Message | CallbackQuery, state: FSMContext, u
             f"❖ <b>GDPX // SUPPORT CENTER</b>\n"
             f"{DIVIDER}\n"
             f"Штаб оперативной связи с командой проекта.\n\n"
-            f"🌑 <b>ОСНОВАТЕЛЬ</b> — @GDPX1\n"
-            f" └ <i>Ресурсная база / Глобальный выкуп</i>\n\n"
-            f"🛡 <b>САППОРТЫ</b> — @oduvan_kenoby | @hdksiwns\n"
-            f" └ <i>Наставление / Прием материала.</i>\n\n"
-            f"⚙️ <b>АРХИТЕКТОР</b> — @brug0S\n"
-            f" └ <i>Бот / Технические вопросы.</i>\n"
+            f"Вы можете отправить прямое сообщение администрации. "
+            f"Оно будет доставлено в панель управления и бот поддержки.\n\n"
+            f"🕒 <b>График:</b> 10:00 - 22:00 МСК\n"
             f"{DIVIDER}\n"
-            f"[<b>ONLINE</b>] — <i>Пишите сразу по существу вопроса.</i>"
+            f"Нажмите кнопку ниже, чтобы начать диалог."
         )
 
-        kb = PremiumBuilder().back(NavCD(to="menu"), "❮ В ГЛАВНОЕ МЕНЮ").as_markup()
+        builder = PremiumBuilder()
+        builder.primary("🛡 НАПИСАТЬ СООБЩЕНИЕ", "support:contact")
+        builder.back(NavCD(to="menu"), "❮ В ГЛАВНОЕ МЕНЮ")
 
-        await ui.display(event=event, text=text, reply_markup=kb, photo=banner)
+        await ui.display(event=event, text=text, reply_markup=builder.as_markup(), photo=banner)
         if isinstance(event, CallbackQuery):
             await event.answer()
     except Exception as e:
         logger.exception(f"Error in on_support_center: {e}")
         if isinstance(event, CallbackQuery):
             await event.answer("⚠️ Ошибка при открытии Поддержки", show_alert=True)
+
+@router.callback_query(F.data == "support:contact")
+async def on_contact_admin_start(callback: CallbackQuery, state: FSMContext, ui: MessageManager):
+    """Переход в режим ожидания сообщения для саппорта."""
+    await state.set_state(SupportState.waiting_for_message)
+    text = (
+        f"🛡 <b>GDPX // SUPPORT</b>\n"
+        f"{DIVIDER}\n"
+        f"Введите ваше сообщение ниже. Опишите проблему или задайте вопрос.\n\n"
+        f"<i>Администратор увидит ваш запрос и ответит в ближайшее время.</i>"
+    )
+    kb = PremiumBuilder().cancel("menu", "ОТМЕНА").as_markup()
+    await ui.display(event=callback, text=text, reply_markup=kb)
+    await callback.answer()
+
+@router.message(SupportState.waiting_for_message)
+async def on_support_message_receive(message: Message, state: FSMContext, session: AsyncSession, ui: MessageManager, **data):
+    """Прием сообщения для техподдержки и создание тикета."""
+    try:
+        user = await UserService(session=session).get_by_telegram_id(message.from_user.id)
+        
+        # Проверяем, есть ли открытый тикет без привязки к eSIM (общий саппорт)
+        stmt = select(SupportTicket).where(
+            and_(
+                SupportTicket.creator_id == user.id,
+                SupportTicket.status == "open",
+                SupportTicket.submission_id == None
+            )
+        )
+        ticket = (await session.execute(stmt)).scalar_one_or_none()
+        
+        if not ticket:
+            ticket = SupportTicket(
+                creator_id=user.id,
+                subject="Запрос из бота",
+                status="open"
+            )
+            session.add(ticket)
+            await session.flush()
+            
+        new_msg = ChatMessage(
+            ticket_id=ticket.id,
+            sender_id=user.id,
+            text=message.text
+        )
+        session.add(new_msg)
+        await session.commit()
+        ws_manager = data.get("ws_manager") or message.bot.get("ws_manager")
+        if ws_manager:
+            await ws_manager.broadcast({
+                "type": "notification",
+                "message": f"💬 НОВЫЙ ТИКЕТ: {user.username}",
+                "style": "info"
+            })
+        
+        await state.clear()
+        
+        success_text = (
+            f"✅ <b>СООБЩЕНИЕ ОТПРАВЛЕНО</b>\n"
+            f"{DIVIDER}\n"
+            f"Ваш запрос принят под номером <code>#{ticket.id}</code>.\n"
+            f"Ожидайте ответа в этом чате."
+        )
+        await ui.display(event=message, text=success_text, reply_markup=get_back_to_main_kb())
+        
+    except Exception as e:
+        logger.exception(f"Error saving support message: {e}")
+        await message.answer("⚠️ Ошибка при отправке сообщения. Попробуйте позже.")

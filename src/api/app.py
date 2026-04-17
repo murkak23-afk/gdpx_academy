@@ -33,7 +33,7 @@ class DeliveryOrder(BaseModel):
     chat_id: int
     init_data: str | None = None
 
-def create_app(bot: Bot, dispatcher: Dispatcher) -> FastAPI:
+def create_app(bot: Bot, dispatcher: Dispatcher) -> tuple[FastAPI, ConnectionManager]:
     app = FastAPI(title="tgpriem API", version="1.0.0")
     settings = get_settings()
     app.state.bot = bot
@@ -94,9 +94,9 @@ def create_app(bot: Bot, dispatcher: Dispatcher) -> FastAPI:
             return RedirectResponse(url="/auth/login")
         return await http_exception_handler(request, exc)
 
-    from src.api.routes import auth, nexus, tickets
+    from src.api.routes import auth, gdpx, tickets
     app.include_router(auth.router)
-    app.include_router(nexus.router)
+    app.include_router(gdpx.router)
     app.include_router(tickets.router)
 
     from fastapi import WebSocket, WebSocketDisconnect
@@ -119,7 +119,7 @@ def create_app(bot: Bot, dispatcher: Dispatcher) -> FastAPI:
     manager = ConnectionManager()
     app.state.ws_manager = manager
 
-    @app.websocket("/nexus/ws")
+    @app.websocket("/gdpx/ws")
     async def websocket_endpoint(websocket: WebSocket):
         await manager.connect(websocket)
         try:
@@ -175,7 +175,7 @@ def create_app(bot: Bot, dispatcher: Dispatcher) -> FastAPI:
             if order.count > available:
                 raise HTTPException(status_code=400, detail=f"Недостаточно на складе. Доступно: {available}")
 
-            background_tasks.add_task(background_delivery_task, bot, cfg.category_id, order.chat_id, cfg.thread_id, order.count)
+            background_tasks.add_task(background_delivery_task, bot, cfg.category_id, order.chat_id, cfg.thread_id, order.count, manager)
             return {"status": "ok"}
 
     @app.post(settings.webhook_path)
@@ -187,4 +187,4 @@ def create_app(bot: Bot, dispatcher: Dispatcher) -> FastAPI:
         background_tasks.add_task(dispatcher.feed_update, bot, update)
         return {"ok": True}
 
-    return app
+    return app, manager

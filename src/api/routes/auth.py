@@ -41,10 +41,10 @@ async def post_login(
         token = AuthService.create_access_token(data={"sub": account.login, "user_id": account.user_id})
         
         # Устанавливаем защищенную куку и даем команду HTMX перенаправить страницу
-        response = HTMLResponse(content="<script>window.location.href='/nexus';</script>")
-        response.headers["HX-Redirect"] = "/nexus"
+        response = HTMLResponse(content="<script>window.location.href='/gdpx';</script>")
+        response.headers["HX-Redirect"] = "/gdpx"
         response.set_cookie(
-            key="nexus_session",
+            key="gdpx_session",
             value=token,
             httponly=True,
             samesite="lax",
@@ -56,5 +56,5 @@ async def post_login(
 async def logout():
     """Сброс сессии."""
     response = RedirectResponse(url="/auth/login")
-    response.delete_cookie("nexus_session")
+    response.delete_cookie("gdpx_session")
     return response

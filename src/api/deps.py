@@ -28,7 +28,7 @@ async def get_bot(request: Request) -> Bot:
 
 async def get_current_user_payload(request: Request) -> dict:
     """Извлекает payload из JWT куки."""
-    token = request.cookies.get("nexus_session")
+    token = request.cookies.get("gdpx_session")
     if not token:
         raise HTTPException(status_code=303, detail="Not authorized")
     

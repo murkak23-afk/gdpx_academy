@@ -1,7 +1,7 @@
 {
-  "name": "GDPX Nexus Panel",
-  "short_name": "Nexus",
-  "start_url": "/nexus",
+  "name": "GDPX GDPX Panel",
+  "short_name": "GDPX",
+  "start_url": "/gdpx",
   "display": "standalone",
   "background_color": "#050508",
   "theme_color": "#00d9ff",

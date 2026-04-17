@@ -1,0 +1,204 @@
+{% extends "base.html" %}
+
+{% block title %}GDPX // ОТЧЕТЫ{% endblock %}
+
+{% block content %}
+<div class="space-y-10 fade-in">
+    
+    <!-- Заголовок -->
+    <div class="flex flex-col md:flex-row justify-between items-start md:items-end gap-8">
+        <div>
+            <div class="text-[10px] text-gdpx-cyan font-bold tracking-[0.4em] uppercase mb-3 opacity-80">Operational Audit</div>
+            <h1 class="text-[36px] font-bold text-white japanese-title leading-none">{% if is_today %}Текущая статистика{% else %}Архив активов{% endif %}</h1>
+            <p class="text-white/40 mt-4 font-medium tracking-[0.1em] uppercase text-[11px] opacity-60">
+                {% if is_today %}Данные за текущие 24 часа (до очистки буфера){% else %}Просмотр истории отгрузок за выбранный период{% endif %}
+            </p>
+        </div>
+        <div class="flex gap-4 items-center">
+            {% if not is_today %}
+            <form method="get" class="flex gap-2">
+                <input type="date" name="date" value="{{ selected_date or '' }}" 
+                       class="bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-[11px] font-bold text-white uppercase tracking-widest focus:outline-none focus:border-gdpx-cyan/50 transition-all">
+                <button type="submit" class="px-6 py-2 bg-gdpx-cyan/10 border border-gdpx-cyan/20 text-gdpx-cyan rounded-xl text-[11px] font-bold uppercase tracking-widest hover:bg-gdpx-cyan hover:text-white transition-all">
+                    Найти
+                </button>
+            </form>
+            {% endif %}
+            {% if user.role == 'owner' and is_today %}
+            <button hx-post="/gdpx/owner/reports/clear" hx-confirm="ВНИМАНИЕ: Это перенесет все отработанные заявки в архив и обнулит текущую статистику. Продолжить?"
+                    class="px-8 py-3 bg-red-500/10 border border-red-500/20 text-red-500 rounded-xl text-[11px] font-bold uppercase tracking-widest hover:bg-red-500 hover:text-white transition-all">
+                Очистить Буфер
+            </button>
+            {% endif %}
+        </div>
+    </div>
+    {% if show_batch_actions %}
+    <div id="batch-controls" class="hidden premium-card p-6 border-gdpx-cyan/30 bg-gdpx-cyan/[0.03] flex items-center justify-between animate-in fade-in slide-in-from-top-4">
+        <div class="flex items-center gap-6">
+            <div class="text-[10px] font-bold text-gdpx-cyan uppercase tracking-[0.2em]">Выбрано: <span id="selected-count" class="text-white">0</span></div>
+            <div class="h-4 w-[1px] bg-white/10"></div>
+            <div class="flex gap-2">
+                <button onclick="batchAction('accept')" class="px-4 py-2 bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 rounded-lg text-[10px] font-bold uppercase tracking-widest hover:bg-emerald-500 hover:text-white transition-all">Массовый зачёт</button>
+                <button onclick="batchAction('block')" class="px-4 py-2 bg-red-500/10 border border-red-500/20 text-red-500 rounded-lg text-[10px] font-bold uppercase tracking-widest hover:bg-red-500 hover:text-white transition-all">Массовый брак</button>
+                <button onclick="batchExport()" class="px-4 py-2 bg-white/5 border border-white/10 text-white/60 rounded-lg text-[10px] font-bold uppercase tracking-widest hover:bg-white/10 hover:text-white transition-all">Экспорт CSV</button>
+            </div>
+        </div>
+        <button onclick="clearSelection()" class="text-[10px] text-white/20 font-bold uppercase tracking-widest hover:text-white transition-all">Отмена</button>
+    </div>
+    {% endif %}
+
+    <!-- KPI карточки (Buffer Summary) -->
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
+        <div class="premium-card p-6 border-white/5">
+            <div class="text-[10px] font-bold text-white/20 uppercase tracking-widest mb-4">Всего выдано</div>
+            <div class="text-[32px] font-light text-white leading-none japanese-title">{{ stats.total_taken }}</div>
+        </div>
+        <div class="premium-card p-6 border-emerald-500/20 bg-emerald-500/[0.02]">
+            <div class="text-[10px] font-bold text-emerald-500/40 uppercase tracking-widest mb-4">Принято (Зачёт)</div>
+            <div class="flex items-baseline gap-3">
+                <div class="text-[32px] font-light text-white leading-none japanese-title">{{ stats.accepted }}</div>
+                <div class="text-[10px] text-emerald-500 font-bold">{{ stats.success_rate }}%</div>
+            </div>
+        </div>
+        <div class="premium-card p-6 border-red-500/20 bg-red-500/[0.02]">
+            <div class="text-[10px] font-bold text-red-500/40 uppercase tracking-widest mb-4">Брак / Блоки</div>
+            <div class="text-[32px] font-light text-white leading-none japanese-title">{{ stats.blocks }}</div>
+        </div>
+        <div class="premium-card p-6 border-white/10">
+            <div class="text-[10px] font-bold text-white/20 uppercase tracking-widest mb-4">Не Скан</div>
+            <div class="text-[32px] font-light text-white leading-none japanese-title">{{ stats.not_scans }}</div>
+        </div>
+        <div class="premium-card p-6 border-gdpx-cyan/30 bg-gdpx-cyan/[0.02]">
+            <div class="text-[10px] font-bold text-gdpx-cyan/40 uppercase tracking-widest mb-4">Выплаты (USDT)</div>
+            <div class="text-[32px] font-light text-white leading-none japanese-title">{{ stats.total_spend|round(2) }}</div>
+        </div>
+    </div>
+
+    <!-- Таблица -->
+    <div class="premium-card overflow-hidden">
+        <div class="overflow-x-auto">
+            <table class="w-full text-left border-collapse">
+                <thead>
+                    <tr class="border-b border-white/5">
+                        {% if show_batch_actions %}
+                        <th class="px-8 py-6 w-10">
+                            <input type="checkbox" id="master-checkbox" class="w-4 h-4 bg-white/5 border-white/10 rounded cursor-pointer accent-gdpx-cyan" onclick="toggleAll(this)">
+                        </th>
+                        {% endif %}
+                        <th class="px-8 py-6 text-[10px] font-bold text-white/30 uppercase tracking-[0.2em]">eSIM / ID</th>
+                        <th class="px-8 py-6 text-[10px] font-bold text-white/30 uppercase tracking-[0.2em]">Категория</th>
+                        <th class="px-8 py-6 text-[10px] font-bold text-white/30 uppercase tracking-[0.2em] text-center">Покупатель</th>
+                        <th class="px-8 py-6 text-[10px] font-bold text-white/30 uppercase tracking-[0.2em] text-center">Статус</th>
+                        <th class="px-8 py-6 text-[10px] font-bold text-white/30 uppercase tracking-[0.2em] text-center">Цена</th>
+                        <th class="px-8 py-6 text-[10px] font-bold text-white/30 uppercase tracking-[0.2em] text-right">Действие</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-white/[0.02] text-sm font-medium">
+                    {% for item in shipments %}
+                    <tr class="hover:bg-white/[0.01] transition-all group">
+                        <td class="px-8 py-6">
+                        {% if show_batch_actions %}
+                        <td class="px-8 py-6">
+                            <input type="checkbox" name="submission-ids" value="{{ item.id }}" class="sub-checkbox w-4 h-4 bg-white/5 border-white/10 rounded cursor-pointer accent-gdpx-cyan" onchange="updateSelection()">
+                        </td>
+                        {% endif %}
+                            <a href="/gdpx/submission/{{ item.id }}" class="font-mono text-white hover:text-gdpx-cyan transition-colors">#{{ item.id }}</a>
+                            <div class="text-[10px] text-white/20 mt-1 uppercase tracking-tighter">{{ item.updated_at.strftime('%d.%m.%Y %H:%M') }}</div>
+                        </td>
+                        <td class="px-8 py-6">
+                            <span class="text-[13px] text-white/80 uppercase tracking-wide">{{ item.category.title }}</span>
+                        </td>
+                        <td class="px-8 py-6 text-center">
+                            <div class="text-[12px] text-gdpx-cyan font-bold">@{{ item.buyer.username or item.buyer.telegram_id }}</div>
+                        </td>
+                        <td class="px-8 py-6 text-center">
+                            {% if item.status.value == 'accepted' %}
+                                <span class="px-3 py-1 bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 rounded-lg text-[9px] font-bold uppercase tracking-widest shadow-[0_0_10px_rgba(16,185,129,0.1)]">ЗАЧЁТ</span>
+                            {% elif item.status.value == 'blocked' %}
+                                <span class="px-3 py-1 bg-red-500/10 text-red-500 border border-red-500/20 rounded-lg text-[9px] font-bold uppercase tracking-widest">БРАК</span>
+                            {% elif item.status.value == 'not_a_scan' %}
+                                <span class="px-3 py-1 bg-white/5 text-white/40 border border-white/10 rounded-lg text-[9px] font-bold uppercase tracking-widest">НЕ СКАН</span>
+                            {% else %}
+                                <span class="px-3 py-1 bg-gdpx-cyan/10 text-gdpx-cyan border border-gdpx-cyan/20 rounded-lg text-[9px] font-bold uppercase tracking-widest">{{ item.status.value|upper }}</span>
+                            {% endif %}
+                        </td>
+                        <td class="px-8 py-6 text-center">
+                            <div class="text-[13px] text-white/90 font-mono">{{ item.purchase_price or 0 }} <span class="text-[10px] opacity-20">USDT</span></div>
+                        </td>
+                        <td class="px-8 py-6 text-right">
+                            <form action="/gdpx/tickets/create" method="post" class="inline">
+                                <input type="hidden" name="submission_id" value="{{ item.id }}">
+                                <input type="hidden" name="subject" value="Вопрос по eSIM #{{ item.id }}">
+                                <button type="submit" class="p-2.5 bg-white/5 border border-white/10 rounded-xl text-white/20 hover:text-gdpx-cyan hover:border-gdpx-cyan hover:bg-gdpx-cyan/10 transition-all">
+                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/></svg>
+                                </button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+<script>
+function toggleAll(master) {
+    document.querySelectorAll(".sub-checkbox").forEach(cb => cb.checked = master.checked);
+    updateSelection();
+}
+
+function updateSelection() {
+    const selected = Array.from(document.querySelectorAll(".sub-checkbox:checked")).map(cb => cb.value);
+    const controls = document.getElementById("batch-controls");
+    const countSpan = document.getElementById("selected-count");
+    
+    if (selected.length > 0) {
+        controls.classList.remove("hidden");
+        controls.classList.add("flex");
+        countSpan.innerText = selected.length;
+    } else {
+        controls.classList.add("hidden");
+        controls.classList.remove("flex");
+    }
+}
+
+function clearSelection() {
+    document.getElementById("master-checkbox").checked = false;
+    document.querySelectorAll(".sub-checkbox").forEach(cb => cb.checked = false);
+    updateSelection();
+}
+
+function batchAction(action) {
+    const selected = Array.from(document.querySelectorAll(".sub-checkbox:checked")).map(cb => cb.value);
+    if (confirm(`Выполнить "${action}" для ${selected.length} объектов?`)) {
+        const formData = new FormData();
+        formData.append("ids", selected.join(","));
+        fetch(`/gdpx/esim/batch-action/${action}`, {
+            method: "POST",
+            body: formData,
+            headers: { "X-CSRF-Token": document.cookie.split("; ").find(row => row.startsWith("csrftoken="))?.split("=")[1] }
+        }).then(r => window.location.reload());
+    }
+}
+
+function batchExport() {
+    const selected = Array.from(document.querySelectorAll(".sub-checkbox:checked")).map(cb => cb.value);
+    const formData = new FormData();
+    formData.append("ids", selected.join(","));
+    fetch("/gdpx/archive/batch-export", {
+        method: "POST",
+        body: formData,
+        headers: { "X-CSRF-Token": document.cookie.split("; ").find(row => row.startsWith("csrftoken="))?.split("=")[1] }
+    }).then(response => response.blob())
+      .then(blob => {
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = "gdpx_batch_export.csv";
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+      });
+}
+</script>
+{% endblock %}

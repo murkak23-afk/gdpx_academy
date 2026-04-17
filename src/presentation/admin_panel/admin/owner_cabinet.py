@@ -66,7 +66,7 @@ async def _render_user_card(user: User, callback_data: OwnerUserCD) -> tuple[str
     
     status_parts = []
     if user.is_restricted: status_parts.append("🚫 RESTRICTED (Bot)")
-    if not user.is_active: status_parts.append("❌ DISABLED (Nexus)")
+    if not user.is_active: status_parts.append("❌ DISABLED (GDPX)")
     
     status_text = "🟢 АКТИВЕН" if not status_parts else " / ".join(status_parts)
     reg_date = user.created_at.strftime("%d.%m.%Y")

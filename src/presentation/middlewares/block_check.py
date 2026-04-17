@@ -54,7 +54,7 @@ class BlockCheckMiddleware(BaseMiddleware):
             await UserCache.set_status(user_tg.id, is_restricted, is_active, role.value if hasattr(role, "value") else str(role))
             data["user_role"] = role
 
-        # Блокировка если либо restricted (в боте), либо inactive (в Nexus)
+        # Блокировка если либо restricted (в боте), либо inactive (в GDPX)
         if is_restricted or not is_active:
             # Владельцев нельзя блокировать через этот механизм
             from src.core.config import get_settings

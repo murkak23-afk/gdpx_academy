@@ -5,18 +5,18 @@
     <!-- Фоновое изображение категории (если есть) -->
     {% if category.photo_file_id %}
     <div class="absolute inset-0 z-0 opacity-10 group-hover:opacity-20 transition-opacity duration-700">
-        <img src="/nexus/media/{{ category.photo_file_id }}" class="w-full h-full object-cover grayscale group-hover:grayscale-0 transition-all duration-700" alt="">
+        <img src="/gdpx/media/{{ category.photo_file_id }}" class="w-full h-full object-cover grayscale group-hover:grayscale-0 transition-all duration-700" alt="">
         <div class="absolute inset-0 bg-gradient-to-t from-[#050508] via-transparent to-transparent"></div>
     </div>
     {% endif %}
 
     <!-- Декоративный неоновый блик -->
-    <div class="absolute -top-12 -right-12 w-24 h-24 bg-nexus-cyan/5 rounded-full blur-[40px] pointer-events-none group-hover:bg-nexus-cyan/15 transition-colors duration-500"></div>
+    <div class="absolute -top-12 -right-12 w-24 h-24 bg-gdpx-cyan/5 rounded-full blur-[40px] pointer-events-none group-hover:bg-gdpx-cyan/15 transition-colors duration-500"></div>
 
     <!-- Header -->
     <div class="flex justify-between items-center gap-3 relative z-10">
         <div class="shrink-0">
-            <span class="text-[10px] font-black bg-gradient-to-r from-nexus-cyan to-nexus-sakura bg-clip-text text-transparent tracking-[0.2em] uppercase">
+            <span class="text-[10px] font-black bg-gradient-to-r from-gdpx-cyan to-gdpx-sakura bg-clip-text text-transparent tracking-[0.2em] uppercase">
                 eSIM
             </span>
         </div>
@@ -33,14 +33,14 @@
         <div class="text-[64px] font-bold tracking-tighter text-white leading-none group-hover:scale-110 origin-left transition-transform duration-700 drop-shadow-[0_0_20px_rgba(255,255,255,0.3)]">
             {{ stock_count }}
         </div>
-        <div class="text-[10px] text-nexus-cyan font-bold mt-2 tracking-[0.3em] uppercase opacity-60">Available</div>
+        <div class="text-[10px] text-gdpx-cyan font-bold mt-2 tracking-[0.3em] uppercase opacity-60">Available</div>
     </div>
 
     <!-- Footer -->
     <div class="mt-6 relative z-10">
         <div class="flex items-center justify-between py-2.5 px-4 mb-4 bg-white/5 border border-white/10 rounded-2xl backdrop-blur-md">
             <span class="text-[10px] text-white/30 font-bold uppercase tracking-widest">Rate</span>
-            <span class="text-[14px] font-black text-nexus-cyan">
+            <span class="text-[14px] font-black text-gdpx-cyan">
                 {% if custom_prices and custom_prices[category.id] %}
                     {{ custom_prices[category.id] }} <span class="text-[10px] opacity-60">USDT</span>
                 {% else %}
@@ -51,7 +51,7 @@
 
         <button onclick="openModal('{{ category.id }}', '{{ category.title }}', '{{ stock_count }}')" 
                 class="w-full h-[48px] rounded-2xl font-black text-white text-[11px] tracking-[0.2em] uppercase
-                       bg-white/5 border border-white/10 hover:bg-nexus-cyan hover:text-black hover:border-nexus-cyan
+                       bg-white/5 border border-white/10 hover:bg-gdpx-cyan hover:text-black hover:border-gdpx-cyan
                        shadow-xl transition-all duration-500">
             Взять на скан
         </button>
@@ -60,14 +60,14 @@
 {% endmacro %}
 
 {% macro ticket_card(ticket) %}
-<a href="/nexus/tickets/{{ ticket.id }}" class="block p-6 bg-white/5 backdrop-blur-xl border border-white/10 rounded-[20px] hover:border-nexus-cyan transition-all duration-300 shadow-[0_8px_30px_rgba(0,0,0,0.5)] hover:shadow-[0_10px_30px_rgba(0,217,255,0.15)] hover:-translate-y-1">
+<a href="/gdpx/tickets/{{ ticket.id }}" class="block p-6 bg-white/5 backdrop-blur-xl border border-white/10 rounded-[20px] hover:border-gdpx-cyan transition-all duration-300 shadow-[0_8px_30px_rgba(0,0,0,0.5)] hover:shadow-[0_10px_30px_rgba(0,217,255,0.15)] hover:-translate-y-1">
     <div class="flex justify-between items-center mb-4">
-        <div class="px-3 py-1 bg-nexus-sakura/20 border border-nexus-sakura/30 rounded-lg">
-            <span class="text-[10px] font-bold text-nexus-sakura tracking-widest uppercase shadow-[0_0_10px_rgba(255,0,234,0.3)]">#{{ ticket.id }}</span>
+        <div class="px-3 py-1 bg-gdpx-sakura/20 border border-gdpx-sakura/30 rounded-lg">
+            <span class="text-[10px] font-bold text-gdpx-sakura tracking-widest uppercase shadow-[0_0_10px_rgba(255,0,234,0.3)]">#{{ ticket.id }}</span>
         </div>
         <span class="text-[10px] bg-white/5 border border-white/10 px-3 py-1 rounded-lg text-white/60 tracking-widest uppercase">{{ ticket.status }}</span>
     </div>
     <div class="font-medium text-[16px] text-white tracking-wide mb-2 line-clamp-1">{{ ticket.subject }}</div>
-    <div class="text-[12px] text-white/40 tracking-wider">Ref: <a href="/nexus/submission/{{ ticket.submission_id }}" class="text-nexus-cyan hover:underline decoration-nexus-cyan/30 underline-offset-4">#{{ ticket.submission_id }}</a></div>
+    <div class="text-[12px] text-white/40 tracking-wider">Ref: <a href="/gdpx/submission/{{ ticket.submission_id }}" class="text-gdpx-cyan hover:underline decoration-gdpx-cyan/30 underline-offset-4">#{{ ticket.submission_id }}</a></div>
 </a>
 {% endmacro %}

@@ -9,15 +9,15 @@
     <div class="flex flex-col md:flex-row justify-between items-start md:items-end gap-6">
         <div>
             <h1 class="text-[42px] font-bold text-white tracking-tight japanese-title">Оперативный контроль</h1>
-            <p class="text-nexus-silver mt-2 font-medium tracking-[0.2em] uppercase text-[10px] opacity-60">Активы в работе и на подтверждении</p>
+            <p class="text-gdpx-silver mt-2 font-medium tracking-[0.2em] uppercase text-[10px] opacity-60">Активы в работе и на подтверждении</p>
         </div>
         <div class="flex items-center gap-4">
             <div id="batch-actions" class="hidden animate-in slide-in-from-right-10 flex gap-3">
-                <button onclick="submitBatch('accept')" class="px-8 py-3 bg-white text-black text-[11px] font-bold rounded-sm uppercase tracking-[0.2em] hover:bg-nexus-cyan hover:text-white transition-all shadow-2xl">
+                <button onclick="submitBatch('accept')" class="px-8 py-3 bg-white text-black text-[11px] font-bold rounded-sm uppercase tracking-[0.2em] hover:bg-gdpx-cyan hover:text-white transition-all shadow-2xl">
                     Зачёт (<span id="selected-count">0</span>)
                 </button>
             </div>
-            <div class="px-6 py-3 bg-white/[0.02] border border-white/5 rounded-sm text-[11px] font-bold text-nexus-silver uppercase tracking-widest">
+            <div class="px-6 py-3 bg-white/[0.02] border border-white/5 rounded-sm text-[11px] font-bold text-gdpx-silver uppercase tracking-widest">
                 Active Items: {{ items|length }}
             </div>
         </div>
@@ -26,10 +26,10 @@
     <!-- Таблица модерации (Zen Style) -->
     <div class="overflow-x-auto custom-scrollbar">
         <table class="premium-table" id="moderation-table">
-            <thead class="text-[10px] font-bold text-nexus-silver/30 uppercase tracking-[0.3em] border-b border-white/5">
+            <thead class="text-[10px] font-bold text-gdpx-silver/30 uppercase tracking-[0.3em] border-b border-white/5">
                 <tr>
                     <th class="w-12 py-6 text-center">
-                        <input type="checkbox" id="select-all" class="w-4 h-4 border-white/10 bg-transparent text-nexus-cyan focus:ring-0 transition-all">
+                        <input type="checkbox" id="select-all" class="w-4 h-4 border-white/10 bg-transparent text-gdpx-cyan focus:ring-0 transition-all">
                     </th>
                     <th class="text-left py-6">eSIM / ID</th>
                     <th class="text-center py-6">Оператор</th>
@@ -42,13 +42,13 @@
                     {% for item in items %}
                     <tr class="group" id="row-{{ item.id }}">
                         <td class="text-center">
-                            <input type="checkbox" name="item-select" value="{{ item.id }}" class="item-checkbox w-4 h-4 border-white/10 bg-transparent text-nexus-cyan focus:ring-0 transition-all">
+                            <input type="checkbox" name="item-select" value="{{ item.id }}" class="item-checkbox w-4 h-4 border-white/10 bg-transparent text-gdpx-cyan focus:ring-0 transition-all">
                         </td>
                         <td class="py-6">
                             <div class="flex items-center gap-6">
                                 <div class="text-[11px] font-mono text-white/20">#{{ item.id }}</div>
                                 <div>
-                                    <div class="text-[16px] font-bold text-white tracking-wide group-hover:text-nexus-cyan transition-colors">{{ item.phone_normalized or 'НЕТ НОМЕРА' }}</div>
+                                    <div class="text-[16px] font-bold text-white tracking-wide group-hover:text-gdpx-cyan transition-colors">{{ item.phone_normalized or 'НЕТ НОМЕРА' }}</div>
                                     <div class="text-[9px] text-white/20 mt-1 tracking-[0.15em] uppercase">Taken: {{ item.assigned_at.strftime('%H:%M:%S') if item.assigned_at else '---' }}</div>
                                 </div>
                             </div>
@@ -64,27 +64,27 @@
                         </td>
                         <td class="text-center">
                             {% if item.status == 'wait_confirm' %}
-                                <span class="text-nexus-sakura text-[10px] font-bold uppercase tracking-[0.2em] flex items-center justify-center gap-2">
-                                    <span class="w-1 h-1 rounded-full bg-nexus-sakura animate-ping"></span>
+                                <span class="text-gdpx-sakura text-[10px] font-bold uppercase tracking-[0.2em] flex items-center justify-center gap-2">
+                                    <span class="w-1 h-1 rounded-full bg-gdpx-sakura animate-ping"></span>
                                     Wait
                                 </span>
                             {% else %}
-                                <span class="text-nexus-cyan text-[10px] font-bold uppercase tracking-[0.2em] flex items-center justify-center gap-2 opacity-40">
+                                <span class="text-gdpx-cyan text-[10px] font-bold uppercase tracking-[0.2em] flex items-center justify-center gap-2 opacity-40">
                                     Work
                                 </span>
                             {% endif %}
                         </td>
                         <td class="text-right">
                             <div class="flex justify-end gap-3 opacity-0 group-hover:opacity-100 transition-opacity">
-                                <a href="/nexus/submission/{{ item.id }}" class="p-2 text-white/20 hover:text-white transition-colors" title="View">
+                                <a href="/gdpx/submission/{{ item.id }}" class="p-2 text-white/20 hover:text-white transition-colors" title="View">
                                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
                                 </a>
-                                <button hx-post="/nexus/esim/{{ item.id }}/action/accept" hx-swap="none" onclick="this.closest('tr').remove()"
+                                <button hx-post="/gdpx/esim/{{ item.id }}/action/accept" hx-swap="none" onclick="this.closest('tr').remove()"
                                         class="p-2 text-white/20 hover:text-emerald-500 transition-colors" title="Accept">
                                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
                                 </button>
-                                <button hx-post="/nexus/esim/{{ item.id }}/action/block" hx-confirm="ЗАБЛОКИРОВАТЬ?" hx-swap="none" onclick="this.closest('tr').remove()"
-                                        class="p-2 text-white/20 hover:text-nexus-sakura transition-colors" title="Block">
+                                <button hx-post="/gdpx/esim/{{ item.id }}/action/block" hx-confirm="ЗАБЛОКИРОВАТЬ?" hx-swap="none" onclick="this.closest('tr').remove()"
+                                        class="p-2 text-white/20 hover:text-gdpx-sakura transition-colors" title="Block">
                                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"/></svg>
                                 </button>
                             </div>
@@ -135,7 +135,7 @@
         
         if (confirm(`Выполнить зачёт для ${checked.length} активов?`)) {
             batchIdsInput.value = ids;
-            batchForm.setAttribute('hx-post', `/nexus/esim/batch-action/${action}`);
+            batchForm.setAttribute('hx-post', `/gdpx/esim/batch-action/${action}`);
             htmx.process(batchForm);
             htmx.trigger(batchForm, 'submit');
         }

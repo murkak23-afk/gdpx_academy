@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}GDPX // NEXUS DASHBOARD{% endblock %}
+{% block title %}GDPX // GDPX DASHBOARD{% endblock %}
 
 {% block content %}
 <div class="space-y-16 fade-in">
@@ -8,55 +8,55 @@
     <!-- Приветствие (Zen Style) -->
     <div class="flex flex-col md:flex-row justify-between items-start md:items-end gap-8">
         <div>
-            <div class="text-[10px] text-nexus-sakura font-bold tracking-[0.4em] uppercase mb-3 opacity-80">System Status: Online</div>
+            <div class="text-[10px] text-gdpx-sakura font-bold tracking-[0.4em] uppercase mb-3 opacity-80">System Status: Online</div>
             <h1 class="text-[56px] font-bold tracking-tight text-white leading-none japanese-title">Добро пожаловать</h1>
-            <p class="text-nexus-silver mt-4 font-medium tracking-[0.15em] uppercase text-[11px] max-w-md leading-relaxed opacity-60">
+            <p class="text-gdpx-silver mt-4 font-medium tracking-[0.15em] uppercase text-[11px] max-w-md leading-relaxed opacity-60">
                 Центральный узел управления операциями GDPX. <br>Гармония данных и эффективности.
             </p>
         </div>
         <div class="relative group">
-            <div class="absolute -inset-1 bg-gradient-to-r from-nexus-cyan to-nexus-sakura rounded-xl blur opacity-20 group-hover:opacity-40 transition duration-1000"></div>
+            <div class="absolute -inset-1 bg-gradient-to-r from-gdpx-cyan to-gdpx-sakura rounded-xl blur opacity-20 group-hover:opacity-40 transition duration-1000"></div>
             <div class="relative px-8 py-4 bg-[#0a0a0f] border border-white/10 rounded-xl backdrop-blur-xl">
-                <span class="text-nexus-cyan font-black text-[24px] tracking-[0.15em] drop-shadow-[0_0_15px_rgba(0,217,255,0.4)]" id="clock"></span>
+                <span class="text-gdpx-cyan font-black text-[24px] tracking-[0.15em] drop-shadow-[0_0_15px_rgba(0,217,255,0.4)]" id="clock"></span>
             </div>
         </div>
     </div>
 
     <!-- Сетка статистики (Zen Cards) -->
-    <div id="stats-grid" hx-get="/nexus" hx-trigger="every 30s" hx-select="#stats-grid" hx-swap="outerHTML" 
+    <div id="stats-grid" hx-get="/gdpx" hx-trigger="every 30s" hx-select="#stats-grid" hx-swap="outerHTML" 
          class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
         
         <!-- Склад -->
         <div class="premium-card p-10 flex flex-col justify-between min-h-[260px] relative overflow-hidden group">
-            <div class="absolute -right-6 -bottom-8 text-[120px] font-bold text-white/[0.02] japanese-title group-hover:text-nexus-cyan/[0.05] transition-all duration-1000">蔵</div>
+            <div class="absolute -right-6 -bottom-8 text-[120px] font-bold text-white/[0.02] japanese-title group-hover:text-gdpx-cyan/[0.05] transition-all duration-1000">蔵</div>
             <div>
-                <div class="text-nexus-silver text-[10px] font-bold uppercase tracking-[0.3em] mb-6 opacity-40">Склад / Warehouse</div>
+                <div class="text-gdpx-silver text-[10px] font-bold uppercase tracking-[0.3em] mb-6 opacity-40">Склад / Warehouse</div>
                 <div class="flex items-baseline gap-4">
                     <span class="text-[64px] font-light text-white japanese-title leading-none">{{ stats.stock }}</span>
                 </div>
             </div>
             <div class="mt-auto">
-                <div class="text-[10px] text-nexus-cyan font-bold tracking-[0.2em] uppercase opacity-80 mb-2">Inventory Ready</div>
+                <div class="text-[10px] text-gdpx-cyan font-bold tracking-[0.2em] uppercase opacity-80 mb-2">Inventory Ready</div>
                 <div class="h-[1px] w-full bg-white/5 overflow-hidden">
-                    <div class="h-full bg-nexus-cyan shadow-[0_0_15px_#00d9ff] transition-all duration-1000" style="width: {{ [stats.stock, 100]|min }}%"></div>
+                    <div class="h-full bg-gdpx-cyan shadow-[0_0_15px_#00d9ff] transition-all duration-1000" style="width: {{ [stats.stock, 100]|min }}%"></div>
                 </div>
             </div>
         </div>
 
         <!-- Оборот (Amount) -->
         <div class="premium-card p-10 flex flex-col justify-between min-h-[260px] relative overflow-hidden group">
-            <div class="absolute -right-6 -bottom-8 text-[120px] font-bold text-white/[0.02] japanese-title group-hover:text-nexus-sakura/[0.05] transition-all duration-1000">金</div>
+            <div class="absolute -right-6 -bottom-8 text-[120px] font-bold text-white/[0.02] japanese-title group-hover:text-gdpx-sakura/[0.05] transition-all duration-1000">金</div>
             <div>
-                <div class="text-nexus-silver text-[10px] font-bold uppercase tracking-[0.3em] mb-6 opacity-40">
+                <div class="text-gdpx-silver text-[10px] font-bold uppercase tracking-[0.3em] mb-6 opacity-40">
                     {{ 'К оплате / Payout' if user.role == 'simbuyer' else 'Доход / Revenue' }}
                 </div>
                 <div class="flex items-baseline gap-4">
                     <span class="text-[64px] font-light text-white japanese-title leading-none">{{ stats.today_amount }}</span>
-                    <span class="text-[14px] text-nexus-sakura font-bold tracking-widest uppercase opacity-60">USDT</span>
+                    <span class="text-[14px] text-gdpx-sakura font-bold tracking-widest uppercase opacity-60">USDT</span>
                 </div>
             </div>
-            <div class="mt-auto flex items-center gap-3 text-[10px] text-nexus-sakura font-bold uppercase tracking-widest">
-                <span class="w-1.5 h-1.5 rounded-full bg-nexus-sakura animate-pulse shadow-[0_0_10px_#ff00ea]"></span>
+            <div class="mt-auto flex items-center gap-3 text-[10px] text-gdpx-sakura font-bold uppercase tracking-widest">
+                <span class="w-1.5 h-1.5 rounded-full bg-gdpx-sakura animate-pulse shadow-[0_0_10px_#ff00ea]"></span>
                 LIVE UPDATES
             </div>
         </div>
@@ -65,7 +65,7 @@
         <div class="premium-card p-10 flex flex-col justify-between min-h-[260px] relative overflow-hidden group">
             <div class="absolute -right-6 -bottom-8 text-[120px] font-bold text-white/[0.02] japanese-title group-hover:text-white/[0.05] transition-all duration-1000">今</div>
             <div>
-                <div class="text-nexus-silver text-[10px] font-bold uppercase tracking-[0.3em] mb-6 opacity-40">За сутки / Daily</div>
+                <div class="text-gdpx-silver text-[10px] font-bold uppercase tracking-[0.3em] mb-6 opacity-40">За сутки / Daily</div>
                 <div class="flex items-baseline gap-4">
                     <span class="text-[64px] font-light text-white japanese-title leading-none">{{ stats.today_count }}</span>
                     <span class="text-[14px] text-white/20 font-bold tracking-widest uppercase">PCS</span>
@@ -76,18 +76,18 @@
 
         <!-- Воркеры / Статус -->
         <div class="premium-card p-10 flex flex-col justify-between min-h-[260px] relative overflow-hidden group">
-            <div class="absolute -right-6 -bottom-8 text-[120px] font-bold text-white/[0.02] japanese-title group-hover:text-nexus-cyan/[0.05] transition-all duration-1000">員</div>
+            <div class="absolute -right-6 -bottom-8 text-[120px] font-bold text-white/[0.02] japanese-title group-hover:text-gdpx-cyan/[0.05] transition-all duration-1000">員</div>
             {% if user.role == 'owner' or user.role == 'admin' %}
             <div>
-                <div class="text-nexus-silver text-[10px] font-bold uppercase tracking-[0.3em] mb-6 opacity-40">Агенты / Agents</div>
+                <div class="text-gdpx-silver text-[10px] font-bold uppercase tracking-[0.3em] mb-6 opacity-40">Агенты / Agents</div>
                 <div class="flex items-baseline gap-4">
                     <span class="text-[64px] font-light text-white japanese-title leading-none">{{ stats.workers }}</span>
                 </div>
             </div>
-            <div class="mt-auto text-[10px] text-nexus-cyan font-bold tracking-[0.2em] uppercase">Active Personnel</div>
+            <div class="mt-auto text-[10px] text-gdpx-cyan font-bold tracking-[0.2em] uppercase">Active Personnel</div>
             {% else %}
             <div>
-                <div class="text-nexus-silver text-[10px] font-bold uppercase tracking-[0.3em] mb-6 opacity-40">Статус / Status</div>
+                <div class="text-gdpx-silver text-[10px] font-bold uppercase tracking-[0.3em] mb-6 opacity-40">Статус / Status</div>
                 <div class="text-[32px] font-light text-white japanese-title leading-none mt-4">ACTIVE</div>
             </div>
             <div class="mt-auto flex items-center gap-2 text-[10px] text-emerald-500 font-bold uppercase tracking-widest">
@@ -103,10 +103,10 @@
     <div class="premium-card p-10 relative overflow-hidden">
         <div class="flex justify-between items-center mb-8">
             <div>
-                <div class="text-[10px] text-nexus-cyan font-bold tracking-[0.3em] uppercase mb-1 opacity-60">Operations Traffic</div>
+                <div class="text-[10px] text-gdpx-cyan font-bold tracking-[0.3em] uppercase mb-1 opacity-60">Operations Traffic</div>
                 <h3 class="text-[24px] font-bold text-white japanese-title">Активность системы (24ч)</h3>
             </div>
-            <div class="px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-[10px] text-nexus-cyan font-bold uppercase tracking-widest">
+            <div class="px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-[10px] text-gdpx-cyan font-bold uppercase tracking-widest">
                 Dynamic Flow
             </div>
         </div>
@@ -117,28 +117,28 @@
 
     <!-- Быстрые действия (Minimal Blocks) -->
     <div class="grid grid-cols-1 md:grid-cols-3 gap-8 pt-6">
-        <a href="/nexus/tickets" class="premium-card p-12 group relative overflow-hidden">
+        <a href="/gdpx/tickets" class="premium-card p-12 group relative overflow-hidden">
             <div class="relative z-10">
-                <div class="text-nexus-cyan font-bold text-[10px] tracking-[0.3em] uppercase mb-6 opacity-60">Communication</div>
-                <h3 class="text-[28px] font-bold text-white mb-4 japanese-title group-hover:text-nexus-cyan transition-colors">Поддержка</h3>
-                <p class="text-nexus-silver text-[13px] leading-relaxed opacity-40">Решение споров и общение по активам.</p>
+                <div class="text-gdpx-cyan font-bold text-[10px] tracking-[0.3em] uppercase mb-6 opacity-60">Communication</div>
+                <h3 class="text-[28px] font-bold text-white mb-4 japanese-title group-hover:text-gdpx-cyan transition-colors">Поддержка</h3>
+                <p class="text-gdpx-silver text-[13px] leading-relaxed opacity-40">Решение споров и общение по активам.</p>
             </div>
         </a>
 
         {% if user.role == 'owner' or user.role == 'admin' %}
-        <a href="/nexus/categories" class="premium-card p-12 group relative overflow-hidden">
+        <a href="/gdpx/categories" class="premium-card p-12 group relative overflow-hidden">
             <div class="relative z-10">
-                <div class="text-nexus-sakura font-bold text-[10px] tracking-[0.3em] uppercase mb-6 opacity-60">Marketplace</div>
-                <h3 class="text-[28px] font-bold text-white mb-4 japanese-title group-hover:text-nexus-sakura transition-colors">Категории</h3>
-                <p class="text-nexus-silver text-[13px] leading-relaxed opacity-40">Управление лимитами и ценами.</p>
+                <div class="text-gdpx-sakura font-bold text-[10px] tracking-[0.3em] uppercase mb-6 opacity-60">Marketplace</div>
+                <h3 class="text-[28px] font-bold text-white mb-4 japanese-title group-hover:text-gdpx-sakura transition-colors">Категории</h3>
+                <p class="text-gdpx-silver text-[13px] leading-relaxed opacity-40">Управление лимитами и ценами.</p>
             </div>
         </a>
 
-        <a href="/nexus/users" class="premium-card p-12 group relative overflow-hidden">
+        <a href="/gdpx/users" class="premium-card p-12 group relative overflow-hidden">
             <div class="relative z-10">
                 <div class="text-white font-bold text-[10px] tracking-[0.3em] uppercase mb-6 opacity-60">Personnel</div>
                 <h3 class="text-[28px] font-bold text-white mb-4 japanese-title group-hover:text-white transition-colors">Команда</h3>
-                <p class="text-nexus-silver text-[13px] leading-relaxed opacity-40">Контроль доступа и ролей воркеров.</p>
+                <p class="text-gdpx-silver text-[13px] leading-relaxed opacity-40">Контроль доступа и ролей воркеров.</p>
             </div>
         </a>
         {% endif %}

@@ -23,10 +23,11 @@ from src.core.utils.message_manager import MessageManager
 from src.core.logger import logger
 
 
-def create_dispatcher() -> Dispatcher:
+def create_dispatcher(ws_manager=None) -> Dispatcher:
     """Создаёт диспетчер и подключает middleware/роутеры/обработчик ошибок."""
 
     dispatcher = Dispatcher(storage=build_fsm_storage())
+    dispatcher["ws_manager"] = ws_manager
     
     # Инициализация SMI MessageManager
     from src.core.bot import create_bot

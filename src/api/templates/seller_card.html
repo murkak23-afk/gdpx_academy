@@ -8,24 +8,24 @@
     <!-- Header -->
     <div class="flex flex-col md:flex-row justify-between items-start md:items-end gap-6">
         <div class="flex items-center gap-6">
-            <div class="w-20 h-20 rounded-[32px] bg-gradient-to-br from-nexus-cyan to-nexus-sakura flex items-center justify-center text-3xl font-bold text-white shadow-[0_0_30px_rgba(0,217,255,0.2)]">
+            <div class="w-20 h-20 rounded-[32px] bg-gradient-to-br from-gdpx-cyan to-gdpx-sakura flex items-center justify-center text-3xl font-bold text-white shadow-[0_0_30px_rgba(0,217,255,0.2)]">
                 {{ seller.full_name[:1] }}
             </div>
             <div>
-                <div class="text-[10px] text-nexus-cyan font-bold tracking-[0.4em] uppercase mb-2 opacity-80">Seller Profile</div>
+                <div class="text-[10px] text-gdpx-cyan font-bold tracking-[0.4em] uppercase mb-2 opacity-80">Seller Profile</div>
                 <h1 class="text-[42px] font-bold tracking-tight text-white leading-none japanese-title">{{ seller.full_name }}</h1>
                 <div class="flex items-center gap-4 mt-4">
-                    <span class="text-[11px] text-nexus-silver font-mono bg-white/5 px-3 py-1 rounded-lg">ID: {{ seller.telegram_id }}</span>
-                    <span class="text-[11px] text-nexus-silver font-mono bg-white/5 px-3 py-1 rounded-lg">@{{ seller.username or 'none' }}</span>
+                    <span class="text-[11px] text-gdpx-silver font-mono bg-white/5 px-3 py-1 rounded-lg">ID: {{ seller.telegram_id }}</span>
+                    <span class="text-[11px] text-gdpx-silver font-mono bg-white/5 px-3 py-1 rounded-lg">@{{ seller.username or 'none' }}</span>
                 </div>
             </div>
         </div>
         <div class="flex gap-4">
-            <button hx-post="/nexus/users/{{ seller.id }}/toggle-active" hx-confirm="Изменить статус доступа?"
+            <button hx-post="/gdpx/users/{{ seller.id }}/toggle-active" hx-confirm="Изменить статус доступа?"
                     class="px-8 py-4 bg-white/5 border border-white/10 rounded-2xl text-[10px] font-bold {{ 'text-red-500' if seller.is_active else 'text-emerald-500' }} uppercase tracking-widest hover:border-white/30 transition-all">
                 {{ 'Заблокировать' if seller.is_active else 'Разблокировать' }}
             </button>
-            <a href="/nexus/owner/sellers" class="px-8 py-4 bg-white/5 border border-white/10 rounded-2xl text-[10px] font-bold text-white/40 uppercase tracking-widest hover:text-white transition-all">
+            <a href="/gdpx/owner/sellers" class="px-8 py-4 bg-white/5 border border-white/10 rounded-2xl text-[10px] font-bold text-white/40 uppercase tracking-widest hover:text-white transition-all">
                 Назад
             </a>
         </div>
@@ -38,13 +38,13 @@
             <!-- Trust Score Card -->
             <div class="premium-card p-10 relative overflow-hidden">
                 <div class="absolute -right-4 -bottom-4 text-[100px] font-bold text-white/[0.02] japanese-title">信</div>
-                <div class="text-nexus-cyan font-bold text-[10px] tracking-[0.3em] uppercase mb-8 opacity-60">Trust Score</div>
+                <div class="text-gdpx-cyan font-bold text-[10px] tracking-[0.3em] uppercase mb-8 opacity-60">Trust Score</div>
                 <div class="flex items-baseline gap-2">
                     <span class="text-[64px] font-light text-white japanese-title leading-none">{{ stats.trust_score }}%</span>
                 </div>
                 <div class="mt-6">
                     <div class="h-1.5 w-full bg-white/5 rounded-full overflow-hidden">
-                        <div class="h-full bg-nexus-cyan shadow-[0_0_15px_#00d9ff] transition-all duration-1000" style="width: {{ stats.trust_score }}%"></div>
+                        <div class="h-full bg-gdpx-cyan shadow-[0_0_15px_#00d9ff] transition-all duration-1000" style="width: {{ stats.trust_score }}%"></div>
                     </div>
                 </div>
                 <div class="mt-8 grid grid-cols-2 gap-4">
@@ -54,14 +54,14 @@
                     </div>
                     <div>
                         <div class="text-[9px] text-white/20 uppercase font-bold mb-1">Accepted</div>
-                        <div class="text-lg font-bold text-nexus-cyan">{{ stats.accepted }}</div>
+                        <div class="text-lg font-bold text-gdpx-cyan">{{ stats.accepted }}</div>
                     </div>
                 </div>
             </div>
 
             <!-- Payout Details Card (Simple) -->
             <div class="premium-card p-10">
-                <div class="text-nexus-sakura font-bold text-[10px] tracking-[0.3em] uppercase mb-6 opacity-60">Payment Info</div>
+                <div class="text-gdpx-sakura font-bold text-[10px] tracking-[0.3em] uppercase mb-6 opacity-60">Payment Info</div>
                 <div class="space-y-6">
                     <div>
                         <label class="text-[10px] font-bold text-white/30 uppercase tracking-[0.2em] mb-2 block">Реквизиты выплат</label>
@@ -78,7 +78,7 @@
             <div class="premium-card p-10 h-full">
                 <div class="flex justify-between items-center mb-10">
                     <div>
-                        <div class="text-nexus-cyan font-bold text-[10px] tracking-[0.3em] uppercase mb-1 opacity-60">Submission History</div>
+                        <div class="text-gdpx-cyan font-bold text-[10px] tracking-[0.3em] uppercase mb-1 opacity-60">Submission History</div>
                         <h3 class="text-[24px] font-bold text-white japanese-title">Последние действия</h3>
                     </div>
                     <div class="text-[10px] text-white/20 font-mono">Limit: 20 entries</div>
@@ -112,7 +112,7 @@
                     {% if not history %}
                     <div class="py-20 text-center">
                         <div class="text-[48px] opacity-10 mb-4">🍃</div>
-                        <p class="text-nexus-silver text-[11px] uppercase tracking-widest opacity-20 font-bold">История пуста</p>
+                        <p class="text-gdpx-silver text-[11px] uppercase tracking-widest opacity-20 font-bold">История пуста</p>
                     </div>
                     {% endif %}
                 </div>

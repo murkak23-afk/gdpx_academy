@@ -1,5 +1,5 @@
 <div class="flex {% if msg.sender_id == current_user_id %}justify-end{% else %}justify-start{% endif %} mb-4 animate-in slide-in-from-bottom-2 duration-300">
-    <div class="max-w-[70%] rounded-2xl px-5 py-3.5 {% if msg.sender_id == current_user_id %}bg-gradient-to-r from-nexus-cyan to-nexus-sakura text-white rounded-br-none shadow-[0_4px_20px_rgba(0,217,255,0.25)]{% else %}bg-[#0a0a0f]/80 backdrop-blur-md border border-white/10 text-white/90 rounded-bl-none shadow-sm{% endif %}">
+    <div class="max-w-[70%] rounded-2xl px-5 py-3.5 {% if msg.sender_id == current_user_id %}bg-gradient-to-r from-gdpx-cyan to-gdpx-sakura text-white rounded-br-none shadow-[0_4px_20px_rgba(0,217,255,0.25)]{% else %}bg-[#0a0a0f]/80 backdrop-blur-md border border-white/10 text-white/90 rounded-bl-none shadow-sm{% endif %}">
         <div class="text-[14px] leading-relaxed">{{ msg.text }}</div>
         <div class="text-[10px] mt-2 opacity-60 {% if msg.sender_id == current_user_id %}text-right text-white/80{% else %}text-left text-white/40{% endif %} font-mono">
             {{ msg.created_at.strftime('%H:%M') }}

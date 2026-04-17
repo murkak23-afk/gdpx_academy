@@ -8,14 +8,11 @@
     <!-- Header -->
     <div class="flex flex-col md:flex-row justify-between items-start md:items-end gap-6">
         <div>
-            <div class="text-[10px] text-nexus-sakura font-bold tracking-[0.4em] uppercase mb-3 opacity-80">Quality Control</div>
+            <div class="text-[10px] text-gdpx-sakura font-bold tracking-[0.4em] uppercase mb-3 opacity-80">Quality Control</div>
             <h1 class="text-[42px] font-bold tracking-tight text-white leading-none japanese-title">Двойной аудит</h1>
-            <p class="text-nexus-silver mt-4 font-medium tracking-[0.15em] uppercase text-[11px] opacity-60">
+            <p class="text-gdpx-silver mt-4 font-medium tracking-[0.15em] uppercase text-[11px] opacity-60">
                 Контроль решений администраторов в реальном времени.
             </p>
-        </div>
-        <div class="px-8 py-4 bg-white/[0.02] border border-white/5 rounded-sm backdrop-blur-md">
-            <span class="text-nexus-cyan font-mono text-[16px] tracking-[0.2em]">LIVE FEED ACTIVE</span>
         </div>
     </div>
 
@@ -37,7 +34,7 @@
                     <tr class="hover:bg-white/[0.01] transition-all group">
                         <td class="px-8 py-6">
                             <div class="flex items-center gap-3">
-                                <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-nexus-sakura to-purple-600 flex items-center justify-center text-[10px] font-bold text-white">
+                                <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-gdpx-sakura to-purple-600 flex items-center justify-center text-[10px] font-bold text-white">
                                     {{ log.admin.full_name[:1] }}
                                 </div>
                                 <div class="font-bold text-white text-[13px]">{{ log.admin.full_name }}</div>
@@ -59,13 +56,13 @@
                             {{ log.created_at.strftime('%H:%M:%S') }}
                         </td>
                         <td class="px-8 py-6 text-right">
-                            <form hx-post="/nexus/owner/audit/{{ log.id }}/override" class="flex justify-end gap-2">
-                                <select name="new_status" class="bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-[10px] text-white focus:outline-none focus:border-nexus-sakura transition-all">
+                            <form hx-post="/gdpx/owner/audit/{{ log.id }}/override" class="flex justify-end gap-2">
+                                <select name="new_status" class="bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-[10px] text-white focus:outline-none focus:border-gdpx-sakura transition-all">
                                     <option value="accepted">ACCEPT</option>
                                     <option value="rejected">REJECT</option>
                                     <option value="blocked">BLOCK</option>
                                 </select>
-                                <button type="submit" class="px-4 py-1.5 bg-nexus-sakura text-white rounded-lg text-[9px] font-bold uppercase tracking-widest hover:shadow-[0_0_15px_#ff00ea] transition-all">
+                                <button type="submit" class="px-4 py-1.5 bg-gdpx-sakura text-white rounded-lg text-[9px] font-bold uppercase tracking-widest hover:shadow-[0_0_15px_#ff00ea] transition-all">
                                     FIX
                                 </button>
                             </form>

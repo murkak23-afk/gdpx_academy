@@ -91,7 +91,8 @@ async def run_application() -> None:
         from src.core.logger import setup_logger
         setup_logger(notification_service)
 
-        fastapi_app = create_fastapi_app(bot, dispatcher)
+        fastapi_app, ws_manager = create_fastapi_app(bot, dispatcher)
+        dispatcher["ws_manager"] = ws_manager
 
         uvicorn_config = uvicorn.Config(
             fastapi_app,

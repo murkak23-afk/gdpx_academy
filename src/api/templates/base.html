@@ -3,8 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% block title %}GDPX // NEXUS{% endblock %}</title>
+    <title>{% block title %}GDPX // GDPX{% endblock %}</title>
     
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.css">
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.js"></script>
+    <script>toastr.options = { "positionClass": "toast-top-right", "progressBar": true, "timeOut": "5000", "closeButton": true };</script>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/htmx.org@1.9.10"></script>
     <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
@@ -23,7 +27,7 @@
                 extend: {
                     fontFamily: { 'sans': ['Outfit', 'sans-serif'] },
                     colors: {
-                        nexus: {
+                        gdpx: {
                             cyan: '#00F5FF',
                             sakura: '#E070FF',
                             bg: '#050508',
@@ -42,7 +46,7 @@
             --sakura-glow: #ff00ea;
             --cyber-purple: #7000ff;
             --premium-white: #F8F9FA;
-            --glass-bg: rgba(255, 255, 255, 0.02);
+            --glass-bg: rgba(255, 255, 255, 0.015);
         }
 
         body { 
@@ -55,6 +59,16 @@
             line-height: 1.5;
         }
 
+        /* ТЕХНИЧЕСКАЯ СЕТКА */
+        .cyber-grid {
+            position: fixed; inset: 0;
+            background-image: 
+                linear-gradient(rgba(0, 240, 255, 0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(0, 240, 255, 0.03) 1px, transparent 1px);
+            background-size: 50px 50px;
+            pointer-events: none; z-index: -1;
+        }
+
         /* Sakura Particles */
         .sakura-petal {
             position: fixed;
@@ -62,7 +76,7 @@
             border-radius: 10px 0 10px 10px;
             pointer-events: none;
             z-index: 5;
-            opacity: 0.4;
+            opacity: 0.3;
         }
         
         /* Исправленная бегущая строка */
@@ -76,7 +90,7 @@
             white-space: nowrap; display: inline-block;
             animation: ticker-slide 40s linear infinite;
             font-size: 10px; font-weight: 700; text-transform: uppercase;
-            letter-spacing: 0.2em; color: var(--electric-cyan);
+            letter-spacing: 0.3em; color: var(--electric-cyan);
             padding-right: 100%;
         }
         @keyframes ticker-slide {
@@ -87,25 +101,25 @@
         /* Modern Premium Glass Cards (Samurai Edition) */
         .premium-card {
             background: var(--glass-bg);
-            backdrop-filter: blur(30px);
-            border: 1px solid rgba(255, 255, 255, 0.08);
+            backdrop-filter: blur(40px);
+            border: 1px solid rgba(255, 255, 255, 0.05);
             border-radius: 32px;
-            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.8);
-            transition: all 0.5s cubic-bezier(0.23, 1, 0.32, 1);
+            box-shadow: 0 30px 100px rgba(0, 0, 0, 0.9);
+            transition: all 0.6s cubic-bezier(0.16, 1, 0.3, 1);
             position: relative;
         }
         .premium-card::before {
             content: ""; position: absolute; inset: 0; border-radius: 32px;
-            padding: 1px; background: linear-gradient(135deg, rgba(0, 240, 255, 0.2), transparent, rgba(224, 112, 255, 0.2));
+            padding: 1px; background: linear-gradient(135deg, rgba(0, 240, 255, 0.15), transparent, rgba(224, 112, 255, 0.15));
             -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
             -webkit-mask-composite: xor; mask-composite: exclude;
-            pointer-events: none;
+            pointer-events: none; opacity: 0.5;
         }
         .premium-card:hover {
-            background: rgba(255, 255, 255, 0.05);
-            border-color: var(--electric-cyan);
-            box-shadow: 0 0 40px rgba(0, 240, 255, 0.15);
-            transform: translateY(-4px);
+            background: rgba(255, 255, 255, 0.04);
+            border-color: rgba(0, 240, 255, 0.4);
+            box-shadow: 0 0 50px rgba(0, 240, 255, 0.1);
+            transform: translateY(-6px) scale(1.01);
         }
 
         .neon-text-gradient {
@@ -115,25 +129,36 @@
         }
 
         .sidebar-active { 
-            background: linear-gradient(90deg, rgba(0, 240, 255, 0.1) 0%, transparent 100%);
-            border-left: 4px solid var(--electric-cyan);
+            background: rgba(0, 240, 255, 0.05);
+            border: 1px solid rgba(0, 240, 255, 0.3);
             color: var(--electric-cyan) !important;
+            box-shadow: 0 0 20px rgba(0, 240, 255, 0.1);
+            position: relative;
+        }
+        .sidebar-active::after {
+            content: ""; position: absolute; left: -2px; top: 25%; height: 50%; width: 4px;
+            background: var(--electric-cyan); border-radius: 0 4px 4px 0;
+            box-shadow: 0 0 15px var(--electric-cyan);
         }
 
         .japanese-title { 
             font-family: 'Outfit', sans-serif; 
-            letter-spacing: -0.02em;
-            font-weight: 700 !important;
+            letter-spacing: -0.01em;
+            font-weight: 800 !important;
             text-transform: uppercase;
             font-style: italic;
         }
 
-        .glass-panel { background: rgba(5, 5, 8, 0.85); backdrop-filter: blur(40px); }
-        .fade-in { animation: fadeIn 0.6s ease-out; }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .glass-panel { 
+            background: rgba(5, 5, 8, 0.9); 
+            backdrop-filter: blur(50px);
+            border-right: 1px solid rgba(255, 255, 255, 0.05);
+        }
+        .fade-in { animation: fadeIn 1s cubic-bezier(0.16, 1, 0.3, 1); }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
 
         /* Custom Scrollbar */
-        ::-webkit-scrollbar { width: 4px; }
+        ::-webkit-scrollbar { width: 3px; }
         ::-webkit-scrollbar-track { background: transparent; }
         ::-webkit-scrollbar-thumb { background: linear-gradient(var(--electric-cyan), var(--sakura-glow)); border-radius: 10px; }
     </style>
@@ -142,12 +167,13 @@
     <!-- ФОНОВЫЕ ЭФФЕКТЫ -->
     <div class="fixed inset-0 z-[-1] bg-[#050508] overflow-hidden">
         <div class="absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,#1e1b4b,transparent)] opacity-40"></div>
+        <div class="cyber-grid"></div>
         <canvas id="starfield" class="absolute inset-0"></canvas>
     </div>
 
     <div class="cyber-ticker">
         <div class="ticker-content" id="ticker-feed">
-            NEXUS PROTOCOL // CYBER-SAMURAI INTERFACE // REAL-TIME SYSTEM SYNC // PREMIUM ACCESS GRANTED //
+            GDPX PROTOCOL // CYBER-SAMURAI INTERFACE // REAL-TIME SYSTEM SYNC // PREMIUM ACCESS GRANTED //
         </div>
     </div>
 
@@ -229,38 +255,42 @@
             
             <nav class="flex-1 px-4 space-y-2">
                 {% if user and (user.role == 'admin' or user.role == 'owner') %}
-                <a href="/nexus" class="flex items-center py-3.5 px-5 rounded-2xl transition-all {% if active_page == 'dashboard' %}sidebar-active{% else %}text-slate-400 hover:bg-white/5 hover:text-white{% endif %}">
+                <a href="/gdpx" class="flex items-center py-3.5 px-5 rounded-2xl transition-all {% if active_page == 'dashboard' %}sidebar-active{% else %}text-slate-400 hover:bg-white/5 hover:text-white{% endif %}">
                     <span>Дашборд</span>
                 </a>
-                <a href="/nexus/moderation" class="flex items-center py-3.5 px-5 rounded-2xl transition-all {% if active_page == 'moderation' %}sidebar-active{% else %}text-slate-400 hover:bg-white/5 hover:text-white{% endif %}">
+                <a href="/gdpx/moderation" class="flex items-center py-3.5 px-5 rounded-2xl transition-all {% if active_page == 'moderation' %}sidebar-active{% else %}text-slate-400 hover:bg-white/5 hover:text-white{% endif %}">
                     <span>Модерация</span>
                 </a>
                 {% endif %}
-                <a href="/nexus/inventory" class="flex items-center py-3.5 px-5 rounded-2xl transition-all {% if active_page == 'inventory' %}sidebar-active{% else %}text-slate-400 hover:bg-white/5 hover:text-white{% endif %}">
+                <a href="/gdpx/inventory" class="flex items-center py-3.5 px-5 rounded-2xl transition-all {% if active_page == 'inventory' %}sidebar-active{% else %}text-slate-400 hover:bg-white/5 hover:text-white{% endif %}">
                     <span>Склад eSIM</span>
                 </a>
-                <a href="/nexus/my-esim" class="flex items-center py-3.5 px-5 rounded-2xl transition-all {% if active_page == 'my-esim' %}sidebar-active{% else %}text-slate-400 hover:bg-white/5 hover:text-white{% endif %}">
+                <a href="/gdpx/my-esim" class="flex items-center py-3.5 px-5 rounded-2xl transition-all {% if active_page == 'my-esim' %}sidebar-active{% else %}text-slate-400 hover:bg-white/5 hover:text-white{% endif %}">
                     <span>Мои активы</span>
                 </a>
-                <a href="/nexus/reports" class="flex items-center py-3.5 px-5 rounded-2xl transition-all {% if active_page == 'reports' %}sidebar-active{% else %}text-slate-400 hover:bg-white/5 hover:text-white{% endif %}">
+                <a href="/gdpx/stats" class="flex items-center py-3.5 px-5 rounded-2xl transition-all {% if active_page == 'stats' %}sidebar-active{% else %}text-slate-400 hover:bg-white/5 hover:text-white{% endif %}">
                     <span>Статистика</span>
                 </a>
-                <a href="/nexus/tickets" class="flex items-center py-3.5 px-5 rounded-2xl transition-all {% if active_page == 'tickets' %}sidebar-active{% else %}text-slate-400 hover:bg-white/5 hover:text-white{% endif %}">
+                <a href="/gdpx/archive" class="flex items-center py-3.5 px-5 rounded-2xl transition-all {% if active_page == 'archive' %}sidebar-active{% else %}text-slate-400 hover:bg-white/5 hover:text-white{% endif %}">
+                    <span>Архив</span>
+                </a>
+                <a href="/gdpx/tickets" class="flex items-center py-3.5 px-5 rounded-2xl transition-all {% if active_page == 'tickets' %}sidebar-active{% else %}text-slate-400 hover:bg-white/5 hover:text-white{% endif %}">
                     <span>Поддержка</span>
+                </a>
                 </a>
 
                 {% if user and user.role == 'owner' %}
-                <div class="pt-8 pb-2 px-5 text-[10px] font-bold text-nexus-sakura uppercase tracking-widest opacity-60">Owner Console</div>
-                <a href="/nexus/owner/buyers" class="flex items-center py-3.5 px-5 rounded-2xl transition-all {% if active_page == 'owner_buyers' %}sidebar-active{% else %}text-slate-400 hover:bg-white/5 hover:text-white{% endif %}">
+                <div class="pt-8 pb-2 px-5 text-[10px] font-bold text-gdpx-sakura uppercase tracking-widest opacity-60">Owner Console</div>
+                <a href="/gdpx/owner/buyers" class="flex items-center py-3.5 px-5 rounded-2xl transition-all {% if active_page == 'owner_buyers' %}sidebar-active{% else %}text-slate-400 hover:bg-white/5 hover:text-white{% endif %}">
                     <span>👤 Покупатели</span>
                 </a>
-                <a href="/nexus/owner/sellers" class="flex items-center py-3.5 px-5 rounded-2xl transition-all {% if active_page == 'owner_sellers' %}sidebar-active{% else %}text-slate-400 hover:bg-white/5 hover:text-white{% endif %}">
+                <a href="/gdpx/owner/sellers" class="flex items-center py-3.5 px-5 rounded-2xl transition-all {% if active_page == 'owner_sellers' %}sidebar-active{% else %}text-slate-400 hover:bg-white/5 hover:text-white{% endif %}">
                     <span>🚜 Продавцы</span>
                 </a>
-                <a href="/nexus/owner/admins" class="flex items-center py-3.5 px-5 rounded-2xl transition-all {% if active_page == 'owner_admins' %}sidebar-active{% else %}text-slate-400 hover:bg-white/5 hover:text-white{% endif %}">
+                <a href="/gdpx/owner/admins" class="flex items-center py-3.5 px-5 rounded-2xl transition-all {% if active_page == 'owner_admins' %}sidebar-active{% else %}text-slate-400 hover:bg-white/5 hover:text-white{% endif %}">
                     <span>🛡 Админы</span>
                 </a>
-                <a href="/nexus/owner/audit-feed" class="flex items-center py-3.5 px-5 rounded-2xl transition-all {% if active_page == 'audit' %}sidebar-active{% else %}text-slate-400 hover:bg-white/5 hover:text-white{% endif %}">
+                <a href="/gdpx/owner/audit-feed" class="flex items-center py-3.5 px-5 rounded-2xl transition-all {% if active_page == 'audit' %}sidebar-active{% else %}text-slate-400 hover:bg-white/5 hover:text-white{% endif %}">
                     <span>📜 Аудит</span>
                 </a>
                 {% endif %}
@@ -269,16 +299,16 @@
             {% if user %}
             <div class="mt-auto border-t border-white/5 p-6">
                 <div class="flex items-center gap-3">
-                    <div class="w-10 h-10 rounded-2xl bg-gradient-to-br from-nexus-cyan to-nexus-sakura p-[1px]">
-                        <div class="w-full h-full rounded-2xl bg-nexus-bg flex items-center justify-center font-bold text-white text-xs">
+                    <div class="w-10 h-10 rounded-2xl bg-gradient-to-br from-gdpx-cyan to-gdpx-sakura p-[1px]">
+                        <div class="w-full h-full rounded-2xl bg-gdpx-bg flex items-center justify-center font-bold text-white text-xs">
                             {{ user.username[0]|upper }}
                         </div>
                     </div>
                     <div class="flex-1 min-w-0">
                         <div class="text-[13px] font-bold text-white truncate">@{{ user.username }}</div>
-                        <div class="text-[10px] text-nexus-cyan uppercase font-bold opacity-60">{{ user.role }}</div>
+                        <div class="text-[10px] text-gdpx-cyan uppercase font-bold opacity-60">{{ user.role }}</div>
                     </div>
-                    <a href="/auth/logout" class="p-2 text-white/20 hover:text-nexus-sakura transition-colors">
+                    <a href="/auth/logout" class="p-2 text-white/20 hover:text-gdpx-sakura transition-colors">
                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
                     </a>
                 </div>
@@ -321,7 +351,7 @@
 
         function connectWS() {
             const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-            const ws = new WebSocket(`${protocol}//${window.location.host}/nexus/ws`);
+            const ws = new WebSocket(`${protocol}//${window.location.host}/gdpx/ws`);
             const statusDot = document.querySelector('.ws-dot');
             const ticker = document.getElementById('ticker-feed');
             
@@ -334,6 +364,7 @@
                 const data = JSON.parse(event.data);
                 if (data.type === 'notification' && ticker) {
                     const time = new Date().toLocaleTimeString();
+                    toastr[data.style || "info"](data.message, "GDPX SYSTEM");
                     ticker.innerText = `[${time}] ${data.message.toUpperCase()} // ` + ticker.innerText;
                 }
                 if (data.trigger === 'refresh_stats') document.body.dispatchEvent(new Event('refreshStats'));

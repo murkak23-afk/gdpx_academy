@@ -26,7 +26,7 @@ from src.services.auth_service import AuthService
 from src.services.delivery_service import background_delivery_task
 from src.domain.submission.submission_service import SubmissionService
 
-router = APIRouter(prefix="/nexus", tags=["Nexus"])
+router = APIRouter(prefix="/gdpx", tags=["GDPX"])
 logger = logging.getLogger(__name__)
 
 # RBAC Dependencies
@@ -242,43 +242,49 @@ async def process_esim_batch_action(
 
         return HTMLResponse(content=f'<script>window.location.reload();</script>')
 
-@router.get("/reports", response_class=HTMLResponse)
-async def get_reports(request: Request, user: User = Depends(get_current_user)):
+@router.post("/owner/archive/clear")
+async def clear_reports_buffer(user: User = Depends(get_current_user)):
+    """Очистка буфера отработанного товара (архивация)."""
     async with SessionFactory() as session:
-        today_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+        if user.role != UserRole.OWNER:
+            raise HTTPException(status_code=403)
+            
+        # Архивируем все отработанные заявки
+        from sqlalchemy import update
+        from src.database.models.enums import SubmissionStatus
+        from datetime import datetime, timezone
         
-        base_stmt = select(Submission).where(Submission.updated_at >= today_start)
-        if user.role == UserRole.SIMBUYER:
-            base_stmt = base_stmt.where(Submission.delivered_to_chat == user.telegram_id)
-
-        all_today = (await session.execute(base_stmt)).scalars().all()
+        stmt = update(Submission).where(
+            and_(
+                Submission.status.in_([
+                    SubmissionStatus.ACCEPTED, 
+                    SubmissionStatus.REJECTED, 
+                    SubmissionStatus.BLOCKED,
+                    SubmissionStatus.NOT_A_SCAN
+                ]),
+                Submission.is_archived == False
+            )
+        ).values(
+            is_archived=True,
+            archived_at=datetime.now(timezone.utc)
+        )
         
-        stats = {
-            "total_taken": len([s for s in all_today if s.status != SubmissionStatus.PENDING]),
-            "blocks": len([s for s in all_today if s.status == SubmissionStatus.BLOCKED]),
-            "not_scans": len([s for s in all_today if s.status == SubmissionStatus.NOT_A_SCAN]),
-            "accepted": len([s for s in all_today if s.status == SubmissionStatus.ACCEPTED]),
-            "total_spend": sum([s.purchase_price or 0 for s in all_today if s.status == SubmissionStatus.ACCEPTED])
-        }
+        await session.execute(stmt)
+        await session.commit()
         
-        stats["success_rate"] = round((stats["accepted"] / stats["total_taken"] * 100), 1) if stats["total_taken"] > 0 else 0
-
-        stmt_list = base_stmt.options(joinedload(Submission.category)).order_by(Submission.updated_at.desc()).limit(500)
-        shipments = (await session.execute(stmt_list)).scalars().all()
-
-        return templates.TemplateResponse("reports.html", {
-            "request": request,
-            "user": user,
-            "shipments": shipments,
-            "stats": stats,
-            "active_page": "reports"
-        })
-
-@router.get("/reports/export")
-async def export_reports_csv(user: User = Depends(admin_only)):
-    """Выгрузка отчетов в CSV."""
+        await log_admin_action(admin_id=user.id, action="CLEAR_REPORTS_BUFFER", details="Буфер отработанного товара очищен")
+        
+        return HTMLResponse(content='<script>window.location.reload();</script>')
+@router.post("/archive/batch-export")
+async def export_batch_csv(ids: str = Form(...), user: User = Depends(admin_only)):
+    """Выгрузка выбранных отчетов в CSV."""
     async with SessionFactory() as session:
-        stmt = select(Submission).options(joinedload(Submission.category)).order_by(Submission.updated_at.desc())
+        try:
+            target_ids = [int(i) for i in ids.split(",") if i.strip()]
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid IDs")
+            
+        stmt = select(Submission).options(joinedload(Submission.category)).where(Submission.id.in_(target_ids)).order_by(Submission.updated_at.desc())
         items = (await session.execute(stmt)).scalars().all()
         
         output = io.StringIO()
@@ -286,21 +292,123 @@ async def export_reports_csv(user: User = Depends(admin_only)):
         writer.writerow(["ID", "Phone", "Category", "Status", "Price", "Date"])
         
         for i in items:
-            writer.writerow([i.id, i.phone_normalized or 'N/A', i.category.title, i.status, i.purchase_price or 0, i.updated_at.strftime('%Y-%m-%d %H:%M')])
+            writer.writerow([i.id, i.phone_normalized or "N/A", i.category.title, i.status, i.purchase_price or 0, i.updated_at.strftime("%Y-%m-%d %H:%M")])
             
         response = StreamingResponse(
             iter([output.getvalue()]),
             media_type="text/csv"
         )
-        response.headers["Content-Disposition"] = "attachment; filename=gdpx_reports.csv"
+        response.headers["Content-Disposition"] = "attachment; filename=gdpx_batch_export.csv"
         return response
+
+
+@router.get("/archive", response_class=HTMLResponse)
+async def get_archive(request: Request, date: str = None, user: User = Depends(get_current_user)):
+    """Архив отгрузок за прошлые дни."""
+    async with SessionFactory() as session:
+        today_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+        
+        # Базовый запрос: только отработанные
+        base_stmt = select(Submission).where(Submission.status != SubmissionStatus.PENDING)
+        
+        if date:
+            try:
+                selected_date = datetime.strptime(date, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+                next_day = selected_date + timedelta(days=1)
+                base_stmt = base_stmt.where(Submission.updated_at >= selected_date, Submission.updated_at < next_day)
+                is_archive_view = True
+            except ValueError:
+                # Если дата кривая, показываем за все время до сегодня
+                base_stmt = base_stmt.where(Submission.updated_at < today_start)
+                is_archive_view = True
+        else:
+            # По умолчанию в Архиве показываем все до сегодня
+            base_stmt = base_stmt.where(Submission.updated_at < today_start)
+            is_archive_view = True
+
+        if user.role == UserRole.SIMBUYER:
+            base_stmt = base_stmt.where(Submission.buyer_id == user.id)
+            
+        shipments_stmt = base_stmt.options(
+            joinedload(Submission.category), 
+            joinedload(Submission.buyer)
+        ).order_by(Submission.updated_at.desc()).limit(1000)
+        
+        shipments = (await session.execute(shipments_stmt)).scalars().all()
+        
+        # KPI считаем по выборке
+        total_taken = len(shipments)
+        accepted_list = [s for s in shipments if s.status == SubmissionStatus.ACCEPTED]
+        
+        stats = {
+            "total_taken": total_taken,
+            "accepted": len(accepted_list),
+            "blocks": len([s for s in shipments if s.status == SubmissionStatus.BLOCKED]),
+            "not_scans": len([s for s in shipments if s.status == SubmissionStatus.NOT_A_SCAN]),
+            "total_spend": sum([s.purchase_price or 0 for s in accepted_list])
+        }
+        stats["success_rate"] = round((stats["accepted"] / total_taken * 100), 1) if total_taken > 0 else 0
+
+        return templates.TemplateResponse("archive.html", {
+            "request": request,
+            "user": user,
+            "shipments": shipments,
+            "stats": stats,
+            "selected_date": date,
+            "active_page": "archive"
+            "show_batch_actions": user.role in [UserRole.OWNER, UserRole.ADMIN],
+        })
+
+@router.get("/stats", response_class=HTMLResponse)
+async def get_current_stats(request: Request, user: User = Depends(get_current_user)):
+    """Оперативная статистика за текущий день."""
+    async with SessionFactory() as session:
+        today_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+        
+        base_stmt = select(Submission).where(Submission.updated_at >= today_start)
+        
+        if user.role == UserRole.SIMBUYER:
+            base_stmt = base_stmt.where(Submission.buyer_id == user.id)
+            
+        shipments_stmt = base_stmt.options(
+            joinedload(Submission.category), 
+            joinedload(Submission.buyer)
+        ).order_by(Submission.updated_at.desc())
+        
+        shipments = (await session.execute(shipments_stmt)).scalars().all()
+        
+        total_taken = len([s for s in shipments if s.status != SubmissionStatus.PENDING])
+        accepted_list = [s for s in shipments if s.status == SubmissionStatus.ACCEPTED]
+        
+        stats = {
+            "total_taken": total_taken,
+            "accepted": len(accepted_list),
+            "blocks": len([s for s in shipments if s.status == SubmissionStatus.BLOCKED]),
+            "not_scans": len([s for s in shipments if s.status == SubmissionStatus.NOT_A_SCAN]),
+            "total_spend": sum([s.purchase_price or 0 for s in accepted_list])
+        }
+        stats["success_rate"] = round((stats["accepted"] / total_taken * 100), 1) if total_taken > 0 else 0
+
+        return templates.TemplateResponse("archive.html", { # Используем тот же шаблон, но с другими данными
+            "request": request,
+            "user": user,
+            "shipments": shipments,
+            "stats": stats,
+            "is_today": True,
+            "active_page": "stats"
+            "show_batch_actions": user.role in [UserRole.OWNER, UserRole.ADMIN],
+        })
 
 @router.get("/submission/{sub_id}", response_class=HTMLResponse)
 async def view_submission(sub_id: int, request: Request, user: User = Depends(get_current_user)):
     """Детальная страница одной eSIM (скана)."""
     async with SessionFactory() as session:
         # Базовая выборка с категорией
-        stmt = select(Submission).options(joinedload(Submission.category)).where(Submission.id == sub_id)
+        stmt = select(Submission).options(
+            joinedload(Submission.category),
+            joinedload(Submission.buyer),
+            joinedload(Submission.admin)
+        ).where(Submission.id == sub_id)
         
         # Загружаем продавца только для админов и овнера (Изоляция данных)
         if user.role in [UserRole.OWNER, UserRole.ADMIN]:
@@ -319,7 +427,7 @@ async def view_submission(sub_id: int, request: Request, user: User = Depends(ge
             "request": request,
             "user": user,
             "sub": sub,
-            "active_page": "reports"
+            "active_page": "archive"
         })
 
 @router.get("/categories", response_class=HTMLResponse)
@@ -355,7 +463,7 @@ async def toggle_category(cat_id: int, user: User = Depends(admin_only)):
             await session.commit()
             
             status_text = "ACTIVE" if cat.is_active else "INACTIVE"
-            status_color = "text-nexus-cyan border-nexus-cyan/30 bg-nexus-cyan/10 shadow-[0_0_10px_rgba(0,217,255,0.1)]" if cat.is_active else "text-white/20 border-white/5 bg-white/5"
+            status_color = "text-gdpx-cyan border-gdpx-cyan/30 bg-gdpx-cyan/10 shadow-[0_0_10px_rgba(0,217,255,0.1)]" if cat.is_active else "text-white/20 border-white/5 bg-white/5"
             return HTMLResponse(content=f'<span class="px-3 py-1 text-[10px] border rounded-lg uppercase tracking-widest font-bold {status_color}">{status_text}</span>')
         return HTMLResponse(content="Error")
 
@@ -376,7 +484,7 @@ async def update_category_price(cat_id: int, price: Decimal = Form(...), user: U
                 target_id=cat.id,
                 details=f"Цена изменена: {old_price} -> {price}"
             )
-            return RedirectResponse(url="/nexus/categories", status_code=303)
+            return RedirectResponse(url="/gdpx/categories", status_code=303)
         return HTTPException(status_code=404)
 
 @router.post("/categories/create")
@@ -397,7 +505,7 @@ async def create_category(
         session.add(new_cat)
         await session.commit()
         await log_admin_action(admin_id=user.id, action="CREATE_CATEGORY", target_type="category", target_id=new_cat.id, details=f"Создана кат. {title} (slug: {slug})")
-        return RedirectResponse(url="/nexus/categories", status_code=303)
+        return RedirectResponse(url="/gdpx/categories", status_code=303)
 
 @router.post("/categories/{cat_id}/update")
 async def update_category(
@@ -414,7 +522,7 @@ async def update_category(
             cat.payout_rate = payout_rate
             await session.commit()
             await log_admin_action(admin_id=user.id, action="UPDATE_CATEGORY", target_type="category", target_id=cat.id, details=f"Обновлена кат. {title}, цена {payout_rate}")
-            return RedirectResponse(url="/nexus/categories", status_code=303)
+            return RedirectResponse(url="/gdpx/categories", status_code=303)
         return HTTPException(status_code=404)
 
 @router.get("/users/{target_id}/delivery", response_class=HTMLResponse)
@@ -465,7 +573,7 @@ async def add_user_delivery_config(
             details=f"Добавлен маршрут: Cat={category_id}, Chat={chat_id}, Thread={thread_id}"
         )
         
-        return RedirectResponse(url=f"/nexus/users/{target_id}/delivery", status_code=303)
+        return RedirectResponse(url=f"/gdpx/users/{target_id}/delivery", status_code=303)
 
 @router.post("/users/delivery/{cfg_id}/delete")
 async def delete_delivery_config(cfg_id: int, user: User = Depends(admin_only)):
@@ -476,7 +584,7 @@ async def delete_delivery_config(cfg_id: int, user: User = Depends(admin_only)):
             target_id = cfg.user_id
             await session.delete(cfg)
             await session.commit()
-            return RedirectResponse(url=f"/nexus/users/{target_id}/delivery", status_code=303)
+            return RedirectResponse(url=f"/gdpx/users/{target_id}/delivery", status_code=303)
         return HTTPException(status_code=404)
 
 @router.get("/users/{target_id}/prices", response_class=HTMLResponse)
@@ -530,7 +638,7 @@ async def add_user_price_config(
             
         await session.commit()
         await log_admin_action(admin_id=user.id, action="UPDATE_USER_PRICE", target_type="user", target_id=target_id, details=f"Установлена цена {price} для кат. {category_id}")
-        return RedirectResponse(url=f"/nexus/users/{target_id}/prices", status_code=303)
+        return RedirectResponse(url=f"/gdpx/users/{target_id}/prices", status_code=303)
 
 @router.post("/users/prices/{price_id}/delete")
 async def delete_user_price(price_id: int, user: User = Depends(get_current_user)):
@@ -545,7 +653,7 @@ async def delete_user_price(price_id: int, user: User = Depends(get_current_user
             target_id = price_cfg.user_id
             await session.delete(price_cfg)
             await session.commit()
-            return RedirectResponse(url=f"/nexus/users/{target_id}/prices", status_code=303)
+            return RedirectResponse(url=f"/gdpx/users/{target_id}/prices", status_code=303)
         return HTTPException(status_code=404)
 
 from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
@@ -653,14 +761,14 @@ async def take_esim_from_inventory(
             details=f"Запрос {count} шт. -> Чат {cfg.chat_id}"
         )
         
-        return HTMLResponse(content='<script>window.location.href="/nexus/my-esim"</script>')
+        return HTMLResponse(content='<script>window.location.href="/gdpx/my-esim"</script>')
 
 @router.post("/submission/{sub_id}/show-in-bot")
 async def show_in_bot(sub_id: int, request: Request, user: User = Depends(get_current_user), bot: Bot = Depends(get_bot)):
-    """Отправка карточки сим-карты в личку админу/овнеру в телеграм."""
+    """Отправка карточки сим-карты в личку (ТОЛЬКО ДЛЯ АДМИНОВ)."""
     async with SessionFactory() as session:
-        if user.role not in [UserRole.OWNER, UserRole.ADMIN]:
-            raise HTTPException(status_code=403)
+        if user.role == UserRole.SIMBUYER:
+            raise HTTPException(status_code=403, detail="Simbuyers cannot use this")
             
         stmt = select(Submission).options(
             joinedload(Submission.category), 
@@ -671,20 +779,21 @@ async def show_in_bot(sub_id: int, request: Request, user: User = Depends(get_cu
         if not sub:
             return HTMLResponse(content="Not Found")
 
+        # ПОЛНАЯ КАРТОЧКА ДЛЯ АДМИНА
         text = (
             f"🏮 *GDPX PROTOCOL: КАРТОЧКА #{sub.id}*\n"
             f"━━━━━━━━━━━━━━━━━━\n\n"
             f"📱 *НОМЕР:* `{sub.phone_normalized or 'Н/Д'}`\n"
             f"🏷 *КАТЕГОРИЯ:* `{sub.category.title}`\n"
             f"⚙️ *СТАТУС:* `{sub.status.upper()}`\n\n"
-            f"👤 *ПРОДАВЕЦ:* @{sub.seller.username or 'unknown'}\n"
+            f"👤 *ПРОДАВЕЦ:* @{sub.seller.username or 'unknown'} (`{sub.seller.telegram_id}`)\n"
             f"📅 *СОЗДАНА:* _{sub.created_at.strftime('%d.%m.%Y %H:%M')}_\n\n"
-            f"🔗 [Открыть в панели](https://{request.base_url.hostname}/nexus/submission/{sub.id})"
+            f"🔗 [Открыть в панели](https://{request.base_url.hostname}/gdpx/submission/{sub.id})"
         )
         
         try:
-            if sub.category.photo_file_id:
-                await bot.send_photo(user.telegram_id, sub.category.photo_file_id, caption=text, parse_mode="Markdown")
+            if sub.telegram_file_id:
+                await bot.send_photo(user.telegram_id, sub.telegram_file_id, caption=text, parse_mode="Markdown")
             else:
                 await bot.send_message(user.telegram_id, text, parse_mode="Markdown")
             return HTMLResponse(content='<span class="text-[10px] text-emerald-400 font-bold uppercase tracking-widest">Отправлено в бот ✅</span>')
@@ -730,7 +839,7 @@ async def discuss_submission(sub_id: int, user: User = Depends(get_current_user)
                 details=f"Начато обсуждение в тикете #{ticket.id}"
             )
 
-        return RedirectResponse(url=f"/nexus/tickets/{ticket.id}", status_code=303)
+        return RedirectResponse(url=f"/gdpx/tickets/{ticket.id}", status_code=303)
 
 @router.get("/owner/buyers", response_class=HTMLResponse)
 async def get_owner_buyers(request: Request, q: Optional[str] = None, user: User = Depends(get_current_user)):
@@ -926,7 +1035,7 @@ async def override_admin_decision(
                 await bot.send_message(log_entry.admin_id, msg, parse_mode="Markdown")
             except: pass
             
-        return RedirectResponse(url="/nexus/owner/audit-feed", status_code=303)
+        return RedirectResponse(url="/gdpx/owner/audit-feed", status_code=303)
 
 @router.get("/users/{target_id}/cabinet", response_class=HTMLResponse)
 async def get_simbuyer_cabinet(target_id: int, request: Request, user: User = Depends(get_current_user)):
@@ -1018,12 +1127,12 @@ async def update_simbuyer_config(
         
         # УВЕДОМЛЕНИЕ ПОКУПАТЕЛЮ (Улучшение #3)
         try:
-            notification = "🔔 *NEXUS: Обновление конфигурации*\n\nВладелец обновил вашу ценовую политику или учетные данные. Пожалуйста, проверьте изменения в личном кабинете."
+            notification = "🔔 *GDPX: Обновление конфигурации*\n\nВладелец обновил вашу ценовую политику или учетные данные. Пожалуйста, проверьте изменения в личном кабинете."
             await bot.send_message(target.telegram_id, notification, parse_mode="Markdown")
         except Exception as e:
             logger.error(f"Failed to notify simbuyer {target_id}: {e}")
             
-        return RedirectResponse(url=f"/nexus/users/{target_id}/cabinet", status_code=303)
+        return RedirectResponse(url=f"/gdpx/users/{target_id}/cabinet", status_code=303)
 
 @router.post("/users/create")
 async def create_new_user(
@@ -1076,7 +1185,7 @@ async def create_new_user(
         await log_admin_action(admin_id=current_admin.id, action="CREATE_USER", target_type="user", target_id=user.id, details=f"Создан аккаунт {login} с ролью {role}")
         
         # Сразу перекидываем в кабинет для настройки цен и параметров
-        return RedirectResponse(url=f"/nexus/users/{user.id}/cabinet", status_code=303)
+        return RedirectResponse(url=f"/gdpx/users/{user.id}/cabinet", status_code=303)
 
 @router.post("/users/{target_id}/role")
 async def update_user_role(target_id: int, new_role: str = Form(...), user: User = Depends(get_current_user)):
@@ -1103,7 +1212,7 @@ async def update_user_role(target_id: int, new_role: str = Form(...), user: User
                 target_id=target.id,
                 details=f"Роль изменена: {old_role} -> {new_role}"
             )
-            return RedirectResponse(url="/nexus/users", status_code=303)
+            return RedirectResponse(url="/gdpx/users", status_code=303)
         return HTTPException(status_code=404)
 
 @router.post("/users/{target_id}/delete")
@@ -1124,7 +1233,7 @@ async def delete_user(target_id: int, user: User = Depends(get_current_user)):
             await session.commit()
             await log_admin_action(admin_id=user.id, action="DELETE_USER", target_type="user", target_id=target_id, details="Полное удаление аккаунта и веб-доступа")
             
-        return RedirectResponse(url="/nexus/owner/buyers", status_code=303)
+        return RedirectResponse(url="/gdpx/owner/buyers", status_code=303)
 
 @router.get("/audit", response_class=HTMLResponse)
 async def get_audit_log(request: Request, user: User = Depends(get_current_user)):
@@ -1222,7 +1331,7 @@ async def search_submissions(q: str, user: User = Depends(get_current_user)):
         
         html = ""
         for res in results:
-            status_color = "text-nexus-cyan"
+            status_color = "text-gdpx-cyan"
             if res.status == SubmissionStatus.ACCEPTED: status_color = "text-emerald-500"
             elif res.status == SubmissionStatus.BLOCKED: status_color = "text-red-500"
             elif res.status == SubmissionStatus.NOT_A_SCAN: status_color = "text-amber-500"
@@ -1231,20 +1340,20 @@ async def search_submissions(q: str, user: User = Depends(get_current_user)):
             bot_btn = ""
             if is_admin:
                 bot_btn = f"""
-                <button hx-post="/nexus/submission/{res.id}/show-in-bot" hx-swap="outerHTML"
-                        class="p-2 bg-white/5 border border-white/10 rounded-lg text-white/40 hover:text-nexus-cyan transition-all" title="Показать в Telegram">
+                <button hx-post="/gdpx/submission/{res.id}/show-in-bot" hx-swap="outerHTML"
+                        class="p-2 bg-white/5 border border-white/10 rounded-lg text-white/40 hover:text-gdpx-cyan transition-all" title="Показать в Telegram">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/></svg>
                 </button>
                 """
 
             html += f"""
             <div class="flex items-center justify-between p-4 hover:bg-white/5 border-b border-white/5 transition-all group">
-                <a href="/nexus/submission/{res.id}" class="flex items-center gap-4 flex-1">
-                    <div class="w-10 h-10 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center font-mono text-[10px] text-white/40 group-hover:border-nexus-cyan/30 transition-all">
+                <a href="/gdpx/submission/{res.id}" class="flex items-center gap-4 flex-1">
+                    <div class="w-10 h-10 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center font-mono text-[10px] text-white/40 group-hover:border-gdpx-cyan/30 transition-all">
                         #{res.id}
                     </div>
                     <div>
-                        <div class="text-white font-bold group-hover:text-nexus-cyan transition-colors">{res.phone_normalized or 'Н/Д'}</div>
+                        <div class="text-white font-bold group-hover:text-gdpx-cyan transition-colors">{res.phone_normalized or 'Н/Д'}</div>
                         <div class="text-[10px] text-white/40 uppercase tracking-widest">{res.category.title}</div>
                     </div>
                 </a>
