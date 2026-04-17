@@ -41,8 +41,7 @@ async def post_login(
         token = AuthService.create_access_token(data={"sub": account.login, "user_id": account.user_id})
         
         # Устанавливаем защищенную куку и даем команду HTMX перенаправить страницу
-        response = HTMLResponse(content="<script>window.location.href='/gdpx';</script>")
-        response.headers["HX-Redirect"] = "/gdpx"
+        response = RedirectResponse(url="/gdpx", status_code=303)
         response.set_cookie(
             key="gdpx_session",
             value=token,

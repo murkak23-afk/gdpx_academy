@@ -46,7 +46,7 @@ def create_app(bot: Bot, dispatcher: Dispatcher) -> tuple[FastAPI, ConnectionMan
     async def csrf_protect(request: Request, call_next):
         if request.method in ["POST", "PUT", "DELETE", "PATCH"]:
             # Skip check for login (where token is set) and telegram webhooks
-            if request.url.path not in ["/auth/login", settings.webhook_path] and not request.url.path.startswith("/api/"):
+            if request.url.path not in ["/auth/login", settings.webhook_path, "/auth/login/"] and not request.url.path.startswith("/api/"):
                 cookie_csrf = request.cookies.get("csrftoken")
                 header_csrf = request.headers.get("X-CSRF-Token")
                 
