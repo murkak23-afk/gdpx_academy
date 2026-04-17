@@ -28,7 +28,7 @@
         
         <!-- Склад -->
         <div class="premium-card p-10 flex flex-col justify-between min-h-[260px] relative overflow-hidden group">
-            <div class="absolute -right-6 -bottom-8 text-[120px] font-bold text-white/[0.02] japanese-title group-hover:text-gdpx-cyan/[0.05] transition-all duration-1000">蔵</div>
+            <div class="absolute -right-6 -bottom-8 text-[120px] font-bold text-white/[0.01] japanese-title group-hover:text-gdpx-cyan/[0.05] transition-all duration-1000">蔵</div>
             <div>
                 <div class="text-gdpx-silver text-[10px] font-bold uppercase tracking-[0.3em] mb-6 opacity-40">Склад / Warehouse</div>
                 <div class="flex items-baseline gap-4">
@@ -45,7 +45,7 @@
 
         <!-- Оборот (Amount) -->
         <div class="premium-card p-10 flex flex-col justify-between min-h-[260px] relative overflow-hidden group">
-            <div class="absolute -right-6 -bottom-8 text-[120px] font-bold text-white/[0.02] japanese-title group-hover:text-gdpx-sakura/[0.05] transition-all duration-1000">金</div>
+            <div class="absolute -right-6 -bottom-8 text-[120px] font-bold text-white/[0.01] japanese-title group-hover:text-gdpx-sakura/[0.05] transition-all duration-1000">金</div>
             <div>
                 <div class="text-gdpx-silver text-[10px] font-bold uppercase tracking-[0.3em] mb-6 opacity-40">
                     {{ 'К оплате / Payout' if user.role == 'simbuyer' else 'Доход / Revenue' }}
@@ -63,7 +63,7 @@
 
         <!-- Оборот (Count) -->
         <div class="premium-card p-10 flex flex-col justify-between min-h-[260px] relative overflow-hidden group">
-            <div class="absolute -right-6 -bottom-8 text-[120px] font-bold text-white/[0.02] japanese-title group-hover:text-white/[0.05] transition-all duration-1000">今</div>
+            <div class="absolute -right-6 -bottom-8 text-[120px] font-bold text-white/[0.01] japanese-title group-hover:text-white/[0.05] transition-all duration-1000">今</div>
             <div>
                 <div class="text-gdpx-silver text-[10px] font-bold uppercase tracking-[0.3em] mb-6 opacity-40">За сутки / Daily</div>
                 <div class="flex items-baseline gap-4">
@@ -76,7 +76,7 @@
 
         <!-- Воркеры / Статус -->
         <div class="premium-card p-10 flex flex-col justify-between min-h-[260px] relative overflow-hidden group">
-            <div class="absolute -right-6 -bottom-8 text-[120px] font-bold text-white/[0.02] japanese-title group-hover:text-gdpx-cyan/[0.05] transition-all duration-1000">員</div>
+            <div class="absolute -right-6 -bottom-8 text-[120px] font-bold text-white/[0.01] japanese-title group-hover:text-gdpx-cyan/[0.05] transition-all duration-1000">員</div>
             {% if user.role == 'owner' or user.role == 'admin' %}
             <div>
                 <div class="text-gdpx-silver text-[10px] font-bold uppercase tracking-[0.3em] mb-6 opacity-40">Агенты / Agents</div>

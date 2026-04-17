@@ -12,38 +12,51 @@
     </div>
 
     <!-- Основной контейнер (Modern Premium) -->
-    <div class="relative z-10 w-full max-w-[420px] fade-in">
+    <div class="relative z-10 w-full max-w-[440px] fade-in">
         
-        <div class="premium-card p-10 sm:p-12 text-center">
+        <div class="premium-card p-10 sm:p-14 text-center group">
             
-            <div class="mb-10">
-                <img src="/assets/logo.png" class="w-48 h-auto mx-auto drop-shadow-[0_0_30px_rgba(0,245,255,0.3)]" alt="GDPX">
-                <h2 class="text-[28px] font-bold text-white mt-8 tracking-tight neon-text-gradient">Авторизация</h2>
-                <p class="text-white/40 text-[11px] uppercase tracking-[0.3em] mt-2">Secure Link Established</p>
+            <div class="mb-12 relative">
+                <!-- Декоративное свечение за логотипом -->
+                <div class="absolute inset-0 bg-gdpx-cyan/20 blur-[60px] rounded-full scale-0 group-hover:scale-100 transition-transform duration-1000"></div>
+                
+                <img src="/assets/logoteep.png" class="logo-evolution-hero w-56 h-auto mx-auto relative z-10" alt="GDPX">
+                <h2 class="text-[32px] font-black text-white mt-10 tracking-tighter japanese-title neon-text-gradient">Вход в систему</h2>
+                <div class="flex items-center justify-center gap-2 mt-2">
+                    <span class="w-8 h-[1px] bg-white/10"></span>
+                    <p class="text-white/30 text-[9px] uppercase tracking-[0.4em]">Protocol Activated</p>
+                    <span class="w-8 h-[1px] bg-white/10"></span>
+                </div>
             </div>
 
             <!-- ФОРМА -->
             <form action="/auth/login" method="POST"  class="flex flex-col gap-6">
                 
-                <div class="space-y-2 text-left">
-                    <label class="text-[10px] font-bold text-white/30 uppercase tracking-widest ml-4">Идентификатор</label>
-                    <input type="text" name="login" required autocomplete="off"
-                           class="w-full bg-white/[0.03] border border-white/10 rounded-2xl px-6 py-4 outline-none focus:border-gdpx-cyan focus:bg-white/[0.05] text-white placeholder:text-white/10 transition-all" 
-                           placeholder="USERNAME / ID">
+                <div class="space-y-3 text-left">
+                    <label class="text-[9px] font-black text-white/20 uppercase tracking-[0.3em] ml-6">Access Identity</label>
+                    <div class="relative group/input">
+                        <input type="text" name="login" required autocomplete="off"
+                               class="w-full bg-white/[0.02] border border-white/5 rounded-2xl px-8 py-5 outline-none focus:border-gdpx-cyan/50 focus:bg-white/[0.04] text-white placeholder:text-white/5 transition-all" 
+                               placeholder="USERNAME / ID">
+                        <div class="absolute inset-0 border border-gdpx-cyan/0 rounded-2xl group-hover/input:border-white/10 pointer-events-none transition-all"></div>
+                    </div>
                 </div>
 
-                <div class="space-y-2 text-left">
-                    <label class="text-[10px] font-bold text-white/30 uppercase tracking-widest ml-4">Пароль</label>
-                    <input type="password" name="password" required 
-                           class="w-full bg-white/[0.03] border border-white/10 rounded-2xl px-6 py-4 outline-none focus:border-gdpx-sakura focus:bg-white/[0.05] text-white placeholder:text-white/10 transition-all" 
-                           placeholder="PASSWORD">
+                <div class="space-y-3 text-left">
+                    <label class="text-[9px] font-black text-white/20 uppercase tracking-[0.3em] ml-6">Security Cipher</label>
+                    <div class="relative group/input">
+                        <input type="password" name="password" required 
+                               class="w-full bg-white/[0.02] border border-white/5 rounded-2xl px-8 py-5 outline-none focus:border-gdpx-sakura/50 focus:bg-white/[0.04] text-white placeholder:text-white/5 transition-all" 
+                               placeholder="••••••••">
+                        <div class="absolute inset-0 border border-gdpx-sakura/0 rounded-2xl group-hover/input:border-white/10 pointer-events-none transition-all"></div>
+                    </div>
                 </div>
 
                 <div id="error-container" class="min-h-[20px]"></div>
                 
                 <button type="submit" 
-                        class="w-full h-[60px] rounded-2xl font-bold text-white text-[14px] tracking-widest uppercase bg-gradient-to-r from-gdpx-cyan to-gdpx-sakura shadow-[0_10px_30px_rgba(0,245,255,0.2)] hover:shadow-[0_15px_40px_rgba(0,245,255,0.4)] transition-all active:scale-[0.98]">
-                    Войти в систему
+                        class="w-full h-[64px] rounded-2xl font-black text-white text-[13px] tracking-[0.3em] uppercase bg-white/5 border border-white/10 hover:bg-gdpx-cyan hover:text-black hover:border-gdpx-cyan shadow-2xl transition-all active:scale-[0.97] mt-4">
+                    Авторизоваться
                 </button>
             </form>
 

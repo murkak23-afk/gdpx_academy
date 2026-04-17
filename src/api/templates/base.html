@@ -122,6 +122,31 @@
             transform: translateY(-6px) scale(1.01);
         }
 
+        /* LOGO EVOLUTION EFFECT */
+        .logo-evolution {
+            filter: brightness(0.5) contrast(1.2) grayscale(0.8);
+            transition: all 1.5s cubic-bezier(0.16, 1, 0.3, 1);
+            cursor: pointer;
+            position: relative;
+        }
+        .logo-evolution:hover {
+            filter: brightness(1.1) contrast(1.1) grayscale(0) drop-shadow(0 0 15px var(--electric-cyan));
+            transform: scale(1.1) rotate(5deg);
+        }
+        .logo-evolution-hero {
+            filter: brightness(0.8) contrast(1) grayscale(0.5) blur(2px);
+            animation: logo-manifest 4s ease-in-out infinite alternate;
+            transition: all 2s ease;
+        }
+        .logo-evolution-hero:hover {
+            filter: brightness(1.2) contrast(1.2) grayscale(0) blur(0) drop-shadow(0 0 40px var(--electric-cyan));
+            transform: scale(1.05);
+        }
+        @keyframes logo-manifest {
+            0% { filter: brightness(0.7) blur(2px) grayscale(0.6); drop-shadow: 0 0 0 transparent; }
+            100% { filter: brightness(1) blur(0.5px) grayscale(0.2); drop-shadow: 0 0 20px var(--sakura-glow); }
+        }
+
         .neon-text-gradient {
             background: linear-gradient(135deg, var(--electric-cyan), var(--sakura-glow));
             -webkit-background-clip: text;
@@ -149,6 +174,26 @@
             font-style: italic;
         }
 
+        /* PREMIUM TABLES */
+        .premium-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        .premium-table tr {
+            border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+            transition: all 0.3s ease;
+        }
+        .premium-table tr:hover {
+            background: rgba(255, 255, 255, 0.01);
+        }
+        .premium-table th {
+            text-align: left;
+            padding: 24px;
+        }
+        .premium-table td {
+            padding: 24px;
+        }
+
         .glass-panel { 
             background: rgba(5, 5, 8, 0.9); 
             backdrop-filter: blur(50px);
@@ -156,6 +201,12 @@
         }
         .fade-in { animation: fadeIn 1s cubic-bezier(0.16, 1, 0.3, 1); }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+        
+        @keyframes pulse-slow {
+            0%, 100% { opacity: 0.02; transform: translate(-50%, -50%) scale(1); }
+            50% { opacity: 0.05; transform: translate(-50%, -50%) scale(1.05); }
+        }
+        .animate-pulse-slow { animation: pulse-slow 10s ease-in-out infinite; }
 
         /* Custom Scrollbar */
         ::-webkit-scrollbar { width: 3px; }
@@ -167,6 +218,12 @@
     <!-- ФОНОВЫЕ ЭФФЕКТЫ -->
     <div class="fixed inset-0 z-[-1] bg-[#050508] overflow-hidden">
         <div class="absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,#1e1b4b,transparent)] opacity-40"></div>
+        
+        <!-- Эстетичный фоновый логотип (Atmospheric Ghost Logo) -->
+        <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] opacity-[0.03] pointer-events-none select-none filter blur-[80px] animate-pulse-slow">
+            <img src="/assets/logoteep.png" class="w-full h-full object-contain" alt="">
+        </div>
+
         <div class="cyber-grid"></div>
         <canvas id="starfield" class="absolute inset-0"></canvas>
     </div>
@@ -189,6 +246,7 @@
             stars = [];
             for (let i = 0; i < 150; i++) {
                 stars.push({
+                    color: Math.random() > 0.8 ? "var(--sakura-glow)" : (Math.random() > 0.6 ? "var(--electric-cyan)" : "#fff"),
                     x: Math.random() * canvas.width,
                     y: Math.random() * canvas.height,
                     size: Math.random() * 1.5,
@@ -201,7 +259,7 @@
         function drawStars() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             stars.forEach(star => {
-                ctx.fillStyle = `rgba(255, 255, 255, ${star.opacity})`;
+                if (star.color.startsWith("var")) ctx.fillStyle = star.color.replace(")", `, ${star.opacity})`); else ctx.fillStyle = `rgba(255, 255, 255, ${star.opacity})`;
                 ctx.beginPath();
                 ctx.arc(star.x, star.y, star.size, 0, Math.PI * 2);
                 ctx.fill();
@@ -242,7 +300,7 @@
         <aside class="hidden lg:flex w-72 glass-panel border-r border-white/10 flex-col sticky top-0 h-screen shrink-0">
             <div class="p-8">
                 <div class="flex items-center gap-3">
-                    <img src="/assets/logo.png" class="w-10 h-auto" alt="Logo">
+                    <img src="/assets/logoteep.png" class="logo-evolution w-10 h-auto" alt="Logo">
                     <h2 class="text-[14px] font-black text-white tracking-[0.2em] uppercase japanese-title">GDPX Panel</h2>
                 </div>
                 <div class="mt-6 flex gap-2">
@@ -318,7 +376,7 @@
 
         <main class="flex-1 w-full flex flex-col min-w-0">
             <header class="lg:hidden h-16 border-b border-white/10 flex items-center justify-between px-6 glass-panel shrink-0">
-                <img src="/assets/logo.png" class="w-8 h-auto" alt="Logo">
+                <img src="/assets/logoteep.png" class="logo-evolution w-8 h-auto" alt="Logo">
                 <div class="text-white font-bold uppercase tracking-widest text-[10px]">GDPX Mobile</div>
                 <a href="/auth/logout" class="text-white/40"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg></a>
             </header>

@@ -1,10 +1,10 @@
 {% extends "base.html" %}
-{% import "components/cards.html" as cards %}
+{% from "components/cards.html" import inventory_card %}
 
 {% block title %}GDPX // СКЛАД{% endblock %}
 
 {% block content %}
-<div class="space-y-10 animate-in fade-in duration-700">
+<div class="space-y-10">
     <div class="flex justify-between items-end">
         <div>
             <h1 class="text-[36px] font-bold text-white tracking-tight drop-shadow-[0_0_15px_rgba(0,217,255,0.2)]">Склад активов</h1>
@@ -12,9 +12,9 @@
         </div>
     </div>
 
-    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8" id="inventory-grid">
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8 mt-10" id="inventory-grid">
         {% for cat in categories %}
-            {{ cards.inventory_card(cat, stock[cat.id], custom_prices) }}
+            {{ inventory_card(cat, stock[cat.id], custom_prices) }}
         {% endfor %}
     </div>
 </div>

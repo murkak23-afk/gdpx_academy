@@ -86,6 +86,7 @@
                         </th>
                         {% endif %}
                         <th class="px-8 py-6 text-[10px] font-bold text-white/30 uppercase tracking-[0.2em]">eSIM / ID</th>
+                        <th class="px-8 py-6 text-[10px] font-bold text-white/30 uppercase tracking-[0.2em]">Номер</th>
                         <th class="px-8 py-6 text-[10px] font-bold text-white/30 uppercase tracking-[0.2em]">Категория</th>
                         <th class="px-8 py-6 text-[10px] font-bold text-white/30 uppercase tracking-[0.2em] text-center">Покупатель</th>
                         <th class="px-8 py-6 text-[10px] font-bold text-white/30 uppercase tracking-[0.2em] text-center">Статус</th>
@@ -96,14 +97,17 @@
                 <tbody class="divide-y divide-white/[0.02] text-sm font-medium">
                     {% for item in shipments %}
                     <tr class="hover:bg-white/[0.01] transition-all group">
-                        <td class="px-8 py-6">
                         {% if show_batch_actions %}
-                        <td class="px-8 py-6">
+                        <td class="px-8 py-6 w-10">
                             <input type="checkbox" name="submission-ids" value="{{ item.id }}" class="sub-checkbox w-4 h-4 bg-white/5 border-white/10 rounded cursor-pointer accent-gdpx-cyan" onchange="updateSelection()">
                         </td>
                         {% endif %}
+                        <td class="px-8 py-6">
                             <a href="/gdpx/submission/{{ item.id }}" class="font-mono text-white hover:text-gdpx-cyan transition-colors">#{{ item.id }}</a>
                             <div class="text-[10px] text-white/20 mt-1 uppercase tracking-tighter">{{ item.updated_at.strftime('%d.%m.%Y %H:%M') }}</div>
+                        </td>
+                        <td class="px-8 py-6">
+                            <div class="text-[13px] text-white/90 font-mono">{{ item.phone_normalized or '—' }}</div>
                         </td>
                         <td class="px-8 py-6">
                             <span class="text-[13px] text-white/80 uppercase tracking-wide">{{ item.category.title }}</span>
