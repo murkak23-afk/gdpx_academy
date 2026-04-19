@@ -52,12 +52,13 @@ def create_dispatcher(ws_manager=None) -> Dispatcher:
     dispatcher.update.outer_middleware(CommandCleanupMiddleware()) # ЧИСТКА КОМАНД СРАЗУ
     dispatcher.update.outer_middleware(FSMTimeoutMiddleware(timeout_seconds=86400)) # СБРОС СТЕЙТА ПО ТАЙМАУТУ
     dispatcher.update.outer_middleware(DbSessionMiddleware(session_factory=SessionFactory))
-    dispatcher.update.outer_middleware(MaintenanceMiddleware(settings=settings))
     dispatcher.update.outer_middleware(BlockCheckMiddleware())
     dispatcher.update.outer_middleware(LoadingMiddleware())
 
-    # Порядок: сначала логирование, затем throttling.
+    # Порядок: сначала логирование, затем техработы.
     dispatcher.update.middleware(UpdateLoggingMiddleware())
+    dispatcher.message.middleware(MaintenanceMiddleware(settings=settings))
+    dispatcher.callback_query.middleware(MaintenanceMiddleware(settings=settings))
     dispatcher.update.middleware(UserThrottlingMiddleware(interval_sec=1.0))
     dispatcher.message.outer_middleware(CommandCleanupMiddleware())
 

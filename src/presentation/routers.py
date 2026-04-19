@@ -12,6 +12,7 @@ from src.presentation.common.global_handlers import router as global_handlers_ro
 
 # Импорт роутеров модерации
 from src.presentation.admin_panel.moderation import router as moderation_root_router
+from src.presentation.admin_panel.support.handlers import router as admin_support_router
 from src.presentation.qr_delivery.handlers import router as qr_delivery_router
 from src.presentation.seller_portal.user_private import user_private_router
 
@@ -19,8 +20,9 @@ from src.presentation.seller_portal.user_private import user_private_router
 def setup_routers() -> Router:
     root_router = Router()
 
-    # 0. ПРИОРИТЕТ: Глобальные команды (cancel/reset)
+    # 0. ПРИОРИТЕТ: Глобальные команды и техподдержка (из-за состояний)
     root_router.include_router(global_handlers_router)
+    root_router.include_router(admin_support_router)
 
     # 1. ПРИОРИТЕТ: Личка и Профиль (включая /start)
     root_router.include_router(user_private_router)

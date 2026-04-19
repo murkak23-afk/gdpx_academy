@@ -98,8 +98,9 @@ class GDPXRenderer:
             username = "🕶 INCOGNITO"
 
         greeting = get_time_greeting()
-        rank_name, rank_emoji, rank_desc, next_target = self._rank_info(approved)
-        progress_bar = self._rank_progress_bar(approved, next_target)
+        
+        # Ранговая система Синдиката
+        rank_lines = self._render_rank_section(approved)
 
         # Значки достижений
         badges_str = " ".join(user.badges) if user.badges else "<i>достижений пока нет</i>"
@@ -114,9 +115,7 @@ class GDPXRenderer:
             f"💰 <b>ТЕКУЩИЙ БАЛАНС:</b> <code>{balance:.2f}</code> USDT",
             f"📈 <b>ВСЕГО ВЫПЛАЧЕНО:</b> <code>{total_paid:.2f}</code> USDT",
             "",
-            f"🥋 <b>РАНГ:</b> {rank_emoji} <code>{rank_name.upper()}</code>",
-            f"📊 <b>ПРОГРЕСС:</b> [{progress_bar}]",
-            f"🎁 <b>БОНУС:</b> <i>{rank_desc}</i>",
+            *rank_lines,
             DIVIDER_LIGHT,
             "📑 <b>ПОСЛЕДНИЕ АКТИВЫ:</b>",
         ]
@@ -135,6 +134,51 @@ class GDPXRenderer:
         lines.append(self._get_agent_wisdom())
         lines.append("<i>Выберите раздел управления ниже ↴</i>")
         return "\n".join(lines)
+
+    def _render_rank_section(self, approved_count: int) -> list[str]:
+        """Система рангов Синдиката: Стажер -> Партнер -> Резидент -> Инвестор -> Акционер."""
+        from src.domain.users.rank_service import RANKS
+        
+        current_idx = 0
+        for i, rank in enumerate(RANKS):
+            if approved_count >= rank.threshold:
+                current_idx = i
+            else:
+                break
+        
+        current_rank = RANKS[current_idx]
+        c_emoji, c_name, c_bonus_val = current_rank.emoji, current_rank.name, current_rank.bonus_percent
+        c_bonus = f"+{c_bonus_val}% к выплатам" if c_bonus_val > 0 else "Базовая ставка"
+        
+        if current_idx < len(RANKS) - 1:
+            # Есть куда расти
+            next_rank = RANKS[current_idx + 1]
+            prev_threshold = current_rank.threshold
+            next_threshold = next_rank.threshold
+            
+            total_needed = next_threshold - prev_threshold
+            current_progress = approved_count - prev_threshold
+            
+            percent = int((current_progress / (total_needed or 1)) * 100)
+            percent = min(max(percent, 0), 100)
+            
+            filled = int(percent / 10)
+            bar = "▰" * filled + "▱" * (10 - filled)
+            
+            progress_line = f"📈 ПРОГРЕСС: 〚 {bar} 〛 {percent}%"
+            sub_line = f" └ Выполнено: {approved_count} из {next_threshold}"
+        else:
+            # Максимальный ранг
+            progress_line = "📈 ПРОГРЕСС: 〚 ▰▰▰▰▰▰▰▰▰▰ 〛 100%"
+            sub_line = " └ Вы достигли вершины иерархии"
+            sub_line = " └ Выполнено: MAX"
+
+        return [
+            f"{c_emoji} <b>РАНГ:</b> <code>{c_name.upper()}</code>",
+            progress_line,
+            sub_line,
+            f"💰 <b>БОНУС:</b> <i>{c_bonus}</i>"
+        ]
 
     def render_seller_stats(self, period_label: str, stats: Mapping[str, Any], rank_pos: tuple[int, int]) -> str:
         """Отрисовка детальной статистики селлера."""
@@ -239,43 +283,6 @@ class GDPXRenderer:
                 "<i>Выберите раздел системы:</i>",
             ]
         )
-
-    @staticmethod
-    def _rank_info(approved_count: int) -> tuple[str, str, str, int | None]:
-        """Возвращает (Название, Эмодзи, Описание, Цель)."""
-        if approved_count <= 50:
-            return "Новичок", "🌱", "Только начинаешь путь", 51
-        if approved_count <= 300:
-            return "Поставщик", "📦", "", 301
-        if approved_count <= 1000:
-            return "Вендор", "🏷️", "", 1001
-        if approved_count <= 3000:
-            return "Мастер", "🌸", "", 3001
-        if approved_count <= 8000:
-            return "Элита", "🏆", "", 8001
-        return "Легенда", "🌟", "", None
-
-    @staticmethod
-    def _rank_progress_bar(approved_count: int, next_target: int | None) -> str:
-        total_cells = 12
-        if next_target is None:
-            return "■" * total_cells
-
-        # Для корректного отображения прогресса внутри текущего ранга
-        ranges = [0, 51, 301, 1001, 3001, 8001]
-        current_base = 0
-        for r in ranges:
-            if next_target > r:
-                current_base = r
-            else:
-                break
-
-        needed = next_target - current_base
-        current_progress = approved_count - current_base
-
-        ratio = min(max(current_progress / (needed or 1), 0), 1.0)
-        filled = int(round(ratio * total_cells))
-        return ("■" * filled) + ("□" * (total_cells - filled))
 
     def render_queue_lobby(self, *, pending_count: int, in_work_count: int) -> str:
         return "\n".join(
@@ -439,9 +446,9 @@ class GDPXRenderer:
         lines.append(DIVIDER)
         return "\n".join(lines)
 
-    def render_leaderboard(self, period_label: str, top_list: list[dict], user_rank: dict | None = None, page: int = 0, total: int = 0) -> str:
+    def render_leaderboard(self, period_label: str, top_list: list[dict], user_rank: dict | None = None, page: int = 0, total: int = 0, prize_text: str | None = None) -> str:
         """Alias for compatibility with leaderboard/handlers.py."""
-        return self.render_premium_leaderboard(top_list, period_label, user_rank)
+        return self.render_premium_leaderboard(top_list, period_label, user_rank, prize_text)
 
     def render_premium_leaderboard(self, top_sellers: list[dict], period_label: str, user_rank: dict | None = None, prize_text: str | None = None) -> str:
         """Премиальная отрисовка доски лидеров в академическом стиле."""

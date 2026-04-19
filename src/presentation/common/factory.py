@@ -125,3 +125,9 @@ class FinancePayCD(CallbackData, prefix="fin_pay"):
 
 class FinanceTopupCD(CallbackData, prefix="fin_top"):
     amount: float = 0.0
+
+
+class AdminSupportCD(CallbackData, prefix="adm_sup"):
+    action: str  # list, view, reply, close, refresh
+    ticket_id: int = 0
+    page: int = 0

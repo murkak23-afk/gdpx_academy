@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 import re
 
-from aiogram import F, Router
+from aiogram import F, Router, Bot
 from aiogram.filters import CommandStart, StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, InputMediaPhoto, Message
@@ -95,7 +95,7 @@ async def process_language(callback: CallbackQuery, state: FSMContext, ui: Messa
 
 @router.message(RegistrationState.waiting_for_pseudonym)
 async def process_pseudonym(message: Message, session: AsyncSession, state: FSMContext, ui: MessageManager):
-    """Валидация псевдонима и создание пользователя."""
+    """Валидация псевдонима и переход к FAQ."""
     pseudonym = message.text.strip()
     
     if not re.match(r'^[a-zA-Z0-9_-]{2,32}$', pseudonym):
@@ -111,18 +111,94 @@ async def process_pseudonym(message: Message, session: AsyncSession, state: FSMC
     data = await state.get_data()
     user_service = UserService(session=session)
     
-    # Проверка на уникальность (опционально, но желательно)
-    # Здесь мы просто создаем пользователя
+    # Регистрация временного профиля
     user = await user_service.register_seller(
         tg_user=message.from_user,
         language=data['language'],
     )
     user.pseudonym = pseudonym
-    await session.flush()
+    await session.commit() # Фиксируем псевдоним
+    
+    await _show_onboarding_faq(message, state, ui)
+
+async def _show_onboarding_faq(event: Message | CallbackQuery, state: FSMContext, ui: MessageManager):
+    """Экран базовой информации для селлера."""
+    await state.set_state(RegistrationState.waiting_for_faq)
+    
+    from src.core.utils.ui_builder import DIVIDER, DIVIDER_LIGHT
+    text = (
+        f"📖 <b>ОСНОВЫ РАБОТЫ // GDPX</b>\n"
+        f"{DIVIDER}\n"
+        f"Добро пожаловать в ряды агентов Синдиката. Перед началом ознакомьтесь с регламентом:\n\n"
+        f"▫ <b>Загрузка:</b> Отправляйте только качественные сканы/фото eSIM.\n"
+        f"▫ <b>Проверка:</b> Модерация занимает от 5 до 30 минут.\n"
+        f"▫ <b>Выплаты:</b> Начисляются в USDT (BEP-20) сразу после зачета.\n"
+        f"▫ <b>Ранги:</b> Чем больше активных сим, тем выше ваш % бонуса.\n\n"
+        f"{DIVIDER_LIGHT}\n"
+        f"<i>Нажмите «ДАЛЕЕ», чтобы изучить Кодекс Агента.</i>"
+    )
+    
+    kb = PremiumBuilder().primary("⏭ ДАЛЕЕ", "reg:faq_next").as_markup()
+    await ui.display(event=event, text=text, reply_markup=kb, photo=media.get("info.png"))
+
+@router.callback_query(RegistrationState.waiting_for_faq, F.data == "reg:faq_next")
+async def process_faq_next(callback: CallbackQuery, state: FSMContext, ui: MessageManager):
+    """Переход к Кодексу."""
+    await _show_onboarding_codex(callback, state, ui)
+    await callback.answer()
+
+async def _show_onboarding_codex(event: Message | CallbackQuery, state: FSMContext, ui: MessageManager):
+    """Экран Кодекса с требованием подписки."""
+    await state.set_state(RegistrationState.waiting_for_codex)
+    
+    from src.presentation.lexicon.ru import Lex
+    from src.core.config import get_settings
+    settings = get_settings()
+    
+    chat_url = settings.brand_chat_url or "https://t.me/gdpx_chat"
+    
+    text = (
+        f"{Lex.Academy.CODEX_HEADER}\n\n"
+        f"{Lex.Academy.CODEX_TEXT}\n\n"
+        f"⚠️ <b>ОБЯЗАТЕЛЬНОЕ УСЛОВИЕ:</b>\n"
+        f"Вы должны состоять в официальном чате Академии для доступа к системе.\n\n"
+        f"🔗 <b>ВСТУПИТЬ:</b> {chat_url}"
+    )
+    
+    kb = (PremiumBuilder()
+          .primary("🛡 ПРИНЯТЬ КОДЕКС", "reg:codex_accept")
+          .row()
+          .button("🔗 ПЕРЕЙТИ В ЧАТ", url=chat_url)
+          .as_markup())
+    
+    await ui.display(event=event, text=text, reply_markup=kb, photo=media.get("info.png"))
+
+@router.callback_query(RegistrationState.waiting_for_codex, F.data == "reg:codex_accept")
+async def process_codex_accept(callback: CallbackQuery, session: AsyncSession, state: FSMContext, ui: MessageManager, bot: Bot):
+    """Проверка подписки и финализация."""
+    from src.core.config import get_settings
+    settings = get_settings()
+    chat_id = settings.brand_chat_id or -1003716766270 # Hardcoded as fallback per user request
+    
+    try:
+        member = await bot.get_chat_member(chat_id=chat_id, user_id=callback.from_user.id)
+        if member.status in ["left", "kicked"]:
+            return await callback.answer("✖ ОШИБКА: Вы должны вступить в чат Синдиката!", show_alert=True)
+    except Exception as e:
+        logger.error(f"Subscription check error: {e}")
+        # Если чат не найден или бот не админ, можно пропустить или выдать ошибку
+        # Но по ТЗ - обязательная проверка.
+        return await callback.answer("⚠️ Не удалось проверить подписку. Попробуйте позже.", show_alert=True)
+
+    # Успех
+    user_service = UserService(session=session)
+    user = await user_service.get_by_telegram_id(callback.from_user.id)
+    user.has_accepted_codex = True
+    await session.commit()
     
     await state.clear()
-    await ui.display(event=message, text="✅ <b>IDENTITY FIXED</b>\nРегистрация в системе завершена.")
-    await _show_main_dashboard(message, user, session, ui)
+    await callback.answer("✅ Добро пожаловать в элиту!", show_alert=True)
+    await _show_main_dashboard(callback, user, session, ui)
 
 from src.presentation.common.factory import SellerMenuCD
 

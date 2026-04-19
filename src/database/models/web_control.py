@@ -34,8 +34,16 @@ class SupportTicket(Base, TimestampMixin):
     
     subject: Mapped[str] = mapped_column(String(255))
     status: Mapped[str] = mapped_column(String(20), default="open") # open, resolved, closed
+    
+    # Кто из админов взял тикет или ответил первым
+    assigned_admin_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    
+    # Ссылка на сообщение в админ-чате для редактирования (один тикет - одно сообщение)
+    admin_chat_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    admin_msg_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
 
-    creator = relationship("User")
+    creator = relationship("User", foreign_keys=[creator_id])
+    assigned_admin = relationship("User", foreign_keys=[assigned_admin_id])
     messages = relationship("ChatMessage", back_populates="ticket", cascade="all, delete-orphan")
 
 class ChatMessage(Base, TimestampMixin):

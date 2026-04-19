@@ -19,6 +19,8 @@ services:
       - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST:-postgres}:${POSTGRES_PORT:-5432}/${POSTGRES_DB}
       - WEBHOOK_URL=${WEBHOOK_URL:-https://gdpx.ru/webhook}
       - WEBHOOK_SECRET_TOKEN=${WEBHOOK_SECRET_TOKEN}
+      - SUPPORT_CHAT_ID=${SUPPORT_CHAT_ID:--1003850703582}
+      - BRAND_CHAT_ID=${BRAND_CHAT_ID:--1003716766270}
     command: /bin/sh -c "alembic upgrade head && python -m src start"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8167/health/ready"]
@@ -27,6 +29,7 @@ services:
       retries: 3
     volumes:
       - ./logs:/app/logs
+      - ./data:/app/data
     depends_on:
       redis:
         condition: service_started
@@ -55,6 +58,7 @@ services:
       retries: 3
     volumes:
       - ./logs:/app/logs
+      - ./data:/app/data
     depends_on:
       redis:
         condition: service_started

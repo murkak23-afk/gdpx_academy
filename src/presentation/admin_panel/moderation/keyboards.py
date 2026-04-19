@@ -23,10 +23,12 @@ def get_mod_dashboard_kb(stats: dict) -> InlineKeyboardMarkup:
     # 3. ПРОВЕРКА (Большая)
     builder.primary(f"✨ ПРОВЕРКА ({stats['verification']})", AdminSellerQueueCD(action="list", status="verification"))
 
-    # 4. ПОИСК ПО НОМЕРУ (Нижняя)
-    builder.button(f"{EMOJI_SEARCH} ПОИСК ПО НОМЕРУ", "mod_search")
+    # 4. ПОИСК И ПОДДЕРЖКА
+    builder.button(f"{EMOJI_SEARCH} ПОИСК", "mod_search")
+    from src.presentation.common.factory import AdminSupportCD
+    builder.button("🛡 ТИКЕТЫ", AdminSupportCD(action="list"))
 
-    builder.adjust(1, 2, 1, 1)
+    builder.adjust(1, 2, 1, 2)
     builder.back(NavCD(to="menu"), "ВЕРНУТЬСЯ В МЕНЮ")
     return builder.as_markup()
 

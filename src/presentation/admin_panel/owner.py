@@ -10,7 +10,7 @@ from src.core.cache.keyboard_cache import cached_keyboard
 from src.presentation.common.factory import FinancePayCD
 from src.presentation.common.base import PremiumBuilder
 from src.presentation.common.constants import *
-from src.presentation.common.factory import CatConCD, CatManageCD, OwnerUserCD
+from src.presentation.common.factory import CatConCD, CatManageCD, OwnerUserCD, AdminSupportCD
 
 
 @cached_keyboard(ttl=3600)
@@ -25,8 +25,10 @@ def get_owner_main_kb() -> InlineKeyboardMarkup:
             .button("⚙️ НАСТРОЙКИ СИСТЕМЫ", "owner_settings")
             .button("🏆 ПРИЗОВОЙ ФОНД", "owner_lb_prize")
             .button("🚨 МОНИТОРИНГ И АЛЕРТЫ", "owner_monitoring")
+            .button("🛡 ТИКЕТЫ (ПОДДЕРЖКА)", AdminSupportCD(action="list"))
             .adjust(1)
             .primary("⚖️ РЕЖИМ МОДЕРАЦИИ (/a)", "owner_to_moderation")
+
             .as_markup())
 
 

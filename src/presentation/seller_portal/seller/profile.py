@@ -328,7 +328,7 @@ async def show_prefs_favorites(callback: CallbackQuery, callback_data: SellerSet
         await callback.answer("⚠️ Ошибка настроек", show_alert=True)
 
 @router.callback_query(SellerSettingsCD.filter(F.action == "export"))
-async def export_data_request(callback: CallbackQuery, callback_data: SellerSettingsCD, session: AsyncSession) -> None:
+async def export_data_request(callback: CallbackQuery, callback_data: SellerSettingsCD, session: AsyncSession, ui: MessageManager) -> None:
     try:
         user = await UserService(session=session).get_by_telegram_id(callback.from_user.id)
         sub_svc = SubmissionService(session=session)
@@ -350,6 +350,10 @@ async def export_data_request(callback: CallbackQuery, callback_data: SellerSett
             caption=caption,
             parse_mode="HTML"
         )
+        
+        # Возвращаем меню настроек обратно
+        await show_settings(callback, session, ui)
+
     except Exception as e:
         logger.exception(f"Error in export_data_request: {e}")
         from src.presentation.seller_portal.seller.keyboards import get_seller_payouts_kb

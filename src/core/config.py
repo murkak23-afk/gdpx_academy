@@ -55,6 +55,7 @@ class Settings(BaseSettings):
     )
     admin_error_chat_id: int | None = Field(default=None, alias="ADMIN_ERROR_CHAT_ID")
     alert_telegram_chat_id: int | None = Field(default=None, alias="ALERT_TELEGRAM_CHAT_ID")
+    support_chat_id: int | None = Field(default=None, alias="SUPPORT_CHAT_ID")
 
     # --- CRYPTO ---
     crypto_pay_token: str | None = Field(default=None, alias="CRYPTO_PAY_TOKEN")
@@ -75,6 +76,7 @@ class Settings(BaseSettings):
     # --- BRAND ---
     brand_channel_url: str | None = Field(default=None, alias="BRAND_CHANNEL_URL")
     brand_chat_url: str | None = Field(default=None, alias="BRAND_CHAT_URL")
+    brand_chat_id: int | None = Field(default=None, alias="BRAND_CHAT_ID")
     brand_payments_url: str | None = Field(default=None, alias="BRAND_PAYMENTS_URL")
 
     # --- VALIDATORS ---

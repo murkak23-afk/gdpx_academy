@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 from aiogram import Router, F
 from aiogram.types import CallbackQuery, InputMediaPhoto
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from src.core.utils.message_manager import MessageManager
 

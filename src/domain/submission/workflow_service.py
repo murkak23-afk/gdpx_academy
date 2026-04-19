@@ -189,21 +189,48 @@ class WorkflowService:
     async def _handle_accepted(self, sub: Submission, admin_id: int, bot: Bot | None, arc_cid: int | None, arc_mid: int | None):
         now = datetime.now(timezone.utc)
         sub.reviewed_at = now
-        sub.accepted_amount = sub.fixed_payout_rate or sub.category.payout_rate
+        
+        # [RANK SYSTEM] Вычисляем ранг и бонус
+        from src.domain.users.rank_service import RankService
+        rank_svc = RankService(self._session)
+        user_rank = await rank_svc.get_user_rank(sub.user_id)
+        
+        base_rate = sub.fixed_payout_rate if sub.fixed_payout_rate > 0 else sub.category.payout_rate
+        sub.accepted_amount = rank_svc.calculate_bonus_amount(base_rate, user_rank)
+        
         seller = sub.seller
         seller.pending_balance = Decimal(seller.pending_balance or 0) + Decimal(sub.accepted_amount)
 
-        if bot and not (arc_cid and arc_mid):
+        if bot:
             settings = get_settings()
             if settings.moderation_chat_id:
                 try:
-                    text = (f"✅ <b>eSIM ACCEPTED</b>\n{DIVIDER}\n🔖 <b>ID:</b> <code>#{sub.id}</code>\n📞 <b>Номер:</b> <code>{sub.phone_normalized or 'N/A'}</code>\n🗂 <b>Категория:</b> <code>{sub.category.title}</code>\n💰 <b>Выплата:</b> <code>{sub.accepted_amount}</code> USDT")
+                    # Добавляем инфо о ранге в лог модерации
+                    rank_str = f" [{user_rank.emoji} {user_rank.name}]" if user_rank.bonus_percent > 0 else ""
+                    text = (f"✅ <b>eSIM ACCEPTED</b>\n{DIVIDER}\n"
+                            f"🔖 <b>ID:</b> <code>#{sub.id}</code>\n"
+                            f"👤 <b>Seller ID:</b> <code>{sub.user_id}</code>{rank_str}\n"
+                            f"📞 <b>Номер:</b> <code>{sub.phone_normalized or 'N/A'}</code>\n"
+                            f"🗂 <b>Категория:</b> <code>{sub.category.title}</code>\n"
+                            f"💰 <b>Выплата:</b> <code>{sub.accepted_amount}</code> USDT")
+                    
+                    # Отправляем сообщение
                     msg = await bot.send_photo(chat_id=settings.moderation_chat_id, photo=sub.telegram_file_id, caption=text, parse_mode="HTML")
-                    arc_cid, arc_mid = msg.chat.id, msg.message_id
-                except Exception as e: logger.error(f"Auto-archive error for #{sub.id}: {e}")
+                    
+                    # Если еще нет архива — создаем запись
+                    if not (arc_cid and arc_mid):
+                        arc_cid, arc_mid = msg.chat.id, msg.message_id
+                except Exception as e:
+                    logger.error(f"Failed to send moderation notification for #{sub.id} to {settings.moderation_chat_id}: {e}")
 
         if arc_cid and arc_mid:
-            self._session.add(PublicationArchive(submission_id=sub.id, archive_chat_id=arc_cid, archive_message_id=arc_mid, archived_by_user_id=admin_id))
+            # Проверяем, нет ли уже такой записи (чтобы не дублировать в PublicationArchive)
+            from src.database.models.publication import PublicationArchive
+            stmt = select(PublicationArchive).where(PublicationArchive.submission_id == sub.id)
+            existing = (await self._session.execute(stmt)).scalar_one_or_none()
+            if not existing:
+                self._session.add(PublicationArchive(submission_id=sub.id, archive_chat_id=arc_cid, archive_message_id=arc_mid, archived_by_user_id=admin_id))
+        
         await self._update_daily_payout(sub)
 
     async def _update_daily_payout(self, sub: Submission):

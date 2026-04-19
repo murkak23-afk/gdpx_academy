@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 
-from aiogram import F, Router
+from aiogram import F, Router, Bot
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, InputMediaPhoto
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -38,8 +38,20 @@ async def start_initiation(callback: CallbackQuery, state: FSMContext, ui: Messa
 
 
 @router.callback_query(AcademyInitiation.accept_codex, F.data == "academy:accept")
-async def accept_codex(callback: CallbackQuery, state: FSMContext, session: AsyncSession, ui: MessageManager):
-    """Завершение инициации после принятия кодекса."""
+async def accept_codex(callback: CallbackQuery, state: FSMContext, session: AsyncSession, ui: MessageManager, bot: Bot):
+    """Завершение инициации после принятия кодекса с проверкой подписки."""
+    from src.core.config import get_settings
+    settings = get_settings()
+    chat_id = settings.brand_chat_id or -1003716766270
+    
+    try:
+        member = await bot.get_chat_member(chat_id=chat_id, user_id=callback.from_user.id)
+        if member.status in ["left", "kicked"]:
+            return await callback.answer("✖ ОШИБКА: Сначала вступите в чат Синдиката!", show_alert=True)
+    except Exception as e:
+        logger.error(f"Academy subscription check error: {e}")
+        return await callback.answer("⚠️ Ошибка проверки подписки. Попробуйте позже.", show_alert=True)
+
     logger.info(f"User {callback.from_user.id} accepted codex")
 
     user_service = UserService(session=session)

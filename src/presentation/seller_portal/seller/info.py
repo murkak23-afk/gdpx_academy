@@ -358,10 +358,35 @@ async def on_support_message_receive(message: Message, state: FSMContext, sessio
         new_msg = ChatMessage(
             ticket_id=ticket.id,
             sender_id=user.id,
-            text=message.text
+            text=message.text,
+            sender=user # Для рендеринга уведомления сразу
         )
         session.add(new_msg)
         await session.commit()
+        
+        # УВЕДОМЛЯЕМ АДМИНОВ (или обновляем существующее)
+        from src.core.notification_service import NotificationService
+        from src.core.config import get_settings
+        from src.services.support_service import SupportService
+        
+        notif_svc = NotificationService(message.bot, get_settings())
+        support_svc = SupportService(session)
+        messages_all = await support_svc.get_ticket_messages(ticket.id)
+        
+        await notif_svc.notify_new_ticket(
+            ticket=ticket, 
+            user_name=message.from_user.username or str(message.from_user.id),
+            messages=messages_all
+        )
+        # Сохраняем admin_msg_id / admin_chat_id если они изменились/создались
+        await session.commit()
+        
+        await message.answer("✅ <b>Сообщение отправлено!</b>\nАдминистратор ответит вам в ближайшее время.", parse_mode="HTML")
+        await state.clear()
+        
+        # Возвращаемся в меню поддержки через 2 сек или сразу
+        await on_support_center(message, state, ui)
+        
         ws_manager = data.get("ws_manager") or message.bot.get("ws_manager")
         if ws_manager:
             await ws_manager.broadcast({

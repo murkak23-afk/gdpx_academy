@@ -8,3 +8,5 @@ class RegistrationState(StatesGroup):
 
     waiting_for_language = State()
     waiting_for_pseudonym = State()
+    waiting_for_faq = State()
+    waiting_for_codex = State()

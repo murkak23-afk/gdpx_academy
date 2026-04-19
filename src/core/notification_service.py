@@ -102,3 +102,65 @@ class NotificationService:
         except Exception as e:
             print(f"CRITICAL: Ошибка при отправке системного алерта: {e}")
             return False
+
+    async def notify_new_ticket(self, ticket: "SupportTicket", user_name: str, messages: list["ChatMessage"]) -> bool:
+        """Уведомляет админов или обновляет существующее сообщение в техподдержке."""
+        chat_id = self._settings.support_chat_id or self._settings.alert_telegram_chat_id or self._settings.admin_error_chat_id
+        if not chat_id:
+            return False
+            
+        from src.core.utils.ui_builder import DIVIDER, DIVIDER_LIGHT
+        from src.presentation.common.factory import AdminSupportCD
+        from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+        
+        kb_data = AdminSupportCD(action="view", ticket_id=ticket.id).pack()
+        kb = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="📥 ОТКРЫТЬ ТИКЕТ", callback_data=kb_data)]
+        ])
+        
+        msg_text = (
+            f"📨 <b>ТИКЕТ #{ticket.id}</b>\n"
+            f"{DIVIDER}\n"
+            f"👤 <b>От:</b> @{escape(user_name)}\n"
+            f"📝 <b>Тема:</b> <code>{escape(ticket.subject)}</code>\n"
+            f"{DIVIDER_LIGHT}\n"
+        )
+        
+        # Показываем последние 3 сообщения в этом уведомлении
+        for m in messages[-3:]:
+            prefix = "👤" if m.sender.role == "simbuyer" else "👮"
+            msg_text += f"{prefix} <b>{m.sender.username or m.sender.telegram_id}:</b> {escape(m.text)}\n"
+
+        try:
+            from src.core.utils.message_manager import MessageManager
+            mm = MessageManager(self._bot)
+            
+            # Если уже есть сообщение — редактируем его
+            if ticket.admin_chat_id == chat_id and ticket.admin_msg_id:
+                try:
+                    await self._bot.edit_message_text(
+                        chat_id=chat_id,
+                        message_id=ticket.admin_msg_id,
+                        text=msg_text,
+                        reply_markup=kb,
+                        parse_mode="HTML"
+                    )
+                    return True
+                except Exception as e:
+                    # Если сообщение удалено или ошибка — шлем новое
+                    logger.debug(f"Failed to edit ticket msg #{ticket.id}: {e}")
+
+            # Шлем новое сообщение
+            sent_msg = await mm.send_notification(
+                user_id=chat_id,
+                text=msg_text,
+                reply_markup=kb,
+                parse_mode="HTML"
+            )
+            if sent_msg:
+                ticket.admin_chat_id = chat_id
+                ticket.admin_msg_id = sent_msg.message_id
+            return True
+        except Exception as e:
+            logger.error(f"Failed to send ticket notification: {e}")
+            return False
