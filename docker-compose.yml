@@ -1,4 +1,13 @@
 services:
+  autoheal:
+    image: willfarrell/autoheal
+    container_name: gdpx_autoheal
+    restart: always
+    environment:
+      - AUTOHEAL_CONTAINER_LABEL=all
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+
   bot:
     build: .
     container_name: gdpx_bot
@@ -16,6 +25,8 @@ services:
       interval: 15s
       timeout: 10s
       retries: 3
+    volumes:
+      - ./logs:/app/logs
     depends_on:
       redis:
         condition: service_started
@@ -42,6 +53,8 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
+    volumes:
+      - ./logs:/app/logs
     depends_on:
       redis:
         condition: service_started

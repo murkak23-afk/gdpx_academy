@@ -211,7 +211,7 @@ async def show_notif_settings(callback: CallbackQuery, session: AsyncSession, ui
     """Отображение настроек уведомлений."""
     try:
         user = await UserService(session=session).get_by_telegram_id(callback.from_user.id)
-        pref = user.notification_preference.value
+        pref = str(user.notification_preference.value if hasattr(user.notification_preference, 'value') else user.notification_preference)
         
         status_map = {
             "full": "🟢 ВКЛЮЧЕНЫ (Все)",
@@ -352,4 +352,6 @@ async def export_data_request(callback: CallbackQuery, callback_data: SellerSett
         )
     except Exception as e:
         logger.exception(f"Error in export_data_request: {e}")
+        from src.presentation.seller_portal.seller.keyboards import get_seller_payouts_kb
         await callback.answer("⚠️ Ошибка экспорта", show_alert=True)
+        await callback.message.edit_text("Возврат в историю выплат.", reply_markup=await get_seller_payouts_kb())

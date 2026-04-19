@@ -82,6 +82,31 @@ def _emoji_patcher(record: "Record") -> None:
     record["extra"]["emoji"] = _LEVEL_EMOJI.get(record["level"].name, "   ")
 
 
+import functools
+import inspect
+
+def log_error(level="ERROR", default_return=None):
+    """Decorator to log exceptions transparently without crashing the app."""
+    def decorator(func):
+        @functools.wraps(func)
+        async def async_wrapper(*args, **kwargs):
+            try:
+                return await func(*args, **kwargs)
+            except Exception as e:
+                logger.opt(depth=1, exception=True).log(level, f"Unhandled exception in {func.__name__}: {e}")
+                return default_return
+
+        @functools.wraps(func)
+        def sync_wrapper(*args, **kwargs):
+            try:
+                return func(*args, **kwargs)
+            except Exception as e:
+                logger.opt(depth=1, exception=True).log(level, f"Unhandled exception in {func.__name__}: {e}")
+                return default_return
+
+        return async_wrapper if inspect.iscoroutinefunction(func) else sync_wrapper
+    return decorator
+
 def setup_logging(level: str = "INFO") -> None:
     """Configure loguru as the sole logging backend.
 

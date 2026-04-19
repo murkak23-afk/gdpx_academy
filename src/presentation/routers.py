@@ -8,6 +8,7 @@ from src.presentation.admin_panel.cat_constructor import router as cat_construct
 from src.presentation.admin_panel.finance.payouts import router as finance_payouts_router
 from src.presentation.common.inline_query import router as inline_query_router
 from src.presentation.common.notifications import router as notifications_router
+from src.presentation.common.global_handlers import router as global_handlers_router
 
 # Импорт роутеров модерации
 from src.presentation.admin_panel.moderation import router as moderation_root_router
@@ -17,6 +18,9 @@ from src.presentation.seller_portal.user_private import user_private_router
 
 def setup_routers() -> Router:
     root_router = Router()
+
+    # 0. ПРИОРИТЕТ: Глобальные команды (cancel/reset)
+    root_router.include_router(global_handlers_router)
 
     # 1. ПРИОРИТЕТ: Личка и Профиль (включая /start)
     root_router.include_router(user_private_router)

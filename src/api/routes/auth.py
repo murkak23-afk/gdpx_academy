@@ -1,12 +1,35 @@
 from __future__ import annotations
 
 import logging
+import hmac
+import hashlib
+import json
 from fastapi import APIRouter, Form, Request, Response, HTTPException, status
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy import select
 from src.database.session import SessionFactory
 from src.database.models.web_control import WebAccount
 from src.services.auth_service import AuthService
+
+from urllib.parse import parse_qsl
+
+def verify_telegram_webapp_data(init_data: str, bot_token: str) -> dict | None:
+    """Проверяет хеш данных WebApp от Telegram."""
+    try:
+        vals = dict(parse_qsl(init_data))
+        hash_val = vals.pop("hash", None)
+        if not hash_val:
+            return None
+
+        data_check_string = "\n".join(f"{k}={v}" for k, v in sorted(vals.items()))
+        secret_key = hmac.new(b"WebAppData", bot_token.encode(), hashlib.sha256).digest()
+        h = hmac.new(secret_key, data_check_string.encode(), hashlib.sha256).hexdigest()
+        
+        if h == hash_val:
+            return json.loads(vals.get("user", "{}"))
+        return None
+    except Exception:
+        return None
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
 logger = logging.getLogger(__name__)

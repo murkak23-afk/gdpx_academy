@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from typing import Type
+import logging
 from sqlalchemy.ext.asyncio import AsyncSession
 from src.database.repositories import UserRepository, SubmissionRepository
-# Пока оставим CategoryRepository из старого пути, если он ещё не перенесён:
 from src.database.repositories.category import CategoryRepository
 
+logger = logging.getLogger(__name__)
 
 class UnitOfWork:
     def __init__(self, session: AsyncSession):
@@ -18,11 +18,17 @@ class UnitOfWork:
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
-        if exc_type:
+        try:
+            if exc_type:
+                await self.rollback()
+            else:
+                await self.commit()
+        except Exception as e:
+            logger.error(f"Error in UoW commit/rollback: {e}", exc_info=True)
             await self.rollback()
-        else:
-            await self.commit()
-        await self.session.close()
+            raise
+        finally:
+            await self.session.close()
 
     async def commit(self):
         await self.session.commit()

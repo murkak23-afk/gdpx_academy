@@ -40,13 +40,20 @@ async def on_leaderboard_open(
         # Получаем данные текущего юзера
         user_rank = await stats_svc.get_user_rank_info(callback.from_user.id, period=period)
 
+        # Получаем призовой фонд
+        from src.database.models.web_control import LeaderboardSettings
+        settings_res = await session.execute(select(LeaderboardSettings).limit(1))
+        lb_settings = settings_res.scalar_one_or_none()
+        prize_text = lb_settings.prize_text if lb_settings and lb_settings.prize_enabled else None
+
         # Рендеринг
         text = _renderer.render_leaderboard(
             period_label="ЗА ВСЁ ВРЕМЯ" if period == "all" else "ЗА 30 ДНЕЙ",
             top_list=top_list,
             user_rank=user_rank,
             page=page,
-            total=total_count
+            total=total_count,
+            prize_text=prize_text
         )
         
         banner = media.get("leaderboard.png")

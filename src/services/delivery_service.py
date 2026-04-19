@@ -12,19 +12,24 @@ from src.core.constants import DIVIDER
 
 logger = logging.getLogger(__name__)
 
-async def background_delivery_task(bot: Bot, category_id: int, buyer_id: int, chat_id: int, thread_id: int, count: int, ws_manager=None):
+async def background_delivery_task(bot: Bot, category_id: int, buyer_id: int, chat_id: int, thread_id: int, item_ids: list[int], ws_manager=None):
     """
-    Фоновая задача выдачи eSIM. 
-    Вынесена в отдельный сервис для предотвращения циклических импортов.
+    Фоновая задача выдачи eSIM.
     """
+    if not item_ids:
+        return
+
     async with SessionFactory() as session:
         async with UnitOfWork(session=session) as uow:
-            sub_svc = SubmissionService(uow)
-            # Берем симки из очереди (метод уже переводит их в IN_WORK)
-            items = await sub_svc.take_from_warehouse(category_id, count)
+            from sqlalchemy.orm import joinedload
+            from src.database.models.submission import Submission
+            
+            # Загружаем уже забронированные товары с их категориями
+            stmt = select(Submission).options(joinedload(Submission.category)).where(Submission.id.in_(item_ids))
+            items = list((await session.execute(stmt)).scalars().all())
 
             if not items:
-                logger.warning(f"⚠️ Склад пуст для категории {category_id}. Выдача в чат {chat_id} отменена.")
+                logger.warning(f"⚠️ Товары не найдены в БД (IDS: {item_ids}). Выдача в чат {chat_id} отменена.")
                 return
 
             # Получаем персональную цену для этого покупателя
@@ -66,10 +71,11 @@ async def background_delivery_task(bot: Bot, category_id: int, buyer_id: int, ch
                     logger.error(f"!!! SEND ERROR (Submission #{item.id}): {e}")
             
             await uow.commit()
+            
             if ws_manager:
                 await ws_manager.broadcast({
                     "type": "notification",
-                    "message": f"🔥 НОВАЯ ВЫДАЧА: {len(items)} шт. {items[0].category.title if items else ""}",
+                    "message": f"🔥 НОВАЯ ВЫДАЧА: {len(items)} шт. {items[0].category.title if items else ''}",
                     "style": "success"
                 })
             logger.info(f"✅ Успешно выдано {len(items)} шт. в чат {chat_id}")

@@ -378,7 +378,8 @@ async def on_support_message_receive(message: Message, state: FSMContext, sessio
             f"Ваш запрос принят под номером <code>#{ticket.id}</code>.\n"
             f"Ожидайте ответа в этом чате."
         )
-        await ui.display(event=message, text=success_text, reply_markup=get_back_to_main_kb())
+        from src.presentation.seller_portal.seller.keyboards import get_seller_main_kb
+        await ui.display(event=message, text=success_text, reply_markup=await get_seller_main_kb())
         
     except Exception as e:
         logger.exception(f"Error saving support message: {e}")

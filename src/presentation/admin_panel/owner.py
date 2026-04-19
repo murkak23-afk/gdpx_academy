@@ -23,6 +23,7 @@ def get_owner_main_kb() -> InlineKeyboardMarkup:
             .button("🏷️ КАТЕГОРИИ И СТАВКИ", "owner_categories")
             .button("👥 ПОЛЬЗОВАТЕЛИ И МОДЫ", "owner_users")
             .button("⚙️ НАСТРОЙКИ СИСТЕМЫ", "owner_settings")
+            .button("🏆 ПРИЗОВОЙ ФОНД", "owner_lb_prize")
             .button("🚨 МОНИТОРИНГ И АЛЕРТЫ", "owner_monitoring")
             .adjust(1)
             .primary("⚖️ РЕЖИМ МОДЕРАЦИИ (/a)", "owner_to_moderation")

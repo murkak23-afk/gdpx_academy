@@ -95,6 +95,67 @@ async def _get_on_enter_owner_panel():
     return on_enter_owner_panel
 
 
+@router.callback_query(F.data == "owner_lb_prize", IsOwnerFilter())
+async def cb_owner_lb_prize_root(callback: CallbackQuery, session: AsyncSession, ui: MessageManager):
+    """Меню настройки призового фонда."""
+    from src.database.models.web_control import LeaderboardSettings
+    settings_res = await session.execute(select(LeaderboardSettings).limit(1))
+    lb_settings = settings_res.scalar_one_or_none()
+    
+    if not lb_settings:
+        lb_settings = LeaderboardSettings(prize_enabled=False, prize_text="Не установлен")
+        session.add(lb_settings)
+        await session.commit()
+
+    status = "🟢 ВКЛЮЧЕН" if lb_settings.prize_enabled else "🔴 ВЫКЛЮЧЕН"
+    text = (
+        f"🏆 <b>НАСТРОЙКА ПРИЗОВОГО ФОНДА</b>\n"
+        f"{DIVIDER}\n"
+        f"<b>Статус:</b> {status}\n"
+        f"<b>Текст приза:</b> <code>{lb_settings.prize_text}</code>\n\n"
+        f"<i>Этот текст будет отображаться в верхней части доски лидеров для всех агентов.</i>"
+    )
+    
+    kb = (PremiumBuilder()
+          .button("🔄 СМЕНИТЬ СТАТУС", "owner_lb_prize_toggle")
+          .button("📝 ИЗМЕНИТЬ ТЕКСТ", "owner_lb_prize_edit")
+          .adjust(1)
+          .back("owner_back_main")
+          .as_markup())
+    
+    await ui.display(event=callback, text=text, reply_markup=kb)
+    await callback.answer()
+
+@router.callback_query(F.data == "owner_lb_prize_toggle", IsOwnerFilter())
+async def cb_owner_lb_prize_toggle(callback: CallbackQuery, session: AsyncSession, ui: MessageManager):
+    from src.database.models.web_control import LeaderboardSettings
+    settings_res = await session.execute(select(LeaderboardSettings).limit(1))
+    lb_settings = settings_res.scalar_one_or_none()
+    lb_settings.prize_enabled = not lb_settings.prize_enabled
+    await session.commit()
+    await callback.answer(f"Призовой фонд {'включен' if lb_settings.prize_enabled else 'выключен'}")
+    await cb_owner_lb_prize_root(callback, session, ui)
+
+@router.callback_query(F.data == "owner_lb_prize_edit", IsOwnerFilter())
+async def cb_owner_lb_prize_edit_start(callback: CallbackQuery, state: FSMContext, ui: MessageManager):
+    await state.set_state(OwnerStates.waiting_for_lb_prize_text)
+    await ui.display(event=callback, text="📝 <b>Введите новый текст призового фонда:</b>\n(До 512 символов)", reply_markup=PremiumBuilder().cancel("owner_lb_prize").as_markup())
+    await callback.answer()
+
+@router.message(OwnerStates.waiting_for_lb_prize_text, IsOwnerFilter())
+async def on_owner_lb_prize_text_receive(message: Message, state: FSMContext, session: AsyncSession, ui: MessageManager):
+    from src.database.models.web_control import LeaderboardSettings
+    settings_res = await session.execute(select(LeaderboardSettings).limit(1))
+    lb_settings = settings_res.scalar_one_or_none()
+    lb_settings.prize_text = message.text[:512]
+    await session.commit()
+    await state.clear()
+    await message.answer("✅ <b>Текст призового фонда успешно обновлен!</b>", parse_mode="HTML")
+    # Возвращаемся в меню
+    from src.presentation.admin_panel.owner import get_owner_main_kb
+    await ui.display(event=message, text=HEADER_OWNER_MAIN, reply_markup=await get_owner_main_kb())
+
+
 # --- НАВИГАЦИЯ ---
 
 @router.callback_query(F.data == "owner_back_main", IsOwnerFilter())

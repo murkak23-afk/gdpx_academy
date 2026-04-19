@@ -443,13 +443,17 @@ class GDPXRenderer:
         """Alias for compatibility with leaderboard/handlers.py."""
         return self.render_premium_leaderboard(top_list, period_label, user_rank)
 
-    def render_premium_leaderboard(self, top_sellers: list[dict], period_label: str, user_rank: dict | None = None) -> str:
+    def render_premium_leaderboard(self, top_sellers: list[dict], period_label: str, user_rank: dict | None = None, prize_text: str | None = None) -> str:
         """Премиальная отрисовка доски лидеров в академическом стиле."""
         lines = [
             "🏆 <b>GDPX // ДОСКА ЛИДЕРОВ</b>",
             f"\n📅 <b>Период:</b> {period_label}",
             "\n────────────────────────────"
         ]
+
+        if prize_text:
+            lines.append(f"🎁 <b>ПРИЗОВОЙ ФОНД:</b>\n<code>{prize_text}</code>")
+            lines.append("────────────────────────────")
 
         if not top_sellers:
             lines.append("\n<i>В данном цикле трафик пока не зафиксирован.</i>")

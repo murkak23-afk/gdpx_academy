@@ -47,8 +47,12 @@ async def start_submission(event: Message | CallbackQuery, state: FSMContext, se
     categories = await CategoryService(session=session).get_active_categories()
     if not categories:
         msg = "🔴 Нет активных операторов для загрузки"
-        if isinstance(event, CallbackQuery): await event.answer(msg, show_alert=True)
-        else: await event.answer(msg)
+        from src.presentation.seller_portal.seller.keyboards import get_seller_main_kb
+        if isinstance(event, CallbackQuery): 
+            await event.answer(msg, show_alert=True)
+        else: 
+            await event.answer(msg)
+        await ui.display(event=event, text=f"❌ {msg}\nВозврат в главное меню.", reply_markup=await get_seller_main_kb())
         return
 
     user = await UserService(session=session).get_by_telegram_id(user_id)
@@ -189,7 +193,6 @@ async def finalize_upload(callback: CallbackQuery, state: FSMContext, session: A
     """Финальное сохранение пачки в БД."""
     user_id = callback.from_user.id
     await _flush_buffer_to_state(user_id, state)
-    _media_buffer.pop(user_id, None)
     
     data = await state.get_data()
     pool, cat_id = data.get("media_pool", []), data.get("category_id")
@@ -220,6 +223,11 @@ async def finalize_upload(callback: CallbackQuery, state: FSMContext, session: A
         await session.rollback()
         await ui.display(event=callback, text="❌ <b>ОШИБКА ЗАПИСИ</b>", reply_markup=await get_seller_main_kb())
         await state.clear()
+    finally:
+        _media_buffer.pop(user_id, None)
+        task = _debounce_tasks.pop(user_id, None)
+        if task:
+            task.cancel()
 
 
 @router.callback_query(F.data == "upload_cancel", StateFilter(SubmissionState.waiting_for_media))

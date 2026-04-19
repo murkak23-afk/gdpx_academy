@@ -19,6 +19,7 @@ from src.presentation.middlewares import (
 from src.presentation.middlewares.command_cleanup import CommandCleanupMiddleware
 from src.presentation.middlewares.block_check import BlockCheckMiddleware
 from src.presentation.middlewares.maintenance import MaintenanceMiddleware
+from src.presentation.middlewares.fsm_timeout import FSMTimeoutMiddleware
 from src.core.utils.message_manager import MessageManager
 from src.core.logger import logger
 
@@ -49,6 +50,7 @@ def create_dispatcher(ws_manager=None) -> Dispatcher:
 
     # ПЕРЕВОДИМ В OUTER MIDDLEWARE (выполняются ВСЕГДА до роутеров)
     dispatcher.update.outer_middleware(CommandCleanupMiddleware()) # ЧИСТКА КОМАНД СРАЗУ
+    dispatcher.update.outer_middleware(FSMTimeoutMiddleware(timeout_seconds=86400)) # СБРОС СТЕЙТА ПО ТАЙМАУТУ
     dispatcher.update.outer_middleware(DbSessionMiddleware(session_factory=SessionFactory))
     dispatcher.update.outer_middleware(MaintenanceMiddleware(settings=settings))
     dispatcher.update.outer_middleware(BlockCheckMiddleware())

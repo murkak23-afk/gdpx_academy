@@ -69,10 +69,19 @@ class SimbuyerPrice(Base, TimestampMixin):
     """Персональные цены для конкретных покупателей."""
     __tablename__ = "simbuyer_prices"
 
-    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("users.id", ondelete="CASCADE"), index=True)
     category_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("categories.id", ondelete="CASCADE"), index=True)
     price: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
 
     user = relationship("User")
     category = relationship("Category")
+
+class LeaderboardSettings(Base, TimestampMixin):
+    """Настройки доски лидеров и призового фонда."""
+    __tablename__ = "leaderboard_settings"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    prize_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    prize_text: Mapped[str | None] = mapped_column(String(512))
+

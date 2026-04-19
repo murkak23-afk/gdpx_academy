@@ -70,8 +70,8 @@ class BlockCheckMiddleware(BaseMiddleware):
                     await event.answer(block_text, parse_mode="HTML")
                 elif isinstance(event, CallbackQuery):
                     await event.answer("Заблокировано 🚫", show_alert=True)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"Failed to send block alert: {e}")
             return None
 
         return await handler(event, data)

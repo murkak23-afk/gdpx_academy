@@ -124,11 +124,26 @@ class SubmissionService:
         fixed_payout_rate: Decimal,
         media_items: list[dict[str, str]],
     ) -> list[Submission]:
-        """Отказоустойчивое массовое сохранение загруженных материалов."""
+        """Отказоустойчивое массовое сохранение загруженных материалов с фильтрацией дубликатов."""
+        from loguru import logger
         now = datetime.now(timezone.utc)
         submissions = []
 
+        if not media_items:
+            return submissions
+
+        # 1. Извлекаем уникальные ID файлов
+        unique_ids = [item["unique_id"] for item in media_items]
+        
+        # 2. Ищем уже существующие файлы в БД
+        existing_stmt = select(Submission.file_unique_id).where(Submission.file_unique_id.in_(unique_ids))
+        existing_ids = set((await self._uow.session.execute(existing_stmt)).scalars().all())
+
         for item in media_items:
+            if item["unique_id"] in existing_ids:
+                logger.warning(f"Пропущен дубликат при массовой загрузке: {item['unique_id']}")
+                continue
+
             caption = item.get("caption", "")
             norms = extract_all_normalized_phones(caption)
             if not norms:
@@ -143,20 +158,24 @@ class SubmissionService:
                     image_sha256="bulk_skip",
                     description_text=caption,
                     attachment_type=item["type"],
-                    status=SubmissionStatus.PENDING,
+                    status="pending",
                     phone_normalized=norm,
                     fixed_payout_rate=fixed_payout_rate,
                     is_duplicate=False,
                     last_status_change=now,
                 )
                 submissions.append(sub)
+                
+                # Добавляем сразу в сессию, чтобы они тоже блокировались, если в одном батче 2 одинаковых
+                self._uow.session.add(sub)
+                existing_ids.add(item["unique_id"])
 
-        for sub in submissions:
-            await self._uow.submissions.add(sub)
-        await invalidate_kb_cache()
-        await invalidate_cache_pattern(f"*u_stats*:{user_id}*")
-        await invalidate_cache_pattern(f"*u_rank_pos*:{user_id}*")
-        await invalidate_cache_pattern("leaderboard:*")
+        if submissions:
+            await invalidate_kb_cache()
+            await invalidate_cache_pattern(f"*u_stats*:{user_id}*")
+            await invalidate_cache_pattern(f"*u_rank_pos*:{user_id}*")
+            await invalidate_cache_pattern("leaderboard:*")
+
         return submissions
 
     # ... Rest of methods using self._uow.session for now to keep it manageable
@@ -188,7 +207,7 @@ class SubmissionService:
                 sub.created_at.strftime("%Y-%m-%d %H:%M"),
                 cat_title,
                 sub.phone_normalized or sub.description_text[:20],
-                sub.status.value.upper(),
+                sub.status.upper(),
                 float(sub.accepted_amount or 0)
             ])
 

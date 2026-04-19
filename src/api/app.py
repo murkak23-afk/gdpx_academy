@@ -142,42 +142,80 @@ def create_app(bot: Bot, dispatcher: Dispatcher) -> tuple[FastAPI, ConnectionMan
     async def get_delivery_categories():
         print("!!! API CALL: get_categories")
         async with SessionFactory() as session:
+            # Оптимизированный запрос через подзапрос (CTE/Subquery)
+            subq = (
+                select(Submission.category_id, func.count(Submission.id).label("stock"))
+                .where(Submission.status == SubmissionStatus.PENDING)
+                .group_by(Submission.category_id)
+                .subquery()
+            )
             stmt = (
-                select(Category.id, Category.title, Category.is_priority, func.count(Submission.id))
-                .outerjoin(Submission, (Submission.category_id == Category.id) & (Submission.status == SubmissionStatus.PENDING))
+                select(Category.id, Category.title, Category.is_priority, func.coalesce(subq.c.stock, 0))
+                .outerjoin(subq, Category.id == subq.c.category_id)
                 .where(Category.is_active == True)
-                .group_by(Category.id)
+                .order_by(Category.is_priority.desc(), Category.title.asc())
             )
             result = await session.execute(stmt)
             return [{"id": r[0], "title": r[1], "is_priority": r[2], "stock": r[3]} for r in result.all()]
 
     @app.post("/api/delivery/order")
     async def process_delivery_order(order: DeliveryOrder, background_tasks: BackgroundTasks):
+        from src.api.routes.auth import verify_telegram_webapp_data
+
         print(f"!!! ORDER RECEIVED: Chat={order.chat_id}, Cat={order.category_id}, Count={order.count}")
-        
+
+        # 1. СТРОГАЯ ВАЛИДАЦИЯ INIT DATA
+        if not order.init_data:
+            raise HTTPException(status_code=401, detail="Отсутствует токен авторизации (initData)")
+
+        user_data = verify_telegram_webapp_data(order.init_data, settings.bot_token)
+        if not user_data:
+            raise HTTPException(status_code=403, detail="Поддельный или просроченный initData")
+
+        buyer_id = user_data.get("id")
+        if not buyer_id:
+            raise HTTPException(status_code=403, detail="Неверная структура данных пользователя")
+
         async with SessionFactory() as session:
-            from src.database.models.web_control import DeliveryConfig
-            stmt_cfg = select(DeliveryConfig).where(
-                DeliveryConfig.category_id == order.category_id,
-                DeliveryConfig.chat_id == order.chat_id
-            )
-            cfg = (await session.execute(stmt_cfg)).scalar_one_or_none()
+            from src.database.uow import UnitOfWork
+            async with UnitOfWork(session=session) as uow:
+                from src.database.models.web_control import DeliveryConfig
+                stmt_cfg = select(DeliveryConfig).where(
+                    DeliveryConfig.category_id == order.category_id,
+                    DeliveryConfig.chat_id == order.chat_id
+                )
+                cfg = (await session.execute(stmt_cfg)).scalar_one_or_none()
 
-            if not cfg:
-                msg = f"Маршрут не найден. ChatID: {order.chat_id}, CatID: {order.category_id}"
-                print(f"!!! ERROR: {msg}")
-                raise HTTPException(status_code=400, detail=msg)
-            
-            from src.domain.submission.submission_service import SubmissionService
-            sub_svc = SubmissionService(session=session)
-            available = await sub_svc.get_category_stock_count(order.category_id)
-            
-            if order.count > available:
-                raise HTTPException(status_code=400, detail=f"Недостаточно на складе. Доступно: {available}")
+                if not cfg:
+                    msg = f"Маршрут не найден. ChatID: {order.chat_id}, CatID: {order.category_id}"
+                    print(f"!!! ERROR: {msg}")
+                    raise HTTPException(status_code=400, detail=msg)
 
-            background_tasks.add_task(background_delivery_task, bot, cfg.category_id, order.chat_id, cfg.thread_id, order.count, manager)
-            return {"status": "ok"}
+                from src.domain.submission.submission_service import SubmissionService
+                sub_svc = SubmissionService(uow)
 
+                # 2. РЕЗЕРВИРОВАНИЕ ТОВАРОВ С FOR UPDATE (Исключаем Race Condition)
+                items = await sub_svc.take_from_warehouse(order.category_id, order.count)
+                if len(items) < order.count:
+                    await uow.rollback()
+                    raise HTTPException(status_code=400, detail=f"Недостаточно на складе. Доступно для резерва: {len(items)}")
+
+                # Если всё ок, получаем забронированные ID и коммитим транзакцию
+                item_ids = [item.id for item in items]
+                await uow.commit()
+
+        # 3. Передаем аргументы СТРОГО в правильном порядке и по именам
+        background_tasks.add_task(
+            background_delivery_task, 
+            bot=bot, 
+            category_id=cfg.category_id, 
+            buyer_id=buyer_id,           # ВАЖНО: ID покупателя из initData
+            chat_id=order.chat_id, 
+            thread_id=cfg.thread_id, 
+            item_ids=item_ids,           # передаем забронированные ID вместо count
+            ws_manager=manager
+        )
+        return {"status": "ok", "delivered": len(item_ids)}
     @app.post(settings.webhook_path)
     async def telegram_webhook(request: Request, background_tasks: BackgroundTasks, x_tg_token: str | None = Header(None, alias="X-Telegram-Bot-Api-Secret-Token")):
         if x_tg_token != settings.webhook_secret_token:
