@@ -227,6 +227,89 @@ async def run_simbuyer_payout_notifications_task(ctx):
         logger.exception("Error in run_simbuyer_payout_notifications_task")
 
 # -----------------
+# ФОНОВЫЕ ЗАДАЧИ (ON-DEMAND)
+# -----------------
+
+async def process_delivery_task(ctx, category_id: int, buyer_id: int, chat_id: int, thread_id: int, item_ids: list[int]):
+    """
+    Фоновая задача выдачи eSIM через ARQ.
+    Гарантирует доставку даже при перезагрузке сервера.
+    """
+    bot = ctx['bot']
+    session_factory = ctx['session_factory']
+    
+    if not item_ids:
+        return
+
+    logger.info(f"ARQ: Starting delivery of {len(item_ids)} items to Buyer {buyer_id} in Chat {chat_id}")
+
+    async with session_factory() as session:
+        from sqlalchemy.orm import joinedload
+        from src.database.models.submission import Submission
+        from src.database.models.web_control import SimbuyerPrice
+        from src.database.models.enums import SubmissionStatus
+        from sqlalchemy import select, and_
+        
+        # Загружаем уже забронированные товары
+        stmt = select(Submission).options(joinedload(Submission.category)).where(Submission.id.in_(item_ids))
+        items = list((await session.execute(stmt)).scalars().all())
+
+        if not items:
+            logger.warning(f"ARQ: Items not found in DB (IDS: {item_ids}). Delivery cancelled.")
+            return
+
+        # Получаем персональную цену
+        price_stmt = select(SimbuyerPrice.price).where(
+            and_(SimbuyerPrice.user_id == buyer_id, SimbuyerPrice.category_id == category_id)
+        )
+        price_val = (await session.execute(price_stmt)).scalar() or 0
+
+        from src.domain.submission.workflow_service import WorkflowService
+        from src.database.models.enums import SubmissionStatus
+        workflow = WorkflowService(session=session)
+
+        for item in items:
+            # Обновляем поля, специфичные для байера
+            item.buyer_id = buyer_id
+            item.purchase_price = price_val
+            item.delivered_to_chat = chat_id
+            item.delivered_to_thread = thread_id
+            
+            # Используем WorkflowService для перехода статуса (это создаст ReviewAction)
+            # В качестве admin_id используем buyer_id, так как это действие совершено по его инициативе
+            await workflow.transition(
+                submission_id=item.id,
+                admin_id=buyer_id,
+                to_status=SubmissionStatus.IN_WORK,
+                comment="Автоматическая выдача через ARQ"
+            )
+
+            try:
+                cat_title = item.category.title if item.category else "Unknown Cluster"
+                arrival_time = item.created_at.strftime('%d.%m.%Y %H:%M')
+                caption = (
+                    f"<b>GDPX // {cat_title}</b>\n"
+                    f"━━━━━━━━━━━━━━━━━━\n\n"
+                    f"🆔 <b>ID:</b> #{item.id}\n"
+                    f"📱 <b>НОМЕР:</b> <code>{item.phone_normalized or 'N/A'}</code>\n"
+                    f"🕒 <b>ПОСТУПИЛА:</b> {arrival_time}\n\n"
+                    f"🍀 <i>Удачного скана и отработки материала!</i>"
+                )
+                
+                await bot.send_photo(
+                    chat_id=chat_id, 
+                    photo=item.telegram_file_id, 
+                    caption=caption, 
+                    message_thread_id=thread_id if thread_id != 0 else None,
+                )
+                await asyncio.sleep(0.3)
+            except Exception as e:
+                logger.error(f"ARQ: SEND ERROR (Submission #{item.id}): {e}")
+        
+        await session.commit()
+        logger.info(f"ARQ: Successfully delivered {len(items)} items to chat {chat_id}")
+
+# -----------------
 # CONFIG
 # -----------------
 
@@ -244,6 +327,8 @@ class WorkerSettings:
     redis_settings = RedisSettings(host=host, port=int(port))
     on_startup = startup
     on_shutdown = shutdown
+    
+    functions = [process_delivery_task]
     
     cron_jobs = [
         # SLA мониторинг и авто-фикс каждые 10 минут

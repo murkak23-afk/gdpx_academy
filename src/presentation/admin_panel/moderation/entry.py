@@ -161,7 +161,7 @@ async def open_blocked_folder(callback: CallbackQuery, session: AsyncSession, ui
 
 
 @router.callback_query(F.data == "mod_take_all_waiting")
-async def mod_take_all_waiting(callback: CallbackQuery, session: AsyncSession, bot: Bot, ui: MessageManager):
+async def mod_take_all_waiting(callback: CallbackQuery, session: AsyncSession, bot: Bot, ui: MessageManager, state: FSMContext):
     """Массовый зачёт всех 'отработанных' симок (>1 часа в работе)."""
     mod_service = ModerationService(session=session)
     user_svc = UserService(session=session)

@@ -42,16 +42,11 @@ class Payout(Base, TimestampMixin):
     accepted_count: Mapped[int] = mapped_column(nullable=False)
     period_key: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
     period_date: Mapped[date | None] = mapped_column(Date, nullable=True, index=True)
-    status: Mapped[PayoutStatus] = mapped_column(
-        Enum(
-            PayoutStatus,
-            name="payout_status_enum",
-            values_callable=lambda e: [item.value for item in e],
-            validate_strings=True,
-        ),
+    status: Mapped[str] = mapped_column(
+        String(20),
         nullable=False,
-        default=PayoutStatus.PENDING,
-        index=True,
+        default=PayoutStatus.PENDING.value,
+        index=True
     )
     uploaded_count: Mapped[int] = mapped_column(nullable=False, default=0)
     blocked_count: Mapped[int] = mapped_column(nullable=False, default=0)

@@ -23,7 +23,6 @@ from src.api.deps import templates, get_current_user, RoleChecker, get_db, get_b
 from src.core.utils.audit_logger import log_admin_action
 from aiogram import Bot
 from src.services.auth_service import AuthService
-from src.services.delivery_service import background_delivery_task
 from src.domain.submission.submission_service import SubmissionService
 
 router = APIRouter(prefix="/gdpx", tags=["GDPX"])
@@ -721,16 +720,14 @@ from src.services.delivery_service import background_delivery_task
 
 @router.post("/inventory/take", response_class=HTMLResponse)
 async def take_esim_from_inventory(
-    background_tasks: BackgroundTasks,
     category_id: int = Form(...),
     count: int = Form(1),
     user: User = Depends(get_current_user),
     bot: Bot = Depends(get_bot)
 ):
-    """Выдача eSIM из инвентаря для симбайера."""
+    """Выдача eSIM из инвентаря для симбайера с атомарным резервированием."""
     async with SessionFactory() as session:
-        
-        # 1. Ищем конфигурацию доставки (персональный чат/топик симбайера)
+        # 1. Ищем конфигурацию доставки
         from src.database.models.web_control import DeliveryConfig
         stmt_cfg = select(DeliveryConfig).where(
             DeliveryConfig.category_id == category_id,
@@ -739,18 +736,49 @@ async def take_esim_from_inventory(
         cfg = (await session.execute(stmt_cfg)).scalar_one_or_none()
 
         if not cfg:
-            return HTMLResponse(content='<div class="text-red-400 p-4 bg-red-900/20 border border-red-900 rounded-lg text-sm">Нет настроенного маршрута (DeliveryConfig). Обратитесь к OWNER.</div>')
+            return HTMLResponse(content='<div class="text-red-400 p-4 bg-red-900/20 border border-red-900 rounded-lg text-sm">Нет настроенного маршрута.</div>')
 
-        # 2. Проверяем наличие
-        from src.domain.submission.submission_service import SubmissionService
-        sub_svc = SubmissionService(session=session)
-        available = await sub_svc.get_category_stock_count(category_id)
+        # 2. АТОМАРНОЕ РЕЗЕРВИРОВАНИЕ (SELECT ... FOR UPDATE SKIP LOCKED)
+        # Это предотвращает выдачу одних и тех же симок разным байерам
+        stmt_reserve = (
+            select(Submission)
+            .where(Submission.category_id == category_id, Submission.status == SubmissionStatus.PENDING)
+            .limit(count)
+            .with_for_update(skip_locked=True)
+        )
+        items = list((await session.execute(stmt_reserve)).scalars().all())
         
-        if count > available:
-            return HTMLResponse(content=f'<div class="text-amber-400 p-4 bg-amber-900/20 border border-amber-900 rounded-lg text-sm">Недостаточно на складе.</div>')
+        if len(items) < count:
+            await session.rollback()
+            return HTMLResponse(content=f'<div class="text-amber-400 p-4 bg-amber-900/20 border border-amber-900 rounded-lg text-sm">Недостаточно на складе. Доступно: {len(items)}</div>')
 
-        # 3. Запускаем общую задачу выдачи
-        background_tasks.add_task(background_delivery_task, bot, category_id, user.id, cfg.chat_id, cfg.thread_id, count)
+        item_ids = [item.id for item in items]
+        
+        # 3. Сразу помечаем их как занятые
+        now = datetime.now(timezone.utc)
+        for item in items:
+            item.status = SubmissionStatus.IN_WORK
+            item.buyer_id = user.id
+            item.assigned_at = now
+            item.delivered_to_chat = cfg.chat_id
+            item.delivered_to_thread = cfg.thread_id
+            
+        await session.commit()
+
+        # 4. Запускаем фоновую отгрузку в Telegram через ARQ (Reliable delivery)
+        from src.core.cache import get_arq_pool
+        arq_pool = await get_arq_pool()
+        if arq_pool:
+            await arq_pool.enqueue_job(
+                'process_delivery_task',
+                category_id=category_id,
+                buyer_id=user.id,
+                chat_id=cfg.chat_id,
+                thread_id=cfg.thread_id,
+                item_ids=item_ids
+            )
+        else:
+            logger.error("ARQ Pool not available in take_esim_from_inventory")
         
         # Логируем
         await log_admin_action(
@@ -758,7 +786,7 @@ async def take_esim_from_inventory(
             action="TAKE_ESIM_WEB",
             target_type="category",
             target_id=category_id,
-            details=f"Запрос {count} шт. -> Чат {cfg.chat_id}"
+            details=f"Выдано {len(item_ids)} шт. -> Чат {cfg.chat_id}"
         )
         
         return HTMLResponse(content='<script>window.location.href="/gdpx/my-esim"</script>')

@@ -60,12 +60,12 @@ class Lex:
     # РЕГИСТРАЦИЯ / ОНБОРДИНГ
     # ══════════════════════════════════════════════════════════════════════
 
-    ASK_LANGUAGE = "❖ <b>GDPX // INITIALIZATION</b>\n▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰\nУстановите языковой пакет интерфейса:"
+    ASK_LANGUAGE = "❖ <b>GDPX // INITIALIZATION</b>\n▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱\nУстановите языковой пакет интерфейса:"
 
     # {requirements} подставляется в шаблон, чтобы правила можно было изменить отдельно
     ASK_PSEUDONYM = (
         "🔖 <b>IDENTITY // INITIALIZATION</b>\n"
-        "▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰\n"
+        "▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱\n"
         "Установите ваш позывной для глобального реестра.\n\n"
         "▫ <b>Формат:</b> 2–32 символа [A-Z, 0-9, _, -]\n"
         "▫ <b>Статус:</b> <i>Изменение невозможно после фиксации</i>\n\n"
@@ -95,7 +95,7 @@ class Lex:
     # {check_url} — ссылка CryptoBot
     OK_WITHDRAW_CHECK = (
         "💠 <b>CLEARING // SUCCESS</b>\n"
-        "▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰\n"
+        "▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱\n"
         "Транзакция верифицирована. Активы переведены в ликвидный чек.\n\n"
         "🔗 <b>LINK:</b> {check_url}\n\n"
         "<i>[!] Чек действителен в течение 24 часов.</i>"
@@ -122,7 +122,7 @@ class Lex:
 
     INFO_SESSION_TERMINATE_CONFIRM = (
         "🚨 <b>PROTOCOL // CLEANUP</b>\n"
-        "▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰\n"
+        "▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱\n"
         "Внимание. Инициирован полный сброс сессии.\n"
         "Все логи терминала будут безвозвратно стерты.\n\n"
         "⚠️ <b>ОПЕРАЦИЯ НЕОБРАТИМА.</b> Исполнить?"
@@ -144,7 +144,7 @@ class Lex:
         """SUPPORT CENTER — экран поддержки продавца."""
 
         HEADER = "🛡 <b>SUPPORT // CENTER</b>"
-        DIVIDER = "▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰"
+        DIVIDER = "▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▰▰▰▰▰▰▰▰▰"
         STATUS = "📡 [🟢 <b>ONLINE</b>] ── <i>Ping: 15m.</i>"
 
         # Плейсхолдеры: {divider} {founder} {helper_1} {helper_2} {architect} {status}
@@ -189,16 +189,16 @@ class Lex:
     class Pay:
         """Тексты раздела выплат (admin/payouts.py)."""
 
-        LEDGER_HEADER = "💸 <b>LEDGER // PAYOUTS</b>\n▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰"
+        LEDGER_HEADER = "💸 <b>LEDGER // PAYOUTS</b>\n▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱"
         LEDGER_EMPTY = "🌑 <b>EMPTY</b>\nПользователи с ожидающими выплатами отсутствуют."
 
-        HISTORY_HEADER = "📜 <b>HISTORY // ARCHIVE</b>\n▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰"
+        HISTORY_HEADER = "📜 <b>HISTORY // ARCHIVE</b>\n▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱"
         HISTORY_EMPTY = "🌑 <b>EMPTY</b>"
 
-        TRASH_HEADER = "🗑 <b>RECYCLE BIN // PAYOUTS</b>\n▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰"
+        TRASH_HEADER = "🗑 <b>RECYCLE BIN // PAYOUTS</b>\n▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱"
         TRASH_EMPTY = "🌑 <b>EMPTY</b>"
 
-        PENDING_HEADER = "⚙️ <b>CONTROL // PAYOUTS</b>\n▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰"
+        PENDING_HEADER = "⚙️ <b>CONTROL // PAYOUTS</b>\n▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱"
         PENDING_EMPTY = "🔴 <b>NO PENDING DATA</b>"
 
         # Кнопки навигации ведомости
@@ -228,7 +228,7 @@ class Lex:
         # {username} {total_accepted} {rejected} {total_amount}
         CONFIRM_STEP1 = (
             "💠 <b>EMISSION // STAGE 01</b>\n"
-            "▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰\n"
+            "▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱\n"
             "▫ <b>AGENT:</b> <code>{username}</code>\n"
             "▫ <b>CYCLE:</b> ACTIVE\n\n"
             "📊 <b>ASSETS SUMMARY:</b>\n"
@@ -241,7 +241,7 @@ class Lex:
         # {total_amount} {username} {balance_line} {warning_line}
         CONFIRM_STEP2 = (
             "💠 <b>EMISSION // STAGE 02</b>\n"
-            "▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰\n"
+            "▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱\n"
             "📡 <code>WAITING FOR ROOT SIGNATURE...</code>\n\n"
             "▫ <b>VOLUME:</b> <code>{total_amount} USDT</code>\n"
             "▫ <b>TARGET:</b> <code>{username}</code>\n\n"
@@ -259,7 +259,7 @@ class Lex:
 
         TOPUP_ASK = (
             "💸 <b>APP // TOPUP</b>\n"
-            "▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰\n"
+            "▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱\n"
             "Введите объем транша в USDT.\n"
             "📡 <code>Waiting for input...</code>"
         )
@@ -274,7 +274,7 @@ class Lex:
 
         ASK_INPUT = (
             "📡 <b>UPLINK // BROADCAST</b>\n"
-            "▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰\n"
+            "▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱\n"
             "Отправьте тело сообщения.\n"
             "Поддерживается: Текст, Фото + Текст.\n\n"
             "{hint}"
@@ -284,7 +284,7 @@ class Lex:
         # {has_photo} "да"/"нет", {preview_body}
         PREVIEW = (
             "📋 <b>PREVIEW // BROADCAST</b>\n"
-            "▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰\n"
+            "▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱\n"
             "▫ <b>PHOTO:</b> {has_photo}\n"
             "▫ <b>BODY:</b>\n"
             "<blockquote>{preview_body}</blockquote>\n\n"
@@ -296,7 +296,7 @@ class Lex:
         # {ok} {blocked} {failed}
         REPORT = (
             "📡 <b>BROADCAST // COMPLETE</b>\n"
-            "▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰\n"
+            "▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱\n"
             "✔️ DELIVERED: <b>{ok}</b>\n"
             "🚫 BLOCKED: <b>{blocked}</b>\n"
             "⚠️ FAILED: <b>{failed}</b>"
@@ -315,7 +315,7 @@ class Lex:
         """Тексты раздела статистики (admin/stats.py)."""
 
         # {month:02d} {year}
-        HEADER = "📊 <b>LOGS // SIM STATS {month:02d}.{year}</b>\n▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰"
+        HEADER = "📊 <b>LOGS // SIM STATS {month:02d}.{year}</b>\n▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱"
         TABLE_HEADER = "<code>DAY | IN | ✔️ | ❌ | 🚫 | ⛔</code>"
         TOTAL_LABEL = "<b>MONTHLY SUMMARY</b>"
 
@@ -331,7 +331,7 @@ class Lex:
 
         CONFIRM_RESET = (
             "🚨 <b>DANGER // DATA WIPE</b>\n"
-            "▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰\n"
+            "▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱\n"
             "Подтвердить обнуление статистики?\n"
             "⚠️ <b>ОПЕРАЦИЯ НЕОБРАТИМА.</b>"
         )
@@ -352,7 +352,7 @@ class Lex:
     class Users:
         """Тексты управления агентами (admin/users.py)."""
 
-        SEARCH_PROMPT = "🔍 <b>AGENT // SEARCH</b>\n▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰\nОтправьте Telegram ID пользователя:"
+        SEARCH_PROMPT = "🔍 <b>AGENT // SEARCH</b>\n▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱\nОтправьте Telegram ID пользователя:"
         ERR_INVALID_ID = "✖ <b>SYNTAX ERROR:</b> Числовой ID."
         ERR_SESSION = "✖ <b>SESSION ERROR</b>"
         ERR_BAD_DELTA = "✖ <b>INVALID DELTA:</b> <code>+15.50</code> / <code>-5.00</code>."
@@ -362,7 +362,7 @@ class Lex:
         # {tg_id} {pending_balance:.2f} {total_paid:.2f}
         BALANCE_PROMPT = (
             "💸 <b>CLEARING // CALIBRATION</b>\n"
-            "▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰\n"
+            "▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱\n"
             "▫ <b>AGENT:</b> <code>{tg_id}</code>\n"
             "▫ <b>PENDING:</b> <code>{pending_balance:.2f}</code> USDT\n"
             "▫ <b>PAID:</b> <code>{total_paid:.2f}</code> USDT\n\n"
@@ -413,7 +413,7 @@ class Lex:
         """Тексты системной диагностики (admin/system.py)."""
 
         SPINNER = "🛡 <b>SYSTEM INTEGRITY</b>\n\n📡 <code>RUNNING DIAGNOSTICS...</code>"
-        DIVIDER = "▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰"
+        DIVIDER = "▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▰▰▰▰▰▰▰▰▰"
 
         STATUS_DB_OK = "ONLINE [OK]"
         STATUS_DB_FAIL = "⚠️ OFFLINE"
@@ -447,7 +447,7 @@ class Lex:
         """Тексты глобальной аналитики (admin/analytics.py)."""
 
         SPINNER = "👁️‍🗨️ <b>SYNDICATE EYE</b>\n\n📡 <code>COLLECTING DATA...</code>"
-        DIVIDER = "▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰"
+        DIVIDER = "▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▰▰▰▰▰▰▰▰▰"
 
         # {total_turnover} {turnover_24h} {esim_accepted} {esim_rejected}
         # {pending_payouts_sum} {ts}
@@ -492,7 +492,7 @@ class Lex:
     class Academy:
         """Тексты раздела академии (admin/academy.py)."""
 
-        CODEX_HEADER = "🏯 <b>GDPX // ACADEMIC: CODEX</b>\n▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰"
+        CODEX_HEADER = "🏯 <b>GDPX // ACADEMIC: CODEX</b>\n▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱"
 
         CODEX_TEXT = (
             "Агент.\n\n"
@@ -516,7 +516,7 @@ class Lex:
 
         WELCOME_RECRUIT = (
             "🏯 <b>GDPX // ACADEMY: INNER CIRCLE</b>\n"
-            "▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰\n"
+            "▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱\n"
             "Приветствуем, Рекрут. Ваш цифровой след зафиксирован.\n\n"
             "▫ <b>Статус:</b> <code>ACTIVE</code>\n"
             "▫ <b>Допуск:</b> <code>LEVEL 1</code>\n\n"
@@ -534,6 +534,6 @@ class Lex:
     class SellerArchive:
         """Тексты раздела архива селлера."""
 
-        HEADER = "📦 <b>ARCHIVE // STORAGE</b>\n▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰"
+        HEADER = "📦 <b>ARCHIVE // STORAGE</b>\n▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱"
         EMPTY = "🌑 <b>EMPTY</b>\nАрхивные данные отсутствуют."
         INFO = "<i>В архиве хранятся симки, загруженные в предыдущие циклы.</i>"

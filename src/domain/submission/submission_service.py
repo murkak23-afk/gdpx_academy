@@ -38,9 +38,52 @@ class SubmissionService:
         else:
             raise ValueError("Either uow or session must be provided")
 
-    async def get_by_id(self, submission_id: int) -> Submission | None:
-        """Возвращает карточку по ID или None."""
-        return await self._uow.submissions.get_by_id(submission_id)
+    async def auto_transition_issued_to_verification(self, threshold: datetime) -> int:
+        """Авто-перевод симок из IN_WORK в PENDING (Проверка) по таймауту."""
+        # На самом деле, симки из IN_WORK должны идти в PENDING для модераторов
+        # если байер их не отработал или прошло много времени.
+        stmt = (
+            update(Submission)
+            .where(
+                Submission.status == SubmissionStatus.IN_WORK,
+                Submission.assigned_at <= threshold
+            )
+            .values(
+                status=SubmissionStatus.PENDING,
+                assigned_at=None,
+                admin_id=None
+            )
+        )
+        res = await self._uow.session.execute(stmt)
+        return res.rowcount
+
+    async def list_in_review_stale(self, threshold: datetime) -> list[Submission]:
+        """Список заявок, которые админ взял на проверку и не закрыл дольше SLA."""
+        stmt = (
+            select(Submission)
+            .options(joinedload(Submission.admin))
+            .where(
+                Submission.status == SubmissionStatus.IN_REVIEW,
+                Submission.last_status_change <= threshold
+            )
+        )
+        res = await self._uow.session.execute(stmt)
+        return list(res.scalars().all())
+
+    async def archive_daily_submissions(self) -> int:
+        """Архивация старых зачтенных/отклоненных заявок (старше 3 дней)."""
+        threshold = datetime.now(timezone.utc) - timedelta(days=3)
+        stmt = (
+            update(Submission)
+            .where(
+                Submission.status.in_([SubmissionStatus.ACCEPTED, SubmissionStatus.REJECTED]),
+                Submission.reviewed_at <= threshold,
+                Submission.is_archived == False
+            )
+            .values(is_archived=True)
+        )
+        res = await self._uow.session.execute(stmt)
+        return res.rowcount
 
     async def get_daily_count(self, user_id: int) -> int:
         """Считает количество материалов пользователя за текущие сутки UTC."""
@@ -123,14 +166,15 @@ class SubmissionService:
         category_id: int,
         fixed_payout_rate: Decimal,
         media_items: list[dict[str, str]],
-    ) -> list[Submission]:
+    ) -> tuple[list[Submission], int]:
         """Отказоустойчивое массовое сохранение загруженных материалов с фильтрацией дубликатов."""
         from loguru import logger
         now = datetime.now(timezone.utc)
         submissions = []
+        duplicate_count = 0
 
         if not media_items:
-            return submissions
+            return submissions, 0
 
         # 1. Извлекаем уникальные ID файлов
         unique_ids = [item["unique_id"] for item in media_items]
@@ -142,6 +186,7 @@ class SubmissionService:
         for item in media_items:
             if item["unique_id"] in existing_ids:
                 logger.warning(f"Пропущен дубликат при массовой загрузке: {item['unique_id']}")
+                duplicate_count += 1
                 continue
 
             caption = item.get("caption", "")
@@ -165,8 +210,6 @@ class SubmissionService:
                     last_status_change=now,
                 )
                 submissions.append(sub)
-                
-                # Добавляем сразу в сессию, чтобы они тоже блокировались, если в одном батче 2 одинаковых
                 self._uow.session.add(sub)
                 existing_ids.add(item["unique_id"])
 
@@ -176,7 +219,7 @@ class SubmissionService:
             await invalidate_cache_pattern(f"*u_rank_pos*:{user_id}*")
             await invalidate_cache_pattern("leaderboard:*")
 
-        return submissions
+        return submissions, duplicate_count
 
     # ... Rest of methods using self._uow.session for now to keep it manageable
     # I'll update export_user_submissions_excel to use uow.session

@@ -36,12 +36,13 @@ class WorkflowService:
     _ALLOWED: Dict[SubmissionStatus, set[SubmissionStatus]] = {
         SubmissionStatus.PENDING: {
             SubmissionStatus.IN_WORK,
+            SubmissionStatus.ACCEPTED,
             SubmissionStatus.REJECTED, 
             SubmissionStatus.BLOCKED, 
             SubmissionStatus.NOT_A_SCAN
         },
         SubmissionStatus.IN_WORK: {
-            SubmissionStatus.IN_WORK,
+            SubmissionStatus.ACCEPTED,
             SubmissionStatus.WAIT_CONFIRM,
             SubmissionStatus.PENDING,
             SubmissionStatus.REJECTED,
@@ -49,9 +50,8 @@ class WorkflowService:
             SubmissionStatus.NOT_A_SCAN,
         },
         SubmissionStatus.WAIT_CONFIRM: {
-            SubmissionStatus.IN_REVIEW,
-            SubmissionStatus.PENDING,
             SubmissionStatus.ACCEPTED,
+            SubmissionStatus.PENDING,
             SubmissionStatus.REJECTED,
             SubmissionStatus.BLOCKED,
             SubmissionStatus.NOT_A_SCAN,
@@ -215,13 +215,19 @@ class WorkflowService:
                             f"💰 <b>Выплата:</b> <code>{sub.accepted_amount}</code> USDT")
                     
                     # Отправляем сообщение
-                    msg = await bot.send_photo(chat_id=settings.moderation_chat_id, photo=sub.telegram_file_id, caption=text, parse_mode="HTML")
-                    
-                    # Если еще нет архива — создаем запись
-                    if not (arc_cid and arc_mid):
-                        arc_cid, arc_mid = msg.chat.id, msg.message_id
+                    try:
+                        if sub.telegram_file_id:
+                            msg = await bot.send_photo(chat_id=settings.moderation_chat_id, photo=sub.telegram_file_id, caption=text, parse_mode="HTML")
+                        else:
+                            msg = await bot.send_message(chat_id=settings.moderation_chat_id, text=text, parse_mode="HTML")
+                        
+                        # Если еще нет архива — создаем запись
+                        if not (arc_cid and arc_mid):
+                            arc_cid, arc_mid = msg.chat.id, msg.message_id
+                    except Exception as send_err:
+                        logger.warning(f"Could not send accept notification for #{sub.id}: {send_err}")
                 except Exception as e:
-                    logger.error(f"Failed to send moderation notification for #{sub.id} to {settings.moderation_chat_id}: {e}")
+                    logger.error(f"Failed to process moderation notification for #{sub.id}: {e}")
 
         if arc_cid and arc_mid:
             # Проверяем, нет ли уже такой записи (чтобы не дублировать в PublicationArchive)
@@ -236,7 +242,16 @@ class WorkflowService:
     async def _update_daily_payout(self, sub: Submission):
         day_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
         period_key = day_start.date().isoformat()
-        stmt = select(Payout).where(Payout.user_id == sub.user_id, Payout.period_key == period_key, Payout.status == PayoutStatus.PENDING, Payout.category_id == sub.category_id)
+        stmt = (
+            select(Payout)
+            .where(
+                Payout.user_id == sub.user_id, 
+                Payout.period_key == period_key, 
+                Payout.status == PayoutStatus.PENDING, 
+                Payout.category_id == sub.category_id
+            )
+            .with_for_update()
+        )
         res = await self._session.execute(stmt)
         payout = res.scalar_one_or_none()
         if payout:
@@ -249,58 +264,24 @@ class WorkflowService:
     def _get_status_label(self, status_val: str) -> str:
         """Централизованные красивые лейблы."""
         labels = {
-            SubmissionStatus.ACCEPTED.value: "💎 <b>ЗАЧЁТ</b>",
+            SubmissionStatus.ACCEPTED.value: "✅ <b>ЗАЧЁТ</b>",
             SubmissionStatus.REJECTED.value: "⚠️ <b>БРАК (ОТКЛОНЕНО)</b>",
-            SubmissionStatus.BLOCKED.value: "⛔️ <b>ВАША СИМ-КАРТА ЗАБЛОКИРОВАНА</b>",
-            SubmissionStatus.NOT_A_SCAN.value: "📵 <b>НЕ ЧИТАЕТСЯ (НЕ СКАН)</b>",
-            SubmissionStatus.IN_REVIEW.value: "🔍 <b>ВЗЯТО НА ПРОВЕРКУ</b>",
+            SubmissionStatus.BLOCKED.value: "💀 <b>БЛОК</b>",
+            SubmissionStatus.NOT_A_SCAN.value: "🚫 <b>НЕ СКАН</b>",
+            SubmissionStatus.IN_REVIEW.value: "🔍 <b>НА ПРОВЕРКЕ</b>",
+            SubmissionStatus.PENDING.value: "📦 <b>СКЛАД</b>",
+            SubmissionStatus.IN_WORK.value: "📡 <b>В РАБОТЕ...</b>",
+            SubmissionStatus.WAIT_CONFIRM.value: "⏳ <b>ОТРАБОТАНА</b>",
         }
         return labels.get(status_val, f"🔘 {status_val.upper()}")
 
     def _format_event(self, status_val: str, phone: str, reason: str | None) -> str:
-        """Форматирует одну строку события."""
-        if status_val == SubmissionStatus.BLOCKED.value:
-            res = f" 🚫 <b>Номер:</b> <code>{phone}</code>"
-            if reason: res += f"\n └ 💬 <b>Причина:</b> <code>{reason}</code>"
-            return res
-        else:
-            res = f" ├ <code>{phone}</code>"
-            if reason: res += f"\n └ 💬 <i>Причина: {reason}</i>"
-            return res
+        """Форматирует строку для лога (уже не используется для селлеров напрямую)."""
+        return f"  ├ Номер: <code>{phone}</code>\n  └ Причина: {reason or 'нет данных'}"
 
     async def _send_notification(self, bot: "Bot", sub: Submission, status: SubmissionStatus, reason: str | RejectionReason | None, comment: str | None):
-        if status not in {SubmissionStatus.ACCEPTED, SubmissionStatus.REJECTED, SubmissionStatus.BLOCKED, SubmissionStatus.NOT_A_SCAN, SubmissionStatus.IN_REVIEW}:
-            return
-
-        user_id, tg_id = sub.user_id, sub.seller.telegram_id
-        reason_txt = reason if isinstance(reason, str) else (reason.value if reason else "")
-        if comment: reason_txt = f"{reason_txt} ({comment})" if reason_txt else comment
-            
-        event = {"phone": sub.phone_normalized or f"#{sub.id}", "status": status.value, "reason": reason_txt}
-
-        redis = await get_redis()
-        if not redis:
-            logger.info(f"Direct notif to {tg_id} (status: {status.value})")
-            text = (f"❖ <b>GDPX // УВЕДОМЛЕНИЕ</b>\n{DIVIDER}\n"
-                    f"{self._get_status_label(status.value)} (1 шт.)\n"
-                    f"{self._format_event(status.value, event['phone'], event['reason'])}\n\n"
-                    f"{DIVIDER_LIGHT}\n<i>Ознакомьтесь с деталями выше.</i>")
-            try: 
-                from src.core.utils.message_manager import MessageManager
-                mm = MessageManager(bot)
-                await mm.send_notification(user_id=tg_id, text=text, parse_mode="HTML")
-            except Exception as e: logger.error(f"Direct notif fail to {tg_id}: {e}")
-            return
-
-        cache_key = f"notif_v4:{user_id}"
-        try:
-            raw = await redis.get(cache_key)
-            data = pickle.loads(raw) if raw else {"msg_id": None, "events": []}
-            data["events"].append(event)
-            await redis.set(cache_key, pickle.dumps(data), ex=3600)
-            if user_id in _notif_tasks: _notif_tasks[user_id].cancel()
-            _notif_tasks[user_id] = asyncio.create_task(self._flush_notification(user_id, tg_id, bot))
-        except Exception as e: logger.error(f"Notif cache error: {e}")
+        """[DEPRECATED] Уведомления отключены в пользу раздела СОСТОЯНИЕ eSIM."""
+        return # Уведомления больше не отправляются селлеру индивидуально
 
     async def _flush_notification(self, user_id: int, tg_id: int, bot: "Bot"):
         try:
@@ -314,63 +295,58 @@ class WorkflowService:
             events = data.get("events", [])
             if not events: return
             
-            groups = {}
-            for ev in events:
-                s = ev["status"]
-                if s not in groups: groups[s] = []
-                groups[s].append(ev)
+            # Получаем пользователя для проверки беззвучного режима
+            from src.database.models.user import User
+            user = await self._session.get(User, user_id)
+            is_silent = user.is_silent_mode if user else False
 
-            lines = ["❖ <b>GDPX // УВЕДОМЛЕНИЕ</b>", f"{DIVIDER}", ""]
-            for s_val, s_items in groups.items():
-                lines.append(f"{self._get_status_label(s_val)} (<code>{len(s_items)}</code> шт.)")
-                for it in s_items[-15:]:
-                    lines.append(self._format_event(s_val, it['phone'], it['reason']))
-                lines.append("") 
-            
-            lines.append(f"{DIVIDER_LIGHT}\n<i>Пожалуйста, ознакомьтесь с деталями выше.</i>")
-            text = "\n".join(lines).strip()
+            # Подсчет сводки
+            accepted_count = sum(1 for e in events if e["status"] == SubmissionStatus.ACCEPTED.value)
+            blocked_count = sum(1 for e in events if e["status"] == SubmissionStatus.BLOCKED.value)
+
+            text = (
+                "🔄 <b>GDPX // ОБНОВЛЕНИЕ СТАТУСА</b>\n"
+                f"{DIVIDER}\n"
+                "По симкам обновился статус в реестре.\n\n"
+                f"Краткая сводка: <code>{accepted_count}</code> зачёт / <code>{blocked_count}</code> блоков.\n"
+                f"{DIVIDER_LIGHT}\n"
+                "<i>Нажмите кнопку ниже для подробностей.</i>"
+            )
 
             from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-            from src.presentation.common.factory import NotificationCD
+            from src.presentation.common.factory import SellerMenuCD, SellerSettingsCD
             
-            kb = InlineKeyboardMarkup(inline_keyboard=[
-                [InlineKeyboardButton(text="✖️ ЗАКРЫТЬ УВЕДОМЛЕНИЕ", callback_data=NotificationCD(action="close").pack())]
-            ])
-
-            from src.core.utils.message_manager import MessageManager
-            mm = MessageManager(bot)
+            buttons = [
+                [InlineKeyboardButton(text="🧬 СОСТОЯНИЕ eSIM", callback_data=SellerMenuCD(action="dynamics").pack())]
+            ]
             
-            # Вместо прямого редактирования/отправки используем send_notification
-            # Но для группировки мы всё равно хотим иметь возможность редактировать!
-            # Улучшим send_notification в MessageManager позже, если нужно.
-            # Пока что WorkflowService сам управляет группировкой через msg_id.
+            # Кнопка отключения звука только если режим НЕ включен
+            if not is_silent:
+                buttons.append([InlineKeyboardButton(text="🔕 ОТКЛЮЧИТЬ ЗВУК", callback_data=SellerSettingsCD(action="silent_toggle", value="on").pack())])
 
+            kb = InlineKeyboardMarkup(inline_keyboard=buttons)
+
+            # --- SINGLE MESSAGE LOGIC ---
+            # Удаляем старое уведомление перед отправкой нового
             msg_id = data.get("msg_id")
-            sent = None
             if msg_id:
-                try: 
-                    sent = await bot.edit_message_text(
-                        chat_id=tg_id, 
-                        message_id=msg_id, 
-                        text=text, 
-                        reply_markup=kb,
-                        parse_mode="HTML"
-                    )
-                except Exception: 
-                    pass
+                try: await bot.delete_message(chat_id=tg_id, message_id=msg_id)
+                except: pass
+
+            # Отправляем новое
+            sent_msg = await bot.send_message(
+                chat_id=tg_id,
+                text=text,
+                reply_markup=kb,
+                parse_mode="HTML",
+                disable_notification=is_silent
+            )
             
-            if not sent:
-                # Используем унифицированный метод
-                msg_id = await mm.send_notification(
-                    user_id=tg_id,
-                    text=text,
-                    reply_markup=kb,
-                    parse_mode="HTML"
-                )
-                if msg_id:
-                    data["msg_id"] = msg_id
-                    await redis.set(cache_key, pickle.dumps(data), ex=3600)
-                    logger.info(f"Flush notif sent to {tg_id} (msg_id: {msg_id})")
+            # Сохраняем ID нового сообщения и очищаем события
+            data["msg_id"] = sent_msg.message_id
+            data["events"] = [] 
+            await redis.set(cache_key, pickle.dumps(data), ex=3600*24)
+            
         except asyncio.CancelledError: pass
         except Exception as e: logger.error(f"Flush fail: {e}")
         finally: _notif_tasks.pop(user_id, None)

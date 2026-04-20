@@ -134,6 +134,10 @@ def create_app(bot: Bot, dispatcher: Dispatcher) -> tuple[FastAPI, ConnectionMan
     async def root_redirect():
         return RedirectResponse(url="/auth/login")
 
+    @app.get("/health/ready")
+    async def health_ready():
+        return {"status": "ready"}
+
     @app.get("/delivery")
     async def delivery_page(request: Request):
         return templates.TemplateResponse("delivery.html", {"request": request})
@@ -159,7 +163,7 @@ def create_app(bot: Bot, dispatcher: Dispatcher) -> tuple[FastAPI, ConnectionMan
             return [{"id": r[0], "title": r[1], "is_priority": r[2], "stock": r[3]} for r in result.all()]
 
     @app.post("/api/delivery/order")
-    async def process_delivery_order(order: DeliveryOrder, background_tasks: BackgroundTasks):
+    async def process_delivery_order(order: DeliveryOrder):
         from src.api.routes.auth import verify_telegram_webapp_data
 
         print(f"!!! ORDER RECEIVED: Chat={order.chat_id}, Cat={order.category_id}, Count={order.count}")
@@ -204,23 +208,41 @@ def create_app(bot: Bot, dispatcher: Dispatcher) -> tuple[FastAPI, ConnectionMan
                 item_ids = [item.id for item in items]
                 await uow.commit()
 
-        # 3. Передаем аргументы СТРОГО в правильном порядке и по именам
-        background_tasks.add_task(
-            background_delivery_task, 
-            bot=bot, 
-            category_id=cfg.category_id, 
-            buyer_id=buyer_id,           # ВАЖНО: ID покупателя из initData
-            chat_id=order.chat_id, 
-            thread_id=cfg.thread_id, 
-            item_ids=item_ids,           # передаем забронированные ID вместо count
-            ws_manager=manager
-        )
+        # 3. Отправляем задачу в ARQ напрямую (Reliable delivery)
+        from src.core.cache import get_arq_pool
+        arq_pool = await get_arq_pool()
+        if arq_pool:
+            await arq_pool.enqueue_job(
+                'process_delivery_task',
+                category_id=cfg.category_id,
+                buyer_id=buyer_id,
+                chat_id=order.chat_id,
+                thread_id=cfg.thread_id,
+                item_ids=item_ids
+            )
+            
+            # WebSocket уведомление (сразу из API)
+            if manager:
+                await manager.broadcast({
+                    "type": "notification",
+                    "message": f"⏳ ВЫДАЧА В ОЧЕРЕДИ: {len(item_ids)} шт.",
+                    "style": "info"
+                })
+        else:
+            logger.error("ARQ Pool not available in process_delivery_order")
+
         return {"status": "ok", "delivered": len(item_ids)}
     @app.post(settings.webhook_path)
     async def telegram_webhook(request: Request, background_tasks: BackgroundTasks, x_tg_token: str | None = Header(None, alias="X-Telegram-Bot-Api-Secret-Token")):
-        if x_tg_token != settings.webhook_secret_token:
-            raise HTTPException(status_code=401)
         update_data = await request.json()
+        logger.info(f"!!! WEBHOOK RECEIVED: {update_data.get('update_id')}")
+
+        if x_tg_token != settings.webhook_secret_token:
+            logger.warning(f"!!! WEBHOOK 401: Token mismatch. Received: {x_tg_token}")
+            # Для отладки пока не будем кидать 401, просто залогируем, если вы разрешите.
+            # Но по правилам безопасности - надо. Оставляю как есть, но с логом.
+            raise HTTPException(status_code=401)
+            
         update = Update.model_validate(update_data, context={"bot": bot})
         background_tasks.add_task(dispatcher.feed_update, bot, update)
         return {"ok": True}

@@ -82,22 +82,7 @@ async def pick_category(callback: CallbackQuery, callback_data: SellerAssetCD, s
         return await callback.answer("🔴 Оператор не найден", show_alert=True)
 
     user_id = callback.from_user.id
-    _media_buffer[user_id] = {
-        "items": [],
-        "cat_title": category.title,
-        "payout": category.payout_rate,
-        "msg_id": callback.message.message_id
-    }
-
-    await state.update_data(
-        category_id=category.id,
-        category_title=category.title,
-        fixed_payout_rate=str(category.payout_rate),
-        media_pool=[],
-        status_msg_id=callback.message.message_id
-    )
-    await state.set_state(SubmissionState.waiting_for_media)
-
+    
     text = (
         f"{_get_upload_header()}"
         f"🗂 <b>Выбран оператор:</b> <code>{escape(category.title)}</code>\n"
@@ -108,7 +93,24 @@ async def pick_category(callback: CallbackQuery, callback_data: SellerAssetCD, s
         f"<i>Можно выделить до 50 файлов разом. После загрузки нажмите «Подтвердить интеграцию».</i>"
     )
 
-    await ui.display(event=callback, text=text, reply_markup=await get_upload_finish_kb())
+    # ВАЖНО: Получаем ID реально созданного сообщения
+    msg_id = await ui.display(event=callback, text=text, reply_markup=await get_upload_finish_kb())
+
+    _media_buffer[user_id] = {
+        "items": [],
+        "cat_title": category.title,
+        "payout": category.payout_rate,
+        "msg_id": msg_id
+    }
+
+    await state.update_data(
+        category_id=category.id,
+        category_title=category.title,
+        fixed_payout_rate=str(category.payout_rate),
+        media_pool=[],
+        status_msg_id=msg_id
+    )
+    await state.set_state(SubmissionState.waiting_for_media)
     await callback.answer("Приемник открыт")
 
 
@@ -151,19 +153,25 @@ async def process_bulk_media(message: Message, state: FSMContext, bot: Bot, ui: 
 
 async def _refresh_control_panel(user_id: int, bot: Bot, state: FSMContext, chat_id: int, ui: MessageManager) -> None:
     """Тихое обновление UI без лишних обращений к Redis."""
-    await asyncio.sleep(0.3) 
+    await asyncio.sleep(0.4) # Даем время пачке долететь
     
     buf = _media_buffer.get(user_id)
     if not buf: return
 
-    count = await _flush_buffer_to_state(user_id, state)
-    msg_id = buf["msg_id"]
+    # Считаем общее кол-во: то что в стейте + то что в локальном буфере
+    data = await state.get_data()
+    state_pool = data.get("media_pool", [])
     
-    if not msg_id:
-        data = await state.get_data()
-        msg_id = data.get("status_msg_id")
-        buf["msg_id"] = msg_id
+    # Сливаем буфер в стейт
+    current_items = buf.get("items", [])
+    if current_items:
+        state_pool.extend(current_items)
+        buf["items"] = [] # Очищаем локальный буфер
+        await state.update_data(media_pool=state_pool)
 
+    count = len(state_pool)
+    msg_id = buf.get("msg_id") or data.get("status_msg_id")
+    
     if not msg_id: return
 
     text = (
@@ -176,15 +184,20 @@ async def _refresh_control_panel(user_id: int, bot: Bot, state: FSMContext, chat
     )
 
     try:
-        # Для дебаунса используем прямой edit или ui.display?
-        # ui.display удалит и пришлет новое если edit упадет, что нам и нужно
-        # Но нам нужен объект "Update" или "Message" чтобы вызвать ui.display
-        # Костыль: передаем пустой Message(id=msg_id)
-        from aiogram.types import User, Chat
-        dummy = Message(message_id=msg_id, date=datetime.now(), chat=Chat(id=user_id, type="private"), from_user=User(id=user_id, is_bot=False, first_name="..."))
-        await ui.display(event=dummy, text=text, reply_markup=await get_upload_finish_kb())
+        from .keyboards import get_upload_finish_kb
+        kb = await get_upload_finish_kb()
+        # Используем прямой edit_message_text для надежности в фоне
+        await bot.edit_message_text(
+            chat_id=chat_id,
+            message_id=msg_id,
+            text=text,
+            reply_markup=kb,
+            parse_mode="HTML"
+        )
     except Exception as e:
-        logger.debug(f"Debounce display failed: {e}")
+        # Если сообщение удалено - не страшно, селлер нажмет /sell заново
+        logger.debug(f"Refresh upload panel failed: {e}")
+    
     _debounce_tasks.pop(user_id, None)
 
 
@@ -206,18 +219,28 @@ async def finalize_upload(callback: CallbackQuery, state: FSMContext, session: A
 
     user = await UserService(session=session).get_by_telegram_id(user_id)
     try:
-        created = await SubmissionService(session=session).create_bulk_submissions(user_id=user.id, category_id=cat_id, fixed_payout_rate=rate, media_items=pool)
+        created, skipped = await SubmissionService(session=session).create_bulk_submissions(user_id=user.id, category_id=cat_id, fixed_payout_rate=rate, media_items=pool)
         await session.commit()
+        
         ws_manager = data_extra.get("ws_manager") or bot.get("ws_manager")
-        if ws_manager:
+        if ws_manager and created:
             await ws_manager.broadcast({
                 "type": "notification",
                 "message": f"🏮 НОВАЯ ПОСТАВКА: {len(created)} шт. {title}",
                 "style": "success"
             })
+
+        # Формируем текст ответа селлеру
+        msg_parts = [f"✅ <b>Принято {len(created)} симок.</b>"]
+        if skipped > 0:
+            msg_parts.append(f"\n⚠️ <b>Пропущено дубликатов: {skipped} шт.</b>\n<i>(Эти файлы уже загружались ранее)</i>")
+        
         await state.clear()
-        await ui.display(event=callback, text=f"✅ <b>Принято {len(created)} симок.</b>", reply_markup=await get_seller_main_kb())
-        asyncio.create_task(_notify_admins_about_upload(bot, user.telegram_id, len(created), title))
+        await ui.display(event=callback, text="\n".join(msg_parts), reply_markup=await get_seller_main_kb())
+        
+        if created:
+            asyncio.create_task(_notify_admins_about_upload(bot, user.telegram_id, len(created), title))
+            
     except Exception as e:
         logger.error(f"Bulk insert failed: {e}", exc_info=True)
         await session.rollback()

@@ -306,6 +306,7 @@ async def on_support_center(event: Message | CallbackQuery, state: FSMContext, u
 
         builder = PremiumBuilder()
         builder.primary("🛡 НАПИСАТЬ СООБЩЕНИЕ", "support:contact")
+        builder.button("📜 МОИ ТИКЕТЫ", SellerTicketCD(action="list"))
         builder.back(NavCD(to="menu"), "❮ В ГЛАВНОЕ МЕНЮ")
 
         await ui.display(event=event, text=text, reply_markup=builder.as_markup(), photo=banner)
@@ -315,6 +316,77 @@ async def on_support_center(event: Message | CallbackQuery, state: FSMContext, u
         logger.exception(f"Error in on_support_center: {e}")
         if isinstance(event, CallbackQuery):
             await event.answer("⚠️ Ошибка при открытии Поддержки", show_alert=True)
+
+from src.presentation.common.factory import SellerTicketCD
+from src.services.support_service import SupportService
+
+@router.callback_query(SellerTicketCD.filter(F.action == "list"))
+async def on_user_tickets_list(callback: CallbackQuery, session: AsyncSession, ui: MessageManager):
+    """Список тикетов пользователя."""
+    try:
+        user = await UserService(session=session).get_by_telegram_id(callback.from_user.id)
+        support_svc = SupportService(session)
+        tickets = await support_svc.get_user_tickets(user.id)
+        
+        text = (
+            f"📜 <b>ВАШИ ОБРАЩЕНИЯ</b>\n"
+            f"{DIVIDER}\n"
+            f"Список ваших запросов в техподдержку.\n\n"
+        )
+        
+        if not tickets:
+            text += "<i>✨ У вас пока нет созданных обращений.</i>"
+            
+        builder = PremiumBuilder()
+        for t in tickets:
+            status_icon = "🟢" if t.status == "open" else "🔴"
+            builder.button(f"{status_icon} #{t.id} | {t.subject[:20]}", SellerTicketCD(action="view", ticket_id=t.id))
+        
+        builder.adjust(1)
+        builder.back(SellerMenuCD(action="support"), "❮ НАЗАД")
+        
+        await ui.display(event=callback, text=text, reply_markup=builder.as_markup())
+        await callback.answer()
+    except Exception as e:
+        logger.exception(f"Error in on_user_tickets_list: {e}")
+
+@router.callback_query(SellerTicketCD.filter(F.action == "view"))
+async def on_user_ticket_view(callback: CallbackQuery, callback_data: SellerTicketCD, session: AsyncSession, ui: MessageManager):
+    """Просмотр истории конкретного тикета селлером."""
+    try:
+        support_svc = SupportService(session)
+        ticket = await support_svc.get_ticket_by_id(callback_data.ticket_id)
+        
+        if not ticket or ticket.creator_id != (await UserService(session).get_by_telegram_id(callback.from_user.id)).id:
+            return await callback.answer("❌ Тикет не найден", show_alert=True)
+            
+        messages = await support_svc.get_ticket_messages(ticket.id)
+        
+        status_str = "ОТКРЫТО 🟢" if ticket.status == "open" else "ЗАКРЫТО 🔴"
+        text = (
+            f"🎫 <b>ТИКЕТ #{ticket.id}</b>\n"
+            f"{DIVIDER}\n"
+            f"📡 <b>Статус:</b> {status_str}\n"
+            f"📝 <b>Тема:</b> <code>{ticket.subject}</code>\n"
+            f"{DIVIDER_LIGHT}\n"
+        )
+        
+        for msg in messages[-7:]: # Последние 7 сообщений
+            time_str = msg.created_at.strftime("%H:%M")
+            sender = "👮 <b>Support</b>" if msg.sender.role in ["admin", "owner"] else "👤 <b>Вы</b>"
+            text += f"[{time_str}] {sender}:\n{msg.text}\n\n"
+            
+        builder = PremiumBuilder()
+        if ticket.status == "open":
+            builder.primary("✍️ ОТВЕТИТЬ", "support:contact") # Переиспользуем существующий механизм
+        
+        builder.back(SellerTicketCD(action="list"), "❮ К СПИСКУ")
+        builder.adjust(1)
+        
+        await ui.display(event=callback, text=text, reply_markup=builder.as_markup())
+        await callback.answer()
+    except Exception as e:
+        logger.exception(f"Error in on_user_ticket_view: {e}")
 
 @router.callback_query(F.data == "support:contact")
 async def on_contact_admin_start(callback: CallbackQuery, state: FSMContext, ui: MessageManager):

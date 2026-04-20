@@ -7,10 +7,12 @@ from typing import Any, Callable
 
 from loguru import logger
 from redis.asyncio import Redis
+from arq.connections import ArqRedis, create_pool, RedisSettings
 
 from src.core.config import get_settings
 
 _redis: Redis | None = None
+_arq_pool: ArqRedis | None = None
 
 
 async def invalidate_cache_pattern(pattern: str):
@@ -43,13 +45,39 @@ async def get_redis() -> Redis | None:
     return _redis
 
 
+async def get_arq_pool() -> ArqRedis | None:
+    """Ленивая инициализация пула ARQ."""
+    global _arq_pool
+    if _arq_pool is not None:
+        return _arq_pool
+    settings = get_settings()
+    if not settings.redis_url:
+        return None
+    
+    # Парсим URL для arq RedisSettings
+    _redis_url = settings.redis_url
+    if _redis_url.startswith("redis://"):
+        _redis_url = _redis_url[8:]
+        host_port = _redis_url.split("@")[-1].split("/")[0]
+        host, port = host_port.split(":") if ":" in host_port else (host_port, 6379)
+    else:
+        host, port = 'localhost', 6379
+        
+    _arq_pool = await create_pool(RedisSettings(host=host, port=int(port)))
+    return _arq_pool
+
+
 async def close_redis() -> None:
     """Вызывается при shutdown: закрывает соединение с Redis."""
-    global _redis
+    global _redis, _arq_pool
     if _redis is not None:
         with suppress(Exception):
             await _redis.aclose()
         _redis = None
+    if _arq_pool is not None:
+        with suppress(Exception):
+            await _arq_pool.close()
+        _arq_pool = None
 
 
 def cached(ttl: int | Callable[[], int] | None = None, key_prefix: str = "") -> Callable:

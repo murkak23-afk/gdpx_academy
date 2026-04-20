@@ -35,12 +35,11 @@ OPERATORS = ["МТС", "Билайн", "МегаФон", "Теле2", "Йота"
 SIM_TYPES = ["Салон", "ГК", "Корпоративные", "Дилерские", "Другое"]
 
 
-@router.message(Command("adm_cat"))
+from src.presentation.filters.admin import IsAdminFilter
+
+@router.message(Command("adm_cat"), IsAdminFilter())
 async def cmd_adm_cat(message: Message, session: AsyncSession) -> None:
     """Точка входа в конструктор (только для админа)."""
-    if not await AdminService(session=session).is_admin(message.from_user.id):
-        return
-
     text = "<b>Конфигурация кластеров сети</b>\n\nВыберите действие:"
     await message.answer(text, reply_markup=await get_catcon_main_kb(), parse_mode="HTML")
 

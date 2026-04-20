@@ -151,15 +151,15 @@ class NotificationService:
                     logger.debug(f"Failed to edit ticket msg #{ticket.id}: {e}")
 
             # Шлем новое сообщение
-            sent_msg = await mm.send_notification(
+            msg_id = await mm.send_notification(
                 user_id=chat_id,
                 text=msg_text,
                 reply_markup=kb,
                 parse_mode="HTML"
             )
-            if sent_msg:
+            if msg_id:
                 ticket.admin_chat_id = chat_id
-                ticket.admin_msg_id = sent_msg.message_id
+                ticket.admin_msg_id = msg_id
             return True
         except Exception as e:
             logger.error(f"Failed to send ticket notification: {e}")

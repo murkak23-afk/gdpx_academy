@@ -117,48 +117,56 @@ class ModerationService:
             return True
         return False
 
-    async def auto_finalize_by_phone(
-        self, 
-        phone_query: str, 
-        status: SubmissionStatus, 
-        reason: str, 
-        comment: str, 
-        bot: Optional["Bot"] = None,
-        search_status: SubmissionStatus = SubmissionStatus.IN_WORK
-    ) -> bool:
+    async def smart_find_by_phone_suffix(self, raw_text: str, search_status: SubmissionStatus = SubmissionStatus.IN_WORK) -> tuple[Optional[Submission], int]:
         """
-        Ищет актив по суффиксу номера в указанном статусе и финализирует его.
-        Используется в AUTO-FIX (топики).
+        Умный поиск по номеру согласно регламенту:
+        1. Нормализация (13 цифр -> 11, 10 цифр -> 11).
+        2. Поиск по суффиксам: 5 -> 4 -> 3 цифры.
         """
-        suffix = phone_query[-5:]
-        if len(suffix) < 4:
-            suffix = phone_query[-4:]
+        # Очищаем от мусора, оставляем только цифры
+        digits = "".join(filter(str.isdigit, raw_text))
+        if len(digits) < 3:
+            return None, 0
 
-        stmt = (
-            select(Submission)
-            .options(joinedload(Submission.seller))
-            .where(
-                Submission.phone_normalized.like(f"%{suffix}"),
-                Submission.status == search_status,
-                Submission.is_archived == False
+        # Нормализация по ТЗ
+        if len(digits) == 13:
+            # Если 13, убираем либо первые 2, либо последние 2. 
+            # В РФ это обычно +7 или 8 в начале, так что берем хвост 11 цифр.
+            digits = digits[:11] if digits.startswith("00") else digits[-11:]
+        elif len(digits) == 10:
+            # Если 10, значит без "7", приводим к 11 для порядка (хотя поиск по хвосту это нивелирует)
+            digits = "7" + digits
+        
+        # Обрезаем до макс 11 знаков если вдруг прилетело больше
+        if len(digits) > 11:
+            digits = digits[-11:]
+
+        # Многоуровневый поиск
+        for length in [5, 4, 3]:
+            if len(digits) < length:
+                continue
+            
+            suffix = digits[-length:]
+            stmt = (
+                select(Submission)
+                .options(joinedload(Submission.seller), joinedload(Submission.category))
+                .where(
+                    Submission.phone_normalized.like(f"%{suffix}"),
+                    Submission.status == search_status,
+                    Submission.is_archived == False
+                )
+                .order_by(Submission.assigned_at.desc())
+                .limit(1)
             )
-            .order_by(Submission.created_at.desc())
-            .limit(1)
-        )
-        res = await self._session.execute(stmt)
-        item = res.scalar_one_or_none()
-
-        if not item:
-            return False
-
-        return await self.finalize_submission(
-            submission_id=item.id,
-            status=status,
-            reason=reason,
-            comment=comment,
-            bot=bot,
-            admin_id=item.admin_id or 1 # Если админ не назначен, берем системного
-        )
+            res = await self._session.execute(stmt)
+            item = res.scalar_one_or_none()
+            
+            if item:
+                # Если нашли по 3 цифрам, но длина исходного ввода была больше, 
+                # проверяем не нашли ли мы случайно не то (дополнительная страховка)
+                return item, length
+                
+        return None, 0
 
     async def get_recent_blocked_grouped(self) -> List[dict]:
         """Возвращает список заблокированных активов за 24ч с группировкой по продавцу и оператору."""
@@ -375,41 +383,60 @@ class ModerationService:
         return list(res.scalars().all())
 
     async def search_pending_assets(self, query: str, filter_type: str = "all", limit: int = 50) -> List[Submission]:
-        """Интеллектуальный поиск по активам."""
-        stmt = (
-            select(Submission)
-            .options(joinedload(Submission.category), joinedload(Submission.seller))
-            .join(Category, Submission.category_id == Category.id)
-            .join(User, Submission.user_id == User.id)
-            .where(Submission.status == SubmissionStatus.PENDING, Submission.is_archived == False)
+        """Интеллектуальный поиск активов в очереди по номеру (5-4-3), ID или селлеру."""
+        from src.database.models.submission import Submission
+        from src.database.models.user import User
+        from src.database.models.category import Category
+        from sqlalchemy import or_, cast, String
+        
+        base_stmt = select(Submission).options(
+            joinedload(Submission.seller),
+            joinedload(Submission.category)
+        ).join(Category).join(User).where(Submission.is_archived == False, Submission.status == SubmissionStatus.PENDING)
+
+        # 1. Если запрос похож на номер телефона (3+ цифры)
+        digits = "".join(filter(str.isdigit, query))
+        if len(digits) >= 3:
+            # Нормализация по ТЗ
+            if len(digits) == 13: digits = digits[-11:]
+            elif len(digits) == 10: digits = "7" + digits
+            
+            # Многоуровневый поиск (5 -> 4 -> 3)
+            for length in [5, 4, 3]:
+                if len(digits) < length: continue
+                suffix = digits[-length:]
+                
+                stmt = base_stmt.where(Submission.phone_normalized.like(f"%{suffix}"))
+                # Применяем фильтры времени/приоритета
+                stmt = self._apply_search_filters(stmt, filter_type)
+                
+                res = await self._session.execute(stmt.order_by(Submission.created_at.desc()).limit(limit))
+                items = list(res.scalars().all())
+                if items: return items
+
+        # 2. Если не нашли по номеру, пробуем по ID или никнейму
+        clean_query = query.strip().replace("@", "")
+        stmt = base_stmt.where(
+            or_(
+                cast(Submission.id, String).contains(clean_query),
+                User.username.ilike(f"%{clean_query}%")
+            )
         )
+        stmt = self._apply_search_filters(stmt, filter_type)
+        res = await self._session.execute(stmt.order_by(Submission.created_at.desc()).limit(limit))
+        return list(res.scalars().all())
 
-        clean_query = query.strip().replace("+", "").replace(" ", "")
-
-        if clean_query:
-            if clean_query.isdigit() and 4 <= len(clean_query) <= 6:
-                stmt = stmt.where(Submission.phone_normalized.like(f"%{clean_query}"))
-            else:
-                stmt = stmt.where(
-                    or_(
-                        Submission.phone_normalized.contains(clean_query),
-                        Submission.id.cast(func.text).contains(clean_query),
-                        User.username.ilike(f"%{clean_query}%"),
-                    )
-                )
-
+    def _apply_search_filters(self, stmt, filter_type: str):
+        """Вспомогательный метод для фильтрации поиска."""
+        from datetime import datetime, timezone, timedelta
         now = datetime.now(timezone.utc)
         if filter_type == "prio":
-            stmt = stmt.where(Category.is_priority)
+            return stmt.where(Category.is_priority)
         elif filter_type == "sla8":
-            stmt = stmt.where(Submission.created_at <= now - timedelta(minutes=8))
+            return stmt.where(Submission.created_at <= now - timedelta(minutes=8))
         elif filter_type == "sla15":
-            stmt = stmt.where(Submission.created_at <= now - timedelta(minutes=15))
-
-        stmt = stmt.order_by(Submission.created_at.desc()).limit(limit)
-
-        res = await self._session.execute(stmt)
-        return list(res.scalars().all())
+            return stmt.where(Submission.created_at <= now - timedelta(minutes=15))
+        return stmt
 
     async def take_specific_items_to_work(self, admin_id: int, item_ids: List[int]) -> int:
         """Бронирование конкретных карточек (из Склада или Проверки)."""

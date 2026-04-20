@@ -27,6 +27,7 @@ from src.database.models.user import User
 from src.presentation.filters.admin import IsOwnerFilter
 from src.presentation.common.base import PremiumBuilder
 from src.presentation.common.factory import CatManageCD, OwnerUserCD
+from src.presentation.common.constants import HEADER_OWNER_MAIN
 from src.presentation.admin_panel.owner import (
     get_owner_categories_kb,
     get_owner_category_detail_kb,
@@ -76,7 +77,7 @@ async def _render_user_card(user: User, callback_data: OwnerUserCD) -> tuple[str
         f"{DIVIDER}\n"
         f"🆔 <b>TG ID:</b> <code>{user.telegram_id}</code>\n"
         f"👤 <b>User:</b> @{user.username or 'N/A'}\n"
-        f"🏷️ <b>Роль:</b> <code>{user.role.value.upper()}</code>\n"
+        f"🏷️ <b>Роль:</b> <code>{user.role.upper()}</code>\n"
         f"📅 <b>Регистрация:</b> <code>{reg_date}</code>\n"
         f"📡 <b>Статус:</b> {status_text}\n"
         f"{DIVIDER_LIGHT}\n"
@@ -85,7 +86,7 @@ async def _render_user_card(user: User, callback_data: OwnerUserCD) -> tuple[str
         f"{DIVIDER}\n"
         f"<i>Действия над пользователем:</i>"
     )
-    kb = await get_user_card_kb(user.id, user.role.value, user.is_restricted, callback_data.page, callback_data.role)
+    kb = await get_user_card_kb(user.id, user.role, user.is_restricted, callback_data.page, callback_data.role)
     return text, kb
 
 
@@ -218,7 +219,7 @@ async def cb_owner_cmd_center(callback: CallbackQuery, session: AsyncSession, ui
 
 
 @router.callback_query(F.data.in_(["owner_mods_suspend", "owner_mods_resume"]), IsOwnerFilter())
-async def cb_owner_mods_control(callback: CallbackQuery, session: AsyncSession, ui: MessageManager):
+async def cb_owner_mods_control(callback: CallbackQuery, session: AsyncSession):
     """Глобальное управление работой модераторов."""
     from src.core.config import get_settings
     settings = get_settings()
@@ -227,7 +228,7 @@ async def cb_owner_mods_control(callback: CallbackQuery, session: AsyncSession, 
     
     msg = "🛑 Работа модераторов ПРИОСТАНОВЛЕНА" if is_suspended else "▶️ Работа модераторов ВОЗОБНОВЛЕНА"
     await callback.answer(msg, show_alert=True)
-    await cb_owner_monitoring(callback, session, ui)
+    await cb_owner_monitoring(callback, session)
 
 
 # --- ФИНАНСЫ ---
@@ -280,14 +281,6 @@ async def cb_owner_to_moderation(callback: CallbackQuery, session: AsyncSession,
     from src.presentation.admin_panel.admin import on_enter_moderator_panel
     await on_enter_moderator_panel(callback, session, ui, state)
     await callback.answer("⚖️ Режим модерации")
-
-
-@router.callback_query(F.data == "owner_back_main", IsOwnerFilter())
-async def cb_owner_back_main(callback: CallbackQuery, session: AsyncSession, ui: MessageManager, state: FSMContext):
-    """Возврат в главное меню владельца."""
-    from src.presentation.admin_panel.admin import on_enter_owner_panel
-    await on_enter_owner_panel(callback, session, ui, state)
-    await callback.answer()
 
 
 # --- ПОЛЬЗОВАТЕЛИ ---
@@ -465,7 +458,7 @@ async def process_owner_cat_price(message: Message, state: FSMContext, session: 
 
 
 @router.callback_query(CatManageCD.filter(F.action.in_(["toggle_active", "toggle_priority"])), IsOwnerFilter())
-async def cb_owner_cat_toggles(callback: CallbackQuery, callback_data: CatManageCD, session: AsyncSession):
+async def cb_owner_cat_toggles(callback: CallbackQuery, callback_data: CatManageCD, session: AsyncSession, ui: MessageManager):
     cat = await session.get(Category, callback_data.cat_id)
     if cat:
         if callback_data.action == "toggle_active": cat.is_active = not cat.is_active
@@ -510,7 +503,7 @@ async def cb_owner_settings_maint(callback: CallbackQuery, session: AsyncSession
     s = get_settings()
     s.maintenance_mode = not s.maintenance_mode
     await callback.answer(f"Режим обслуживания: {'ВКЛ' if s.maintenance_mode else 'ВЫКЛ'}", show_alert=True)
-    await cb_owner_monitoring(callback, session, ui)
+    await cb_owner_monitoring(callback, session)
 
 
 # --- БЕЗОПАСНОСТЬ (ДОПОЛНИТЕЛЬНО) ---
@@ -784,7 +777,7 @@ async def process_owner_role_search(message: Message, state: FSMContext, session
         f"👤 <b>УПРАВЛЕНИЕ ПРАВАМИ</b>\n{DIVIDER}\n"
         f"🆔 ID: <code>{user.telegram_id}</code>\n"
         f"👤 User: @{user.username or 'N/A'}\n"
-        f"🏷️ Текущая роль: <code>{user.role.value.upper()}</code>\n"
+        f"🏷️ Текущая роль: <code>{user.role.upper()}</code>\n"
         f"{DIVIDER_LIGHT}\nВыберите новую роль для пользователя:"
     )
     
@@ -799,7 +792,7 @@ async def process_owner_role_search(message: Message, state: FSMContext, session
 
 
 @router.callback_query(F.data.startswith("owner_role_set:"), IsOwnerFilter())
-async def cb_owner_role_apply(callback: CallbackQuery, state: FSMContext, session: AsyncSession):
+async def cb_owner_role_apply(callback: CallbackQuery, state: FSMContext, session: AsyncSession, ui: MessageManager):
     """Применение новой роли."""
     role_str = callback.data.split(":")[1]
     data = await state.get_data()
@@ -813,7 +806,7 @@ async def cb_owner_role_apply(callback: CallbackQuery, state: FSMContext, sessio
         await session.commit()
         await callback.answer(f"✅ Роль пользователя обновлена до {role_str.upper()}", show_alert=True)
         await state.clear()
-        await cb_owner_users_main(callback, session)
+        await cb_owner_users_main(callback, session, ui)
     else:
         await callback.answer("❌ Пользователь не найден", show_alert=True)
 
@@ -869,13 +862,13 @@ async def cb_owner_cat_confirm_delete(callback: CallbackQuery, callback_data: Ca
 
 
 @router.callback_query(CatManageCD.filter(F.action == "delete"), IsOwnerFilter())
-async def cb_owner_cat_delete(callback: CallbackQuery, callback_data: CatManageCD, session: AsyncSession):
+async def cb_owner_cat_delete(callback: CallbackQuery, callback_data: CatManageCD, session: AsyncSession, ui: MessageManager):
     cat = await session.get(Category, callback_data.cat_id)
     if cat:
         await session.delete(cat)
         await session.commit()
         await callback.answer("✅ Категория удалена", show_alert=True)
-    await cb_owner_categories(callback, session)
+    await cb_owner_categories(callback, session, ui)
 
 
 @router.callback_query(F.data == "owner_finance_bulk_export", IsOwnerFilter())

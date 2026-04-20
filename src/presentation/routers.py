@@ -13,22 +13,27 @@ from src.presentation.common.global_handlers import router as global_handlers_ro
 # Импорт роутеров модерации
 from src.presentation.admin_panel.moderation import router as moderation_root_router
 from src.presentation.admin_panel.support.handlers import router as admin_support_router
+from src.presentation.common.auto_fix import router as auto_fix_router
 from src.presentation.qr_delivery.handlers import router as qr_delivery_router
 from src.presentation.seller_portal.user_private import user_private_router
 
 
+from src.presentation.seller_portal.seller.dynamics import router as seller_dynamics_router
+
 def setup_routers() -> Router:
     root_router = Router()
 
-    # 0. ПРИОРИТЕТ: Глобальные команды и техподдержка (из-за состояний)
+    # 0. ВЫСШИЙ ПРИОРИТЕТ: Команды выдачи (только /qr)
+    root_router.include_router(qr_delivery_router)
+    
+    # 1. СИСТЕМНЫЕ: Авто-фикс (текст в топиках) и Глобальные (отмена и т.д.)
+    root_router.include_router(auto_fix_router)
     root_router.include_router(global_handlers_router)
     root_router.include_router(admin_support_router)
 
     # 1. ПРИОРИТЕТ: Личка и Профиль (включая /start)
     root_router.include_router(user_private_router)
-
-    # 2. ПРИОРИТЕТ: Выдача QR (Группы)
-    root_router.include_router(qr_delivery_router)
+    root_router.include_router(seller_dynamics_router) # НОВЫЙ РОУТЕР
 
     # 3. ПРИОРИТЕТ: Модерация
     root_router.include_router(moderation_root_router)

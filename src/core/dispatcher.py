@@ -44,7 +44,11 @@ def create_dispatcher(ws_manager=None) -> Dispatcher:
     @dispatcher.update.outer_middleware()
     async def global_debug_middleware(handler, event, data):
         user = data.get("event_from_user")
-        if user:
+        msg = data.get("event_chat") # На самом деле лучше брать из самого event если это Update
+        from aiogram.types import Update
+        if isinstance(event, Update) and event.message:
+            logger.info(f"!!! [GLOBAL_TRACE] !!! Message from {user.id} (@{user.username}): '{event.message.text}' in chat {event.message.chat.id}")
+        elif user:
             logger.info(f"!!! [GLOBAL_TRACE] !!! Update from {user.id} (@{user.username})")
         return await handler(event, data)
 

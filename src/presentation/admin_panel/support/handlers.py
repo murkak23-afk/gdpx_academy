@@ -34,6 +34,8 @@ async def show_tickets_list(event: Message | CallbackQuery, session: AsyncSessio
         user_svc = UserService(session)
         user = await user_svc.get_by_telegram_id(event.from_user.id)
         if not user or user.role not in ["admin", "owner"]:
+            if isinstance(event, CallbackQuery):
+                await event.answer("❌ Доступ запрещен.", show_alert=True)
             return
             
         support_svc = SupportService(session)
@@ -69,6 +71,11 @@ async def show_tickets_list(event: Message | CallbackQuery, session: AsyncSessio
 async def view_ticket_detail(callback: CallbackQuery, callback_data: AdminSupportCD, session: AsyncSession, ui: MessageManager):
     """Детальный просмотр тикета с историей админа."""
     try:
+        from src.domain.moderation.admin_service import AdminService
+        admin_svc = AdminService(session)
+        if not await admin_svc.is_admin_strictly(callback.from_user.id):
+            return await callback.answer("❌ Доступ запрещен. Только для администрации.", show_alert=True)
+
         support_svc = SupportService(session)
         # Подгружаем с учетом assigned_admin для истории
         from sqlalchemy.orm import joinedload

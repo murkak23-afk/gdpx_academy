@@ -54,7 +54,8 @@ class BillingService:
 
     async def create_payout_request(self, user_id: int, admin_id: int, amount: Decimal) -> Payout | None:
         """Создает транзакцию выплаты, списывая средства с pending_balance."""
-        seller = await self._uow.users.get_by_id(user_id)
+        # БЛОКИРУЕМ СТРОКУ ПОЛЬЗОВАТЕЛЯ
+        seller = await self._uow.users.get_by_id(user_id, for_update=True)
         if not seller or seller.pending_balance < amount or amount <= 0:
             return None
 
@@ -85,7 +86,8 @@ class BillingService:
         """
         Создает транзакцию выплаты со статусом PAID и безопасно списывает средства.
         """
-        seller = await self._uow.users.get_by_id(user_id)
+        # БЛОКИРУЕМ СТРОКУ ПОЛЬЗОВАТЕЛЯ
+        seller = await self._uow.users.get_by_id(user_id, for_update=True)
         if not seller or seller.pending_balance < amount or amount <= 0:
             return None
 
@@ -156,7 +158,8 @@ class BillingService:
         if payout.status != PayoutStatus.PENDING:
             return False, f"Нельзя отменить выплату в статусе {payout.status.value}."
 
-        seller = await self._uow.users.get_by_id(payout.user_id)
+        # БЛОКИРУЕМ СТРОКУ ПОЛЬЗОВАТЕЛЯ ПРИ ВОЗВРАТЕ
+        seller = await self._uow.users.get_by_id(payout.user_id, for_update=True)
         if seller:
             seller.pending_balance += payout.amount
         

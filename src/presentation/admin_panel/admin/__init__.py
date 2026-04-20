@@ -39,13 +39,10 @@ async def on_enter_moderator_panel(event: Message | CallbackQuery, session: Asyn
     
     await ui.display(event=event, text=text, reply_markup=kb)
 
-@router.message(Command("a", "admin", prefix="/!"))
-@router.message(F.text.casefold().regexp(r"^[/!](a|admin)$"))
-@router.message(F.text.casefold().contains("модерация"))
+@router.message(Command("a", "admin", prefix="/!"), IsAdminFilter())
+@router.message(F.text.casefold().regexp(r"^[/!](a|admin)$"), IsAdminFilter())
+@router.message(F.text.casefold().contains("модерация"), IsAdminFilter())
 async def cmd_moderator_panel(message: Message, session: AsyncSession, state: FSMContext, ui: MessageManager) -> None:
-    admin_svc = AdminService(session=session)
-    if not await admin_svc.is_admin_strictly(message.from_user.id):
-        return
     await on_enter_moderator_panel(message, session, ui, state)
 
 

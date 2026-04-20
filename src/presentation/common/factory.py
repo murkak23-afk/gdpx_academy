@@ -12,7 +12,13 @@ class NavCD(CallbackData, prefix="nav"):
 
 # --- СЕЛЛЕР ---
 class SellerMenuCD(CallbackData, prefix="sel_menu"):
-    action: str  # sell, profile, assets, payouts, info, support, faq, manuals
+    action: str  # sell, profile, assets, payouts, info, support, my_tickets, view_ticket, faq, manuals
+
+
+class SellerTicketCD(CallbackData, prefix="sel_ticket"):
+    action: str  # list, view, reply
+    ticket_id: int = 0
+    page: int = 0
 
 class SellerInfoCD(CallbackData, prefix="sel_info"):
     type: str # faq, manual_lvl, manual_item
@@ -35,11 +41,15 @@ class SellerArchiveCD(CallbackData, prefix="sel_arch"):
     period: str # yesterday, 7d, 30d, all
 
 class SellerSettingsCD(CallbackData, prefix="sel_sett"):
-    action: str  # main, alias, incognito, prefs, lang, export, notif
+    action: str  # main, alias, incognito, prefs, lang, export, notif, silent_toggle
     value: str = ""
 
 class SellerNotifCD(CallbackData, prefix="sel_notif"):
     preference: str # full, summary, none
+
+class SellerDynamicsCD(CallbackData, prefix="sel_dyn"):
+    action: str = "view"
+    page: int = 0
 
 class SellerSubmissionCD(CallbackData, prefix="sel_sub"):
     category_id: int
@@ -131,3 +141,8 @@ class AdminSupportCD(CallbackData, prefix="adm_sup"):
     action: str  # list, view, reply, close, refresh
     ticket_id: int = 0
     page: int = 0
+
+
+class AutoFixConfirmCD(CallbackData, prefix="af_conf"):
+    sub_id: int
+    status: str  # blocked, not_a_scan, accepted

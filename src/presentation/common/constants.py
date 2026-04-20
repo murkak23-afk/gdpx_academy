@@ -40,7 +40,7 @@ HEADER_LEADERBOARD = "🏆 <b>VANGUARD // LEADERBOARD</b>"
 
 # Визуальные разделители
 DIVIDER = "▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰"
-DIVIDER_LIGHT = "▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱"
+DIVIDER_LIGHT = "▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱"
 PREFIX_ITEM = "  ├"
 PREFIX_LAST = "  └"
 

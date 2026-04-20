@@ -11,6 +11,7 @@ from src.presentation.common.factory import (
     NavCD,
     SellerArchiveCD,
     SellerAssetCD,
+    SellerDynamicsCD,
     SellerItemCD,
     SellerMenuCD,
     SellerNotifCD,
@@ -58,6 +59,7 @@ def get_seller_main_kb(has_accepted_codex: bool = True) -> InlineKeyboardMarkup:
     else:
         # Полноценное меню
         builder.button("🧧 ЗАГРУЗИТЬ eSIM", SellerMenuCD(action="sell"))
+        builder.button("🧬 СОСТОЯНИЕ eSIM", SellerMenuCD(action="dynamics"))
         builder.row()
         builder.button("💎 ИСТОРИЯ ВЫПЛАТ", SellerMenuCD(action="payouts"))
         builder.button("🥋 МОЙ ПРОФИЛЬ", SellerMenuCD(action="profile"))
@@ -67,8 +69,29 @@ def get_seller_main_kb(has_accepted_codex: bool = True) -> InlineKeyboardMarkup:
         builder.row()
         builder.button("🏆 ДОСКА ЛИДЕРОВ", SellerMenuCD(action="leaderboard"))
         builder.button("🛡 ПОДДЕРЖКА", SellerMenuCD(action="support"))
-        builder.adjust(1, 2, 2, 2, 2)
+        builder.adjust(2, 2, 2, 2)
         
+    return builder.as_markup()
+
+@cached_keyboard(ttl=5)
+def get_sim_dynamics_kb(current_page: int, total_items: int, items_per_page: int) -> InlineKeyboardMarkup:
+    """Клавиатура раздела динамики eSIM с пагинацией."""
+    builder = PremiumBuilder()
+    
+    # Кнопки пагинации
+    if total_items > items_per_page:
+        builder.pagination(
+            prefix="sel_dyn_pg",
+            current_page=current_page,
+            total_items=total_items,
+            items_per_page=items_per_page
+        )
+    
+    builder.row()
+    builder.button("🔄 ОБНОВИТЬ", SellerDynamicsCD(action="view", page=current_page))
+    builder.back(NavCD(to="menu"), "❮ В ГЛАВНОЕ МЕНЮ")
+    builder.adjust(2, 1) # Пагинация в ряд, потом остальные
+    
     return builder.as_markup()
 
 @cached_keyboard(ttl=600)
@@ -104,17 +127,21 @@ def get_seller_stats_kb(current_period: str) -> InlineKeyboardMarkup:
     return builder.as_markup()
 
 @cached_keyboard(ttl=600)
-def get_seller_settings_kb() -> InlineKeyboardMarkup:
+def get_seller_settings_kb(is_silent: bool = False) -> InlineKeyboardMarkup:
     """Меню настроек профиля."""
+    silent_text = "🔔 ВКЛЮЧИТЬ ЗВУК" if is_silent else "🔕 ВЫКЛЮЧИТЬ ЗВУК"
+    
     return (PremiumBuilder()
             .button("👤 ЛИЧНЫЕ ДАННЫЕ", SellerSettingsCD(action="alias"))
             .row()
             .button("🎭 РЕЖИМ INCOGNITO", SellerSettingsCD(action="incognito"))
-            .button("🔔 УВЕДОМЛЕНИЯ", SellerSettingsCD(action="notif"))
+            .button(silent_text, SellerSettingsCD(action="silent_toggle"))
             .row()
+            .button("🔔 УВЕДОМЛЕНИЯ", SellerSettingsCD(action="notif"))
             .button("🌐 ЯЗЫК / LANGUAGE", SellerSettingsCD(action="lang"))
+            .row()
             .button("📊 ЭКСПОРТ ДАННЫХ", SellerSettingsCD(action="export"))
-            .adjust(1, 2, 2)
+            .adjust(1, 2, 2, 1)
             .back(SellerMenuCD(action="profile"), "В ПРОФИЛЬ")
             .as_markup())
 
@@ -177,7 +204,7 @@ def get_categories_kb(categories: list, favorite_ids: list[int] = None, cancel_t
         key=lambda c: (c.id not in fav_ids, not getattr(c, "is_priority", False), c.title)
     )
     for cat in sorted_cats:
-        is_fav = cat.id in fav_ids
+        is_fav = cat.id in favorite_ids
         fav_icon = "⭐ " if is_fav else ""
         prio_icon = "🏮 " if getattr(cat, "is_priority", False) else "📦 "
         title = f"{fav_icon}{prio_icon}{cat.title} | {cat.payout_rate} USDT"
@@ -246,7 +273,7 @@ def get_seller_item_view_kb(item_id: int, category_id: int, status: str = "pendi
     return builder.as_markup()
 
 @cached_keyboard(ttl=600)
-def get_seller_payout_history_kb(current_period: str) -> InlineKeyboardMarkup:
+def get_seller_payouts_kb(current_period: str = "7") -> InlineKeyboardMarkup:
     """Клавиатура истории выплат с фильтрами."""
     builder = PremiumBuilder()
     periods = [

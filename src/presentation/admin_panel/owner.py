@@ -67,7 +67,7 @@ def get_users_list_kb(users: list, page: int, total: int, role: str, page_size: 
     builder = PremiumBuilder()
     
     for u in users:
-        icon = "⚖️" if u.role.value == "admin" else "👤"
+        icon = "⚖️" if u.role == "admin" else "👤"
         status = "🔴" if u.is_restricted else "🟢"
         name = f"@{u.username}" if u.username else f"ID: {u.telegram_id}"
         builder.button(f"{status} {icon} {name}", OwnerUserCD(action="view", user_id=u.id, page=page, role=role))

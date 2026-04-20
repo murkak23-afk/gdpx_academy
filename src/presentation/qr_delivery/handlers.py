@@ -25,49 +25,79 @@ from src.core.utils.message_manager import MessageManager
 router = Router(name="qr-delivery-router")
 logger = logging.getLogger(__name__)
 
+from src.presentation.filters.admin import IsAdminFilter, IsOwnerFilter
+
 # --- ГЛАВНОЕ МЕНЮ ВЫДАЧИ ---
 
 @router.message(Command("qr"), StateFilter("*"))
 @router.callback_query(QRDeliveryCD.filter(F.action == "menu"))
 @router.callback_query(F.data == "qr_delivery_menu")
-async def cmd_qr_delivery_menu(event: Message | CallbackQuery, session: AsyncSession, state: FSMContext, ui: MessageManager):
+async def cmd_qr_delivery_menu(event: Message | CallbackQuery, session: AsyncSession, state: FSMContext, ui: MessageManager, bot: Bot, **data):
     """Классическое меню (кнопки)."""
-    await state.clear()
-    user_svc = UserService(session=session)
-    user = await user_svc.get_by_telegram_id(event.from_user.id)
-    
-    if not user or user.role not in (UserRole.ADMIN, UserRole.OWNER, UserRole.SIMBUYER):
-        if isinstance(event, CallbackQuery): await event.answer("❌ Доступ ограничен", show_alert=True)
-        return
+    logger.info(f"DEBUG: cmd_qr_delivery_menu TRIGGERED by {event.from_user.id}")
+    if isinstance(event, CallbackQuery):
+        chat_id = event.message.chat.id
+        thread_id = getattr(event.message, "message_thread_id", None)
+    else:
+        chat_id = event.chat.id
+        thread_id = getattr(event, "message_thread_id", None)
 
-    text = (
-        f"❖ <b>GDPX // СИСТЕМА ВЫДАЧИ</b>\n"
-        f"{DIVIDER}\n"
-        f"Инструментарий для оперативной отгрузки eSIM (КНОПКИ).\n\n"
-        f"<i>Выберите оператора для начала процесса:</i>"
-    )
-    
-    await ui.display(event=event, text=text, reply_markup=get_qr_delivery_main_kb())
-    if isinstance(event, CallbackQuery): await event.answer()
+    try:
+        logger.info(f"User {event.from_user.id} accessing /qr in chat {chat_id} (thread {thread_id})")
+        await state.clear()
+        
+        from src.domain.users.user_service import UserService
+        user = await UserService(session=session).get_by_telegram_id(event.from_user.id)
+        
+        if not user or user.role not in (UserRole.ADMIN, UserRole.OWNER, UserRole.SIMBUYER):
+            role_info = user.role if user else 'NOT REGISTERED'
+            msg = f"❌ <b>ОТКАЗАНО:</b> Доступ запрещен (Ваша роль: <code>{role_info}</code>)"
+            if isinstance(event, CallbackQuery): await event.answer(msg, show_alert=True)
+            else: await bot.send_message(chat_id, msg, parse_mode="HTML", message_thread_id=thread_id)
+            return
+
+        text = (
+            f"❖ <b>GDPX // СИСТЕМА ВЫДАЧИ</b>\n"
+            f"{DIVIDER}\n"
+            f"Инструментарий для оперативной отгрузки eSIM.\n\n"
+            f"<i>Это меню изолировано для вас. Другие админы его не увидят.</i>"
+        )
+        
+        await ui.display(event=event, text=text, reply_markup=get_qr_delivery_main_kb())
+        if isinstance(event, CallbackQuery):
+            await event.answer()
+            
+    except Exception as e:
+        logger.exception(f"CRITICAL ERROR in /qr: {e}")
+        error_msg = f"⚠️ <b>ОШИБКА ВЫДАЧИ:</b>\n<code>{str(e)}</code>"
+        await bot.send_message(chat_id, error_msg, parse_mode="HTML", message_thread_id=thread_id)
 
 @router.message(Command("qrweb"), StateFilter("*"))
-async def cmd_qr_delivery_web(message: Message, session: AsyncSession, state: FSMContext, ui: MessageManager):
+async def cmd_qr_delivery_web(message: Message, session: AsyncSession, state: FSMContext, ui: MessageManager, bot: Bot):
     """Вход в современный DELIVERY HUB (WebApp)."""
-    await state.clear()
-    user_svc = UserService(session=session)
-    user = await user_svc.get_by_telegram_id(message.from_user.id)
-    
-    if not user or user.role not in (UserRole.ADMIN, UserRole.OWNER, UserRole.SIMBUYER):
-        return
+    chat_id = message.chat.id
+    thread_id = message.message_thread_id
+    try:
+        logger.info(f"User {message.from_user.id} attempting to access /qrweb")
+        await state.clear()
+        
+        from src.domain.users.user_service import UserService
+        user = await UserService(session=session).get_by_telegram_id(message.from_user.id)
+        
+        if not user or user.role not in (UserRole.ADMIN, UserRole.OWNER, UserRole.SIMBUYER):
+            return await message.answer(f"❌ <b>ОТКАЗАНО:</b> Недостаточно прав.", parse_mode="HTML")
 
-    text = (
-        f"❖ <b>GDPX // DELIVERY HUB</b>\n"
-        f"{DIVIDER}\n"
-        f"Современный интерфейс для управления отгрузками.\n\n"
-        f"<i>Нажмите кнопку ниже для запуска приложения:</i>"
-    )
-    
-    await ui.display(event=message, text=text, reply_markup=get_qr_delivery_webapp_kb(message.chat.id))
+        text = (
+            f"❖ <b>GDPX // DELIVERY HUB</b>\n"
+            f"{DIVIDER}\n"
+            f"Современный интерфейс для управления отгрузками.\n\n"
+            f"<i>Нажмите кнопку ниже для запуска приложения:</i>"
+        )
+        
+        await ui.display(event=message, text=text, reply_markup=get_qr_delivery_webapp_kb(message.chat.id))
+    except Exception as e:
+        logger.exception(f"CRITICAL ERROR in /qrweb: {e}")
+        await message.answer(f"⚠️ <b>ОШИБКА HUB:</b>\n<code>{str(e)}</code>", parse_mode="HTML")
 
 @router.callback_query(QRDeliveryCD.filter(F.action == "op_list"))
 async def cb_delivery_op_list(callback: CallbackQuery, session: AsyncSession, ui: MessageManager):
@@ -79,11 +109,13 @@ async def cb_delivery_op_list(callback: CallbackQuery, session: AsyncSession, ui
         return await callback.answer("📭 Склад пуст.", show_alert=True)
 
     text = (
-        f"❖ <b>ВЫБОР ОПЕРАТОРА</b>\n"
-        f"{DIVIDER}\n"
-        f"Ниже список категорий, в которых есть готовые к выдаче eSIM (PENDING)."
+        f"❖ <b>GDPX // ВЫБОР ОПЕРАТОРА</b>\n"
+        f"{DIVIDER_LIGHT}\n"
+        f"Ниже список категорий, в которых есть готовых eSIM."
     )
     
+    # Сначала удаляем текущее меню, чтобы создать новое "чистое"
+    await ui.delete_main(event=callback)
     await ui.display(event=callback, text=text, reply_markup=get_qr_delivery_operators_kb(stats))
     await callback.answer()
 
@@ -132,6 +164,13 @@ async def process_delivery_count(message: Message, state: FSMContext, session: A
         return await message.answer(f"❌ Доступно только: {available}")
 
     await state.clear()
+    
+    # 1. Сначала удаляем интерфейсное сообщение и сообщение пользователя
+    await ui.delete_main(event=message)
+    try: await message.delete()
+    except: pass
+
+    # 2. Показываем временный статус
     wait_msg = await message.answer("⏳ <b>Инициация отгрузки...</b>", parse_mode="HTML")
 
     sub_svc = SubmissionService(session=session)
@@ -141,37 +180,46 @@ async def process_delivery_count(message: Message, state: FSMContext, session: A
         return await wait_msg.edit_text("🔴 Ошибка извлечения активов.")
 
     success_count = 0
+    chat_id = message.chat.id
+    thread_id = message.message_thread_id
+
+    # 3. Выдача активов
     for item in items:
         try:
             caption = (
-                f"📟 <b>eSIM #{item.id}</b>\n"
+                f"❖ <b>GDPX // eSIM #{item.id}</b>\n"
+                f"{DIVIDER_LIGHT}\n"
                 f"📶 <b>ОПЕРАТОР:</b> {data['cat_title']}\n"
                 f"📞 <b>НОМЕР:</b> <code>{item.phone_normalized or 'N/A'}</code>\n"
-                f"{DIVIDER}\n"
                 f"👤 <b>АГЕНТ:</b> @{item.seller.username or 'id' + str(item.seller.telegram_id)}"
             )
-            thread_id = message.message_thread_id
+            
             if item.attachment_type == "photo":
-                await bot.send_photo(message.chat.id, item.telegram_file_id, caption=caption, parse_mode="HTML", message_thread_id=thread_id)
+                await bot.send_photo(chat_id, item.telegram_file_id, caption=caption, parse_mode="HTML", message_thread_id=thread_id)
             else:
-                await bot.send_document(message.chat.id, item.telegram_file_id, caption=caption, parse_mode="HTML", message_thread_id=thread_id)
+                await bot.send_document(chat_id, item.telegram_file_id, caption=caption, parse_mode="HTML", message_thread_id=thread_id)
             
             success_count += 1
             await asyncio.sleep(0.3)
         except Exception as e:
             logger.error(f"Error delivery item {item.id}: {e}")
 
+    await session.commit()
     await wait_msg.delete()
-    await message.answer(
-        f"✅ <b>ОТГРУЗКА ЗАВЕРШЕНА</b>\n"
+
+    # 4. Отправляем свежее главное меню как завершающий штрих
+    user_mention = f"@{message.from_user.username}" if message.from_user.username else f"ID:{message.from_user.id}"
+    text = (
+        f"✅ Выдано <code>{success_count}</code> шт. сканов по запросу <b>{user_mention}</b>\n\n"
+        f"Удачной отработки!\n"
         f"{DIVIDER}\n"
-        f"Выдано: <code>{success_count}</code> шт.\n"
-        f"Статус изменен на <b>IN_WORK</b>.",
-        parse_mode="HTML",
-        reply_markup=get_qr_delivery_main_kb()
+        f"<i>Интерфейс выдачи обновлен.</i>"
     )
+    await ui.display(event=message, text=text, reply_markup=get_qr_delivery_main_kb())
 
 @router.callback_query(QRDeliveryCD.filter(F.action == "cancel"), StateFilter("*"))
-async def cb_delivery_cancel(callback: CallbackQuery, state: FSMContext, session: AsyncSession, ui: MessageManager):
+async def cb_delivery_cancel(callback: CallbackQuery, state: FSMContext, ui: MessageManager):
+    """Полное закрытие меню выдачи."""
     await state.clear()
-    await cmd_qr_delivery_menu(callback, session, state, ui)
+    await ui.delete_main(event=callback)
+    await callback.answer("🚪 Меню закрыто")

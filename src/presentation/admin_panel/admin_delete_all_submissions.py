@@ -11,13 +11,11 @@ router = Router(name="admin-delete-all-submissions")
 
 CONFIRM_CB = "delete_all_submissions_confirm"
 
-# Команда для запуска удаления (только для админа)
-@router.message(Command("delete_asim"))
-async def cmd_delete_asim(message: Message, session: AsyncSession):
-    if not await AdminService(session).can_manage_payouts(message.from_user.id):
-        await message.answer("❌ Нет прав. Только для администратора.")
-        return
+from src.presentation.filters.admin import IsOwnerFilter
 
+# Команда для запуска удаления (только для владельца)
+@router.message(Command("delete_asim"), IsOwnerFilter())
+async def cmd_delete_asim(message: Message, session: AsyncSession):
     count = (await session.execute(select(func.count(Submission.id)))).scalar_one()
     if count == 0:
         await message.answer("✅ В базе нет записей.")
@@ -36,13 +34,9 @@ async def cmd_delete_asim(message: Message, session: AsyncSession):
         reply_markup=kb,
     )
 
-# Обработка подтверждения
-@router.callback_query(F.data == CONFIRM_CB)
+# Обработка подтверждения (только для владельца)
+@router.callback_query(F.data == CONFIRM_CB, IsOwnerFilter())
 async def cb_confirm_delete_all_submissions(callback: CallbackQuery, session: AsyncSession):
-    if not await AdminService(session).can_manage_payouts(callback.from_user.id):
-        await callback.answer("Нет прав", show_alert=True)
-        return
-
     count = (await session.execute(select(func.count(Submission.id)))).scalar_one()
     from src.core.utils.text_format import edit_message_text_or_caption_safe
     if count == 0:

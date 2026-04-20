@@ -13,8 +13,10 @@ class BaseRepository(Generic[ModelType]):
         self.model = model
         self.session = session
 
-    async def get_by_id(self, id: int) -> ModelType | None:
+    async def get_by_id(self, id: int, for_update: bool = False) -> ModelType | None:
         query = select(self.model).where(self.model.id == id)
+        if for_update:
+            query = query.with_for_update()
         result = await self.session.execute(query)
         return result.scalar_one_or_none()
 

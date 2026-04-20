@@ -25,6 +25,7 @@ class User(Base, TimestampMixin):
     nickname: Mapped[str | None] = mapped_column(String(64), nullable=True)
     pseudonym: Mapped[str | None] = mapped_column(String(64), nullable=True)
     is_incognito: Mapped[bool] = mapped_column(default=False)
+    is_silent_mode: Mapped[bool] = mapped_column(default=False)
     notification_preference: Mapped[str] = mapped_column(String(32), default="full")
     favorite_categories: Mapped[list[int]] = mapped_column(JSON, default=list)
     badges: Mapped[list[str]] = mapped_column(JSON, default=list)

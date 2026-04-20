@@ -16,7 +16,7 @@ from .keyboards import (
     get_seller_assets_items_kb,
     get_seller_item_view_kb,
     get_seller_main_kb,
-    get_seller_payout_history_kb,
+    get_seller_payouts_kb,
     get_seller_profile_kb,
     get_seller_settings_kb,
     get_seller_stats_kb,

@@ -28,13 +28,12 @@ class LoadingMiddleware(BaseMiddleware):
 
         if ui:
             # 1. Мгновенная реакция (callback.answer)
+            # Это убирает "часики" у кнопки
             await ui.answer_loading(callback)
             
-            # 2. Loading-состояние (edit_message)
-            # Показываем только если это не быстрый "toggle" (например, инкогнито или избранное)
-            cd = callback.data or ""
-            if not any(x in cd for x in ["incognito", "prefs", "lang_set", "toggle_"]):
-                await ui.show_loading(callback)
+            # 2. Loading-состояние (опционально)
+            # Мы его убираем из middleware, так как оно часто конфликтует 
+            # с быстрыми ответами хендлеров.
 
         try:
             return await handler(event, data)

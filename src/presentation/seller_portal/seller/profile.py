@@ -13,7 +13,7 @@ from .keyboards import (
     get_favorite_categories_kb,
     get_language_settings_kb,
     get_notification_settings_kb,
-    get_seller_payout_history_kb,
+    get_seller_payouts_kb,
     get_seller_profile_kb,
     get_seller_settings_kb,
     get_seller_stats_kb,
@@ -165,12 +165,35 @@ async def show_profile(event: Message | CallbackQuery, session: AsyncSession, ui
 # --- НАСТРОЙКИ ---
 
 @router.callback_query(SellerMenuCD.filter(F.action == "settings"))
+@router.callback_query(SellerSettingsCD.filter(F.action == "silent_toggle"))
+async def cb_seller_silent_toggle(callback: CallbackQuery, callback_data: SellerSettingsCD, session: AsyncSession, ui: MessageManager):
+    """Переключение беззвучного режима уведомлений."""
+    user_svc = UserService(session)
+    user = await user_svc.get_by_telegram_id(callback.from_user.id)
+
+    # Инвертируем или ставим по значению
+    if callback_data.value == "on":
+        user.is_silent_mode = True
+    elif callback_data.value == "off":
+        user.is_silent_mode = False
+    else:
+        user.is_silent_mode = not user.is_silent_mode
+
+    await session.commit()
+
+    msg = "🔕 Звук уведомлений ВЫКЛЮЧЕН" if user.is_silent_mode else "🔔 Звук уведомлений ВКЛЮЧЕН"
+    await callback.answer(msg, show_alert=True)
+
+    # Возвращаемся в настройки или обновляем текущее окно
+    # Если нажали из уведомления (value="on"), то просто закрываем или обновляем
+    await cb_seller_settings(callback, session, ui)
+
 @router.callback_query(SellerSettingsCD.filter(F.action == "main"))
-async def show_settings(callback: CallbackQuery, session: AsyncSession, ui: MessageManager) -> None:
+async def cb_seller_settings(callback: CallbackQuery, session: AsyncSession, ui: MessageManager):
     try:
         user = await UserService(session=session).get_by_telegram_id(callback.from_user.id)
         text = _renderer.render_seller_settings(user)
-        kb = await get_seller_settings_kb()
+        kb = get_seller_settings_kb(is_silent=user.is_silent_mode)
         banner = media.get("settings.png")
         await ui.display(event=callback, text=text, reply_markup=kb, photo=banner)
         await callback.answer()
@@ -352,7 +375,7 @@ async def export_data_request(callback: CallbackQuery, callback_data: SellerSett
         )
         
         # Возвращаем меню настроек обратно
-        await show_settings(callback, session, ui)
+        await cb_seller_settings(callback, session, ui)
 
     except Exception as e:
         logger.exception(f"Error in export_data_request: {e}")

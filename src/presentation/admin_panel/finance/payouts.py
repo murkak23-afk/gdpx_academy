@@ -32,29 +32,25 @@ router = Router(name="finance-payouts-router")
 logger = logging.getLogger(__name__)
 
 
-@router.message(Command("paylist"))
-@router.message(Command("payme"))
-@router.message(Command("payouts"))
+from src.presentation.filters.admin import IsAdminFilter
+
+@router.message(Command("paylist"), IsAdminFilter())
+@router.message(Command("payme"), IsAdminFilter())
+@router.message(Command("payouts"), IsAdminFilter())
 async def cmd_paylist_start(message: Message, session: AsyncSession):
     """Скрытая команда: список селлеров на выплату."""
-    if not await AdminService(session=session).is_admin(message.from_user.id):
-        return
     await _render_paylist(message, session, page=0)
 
 
-@router.message(Command("payhistory"))
+@router.message(Command("payhistory"), IsAdminFilter())
 async def cmd_payhistory_start(message: Message, session: AsyncSession):
     """Скрытая команда: история выплат."""
-    if not await AdminService(session=session).is_admin(message.from_user.id):
-        return
     await _render_history(message, session, page=0, status_filter="all")
 
 
-@router.message(Command("paystats"))
+@router.message(Command("paystats"), IsAdminFilter())
 async def cmd_paystats_start(message: Message, session: AsyncSession):
     """Скрытая команда: статистика выплат."""
-    if not await AdminService(session=session).is_admin(message.from_user.id):
-        return
     await _render_stats(message, session)
 
 
